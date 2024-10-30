@@ -65,6 +65,8 @@ android {
     namespace = "org.readium.r2.testapp"
 }
 
+tasks.register("prepareKotlinBuildScriptModel") {}
+
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
@@ -122,3 +124,4 @@ dependencies {
     androidTestImplementation(libs.androidx.ext.junit)
     androidTestImplementation(libs.androidx.expresso.core)
 }
+
