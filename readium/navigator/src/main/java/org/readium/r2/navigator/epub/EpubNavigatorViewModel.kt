@@ -109,7 +109,11 @@ internal class EpubNavigatorViewModel(
         _settings.mapStateIn(viewModelScope) { settings ->
             SimpleOverflow(
                 readingProgression = settings.readingProgression,
-                scroll = settings.scroll,
+                scroll = if (layout == EpubLayout.REFLOWABLE) {
+                    settings.scroll
+                } else {
+                    false
+                },
                 axis = if (settings.scroll && !settings.verticalText) {
                     Axis.VERTICAL
                 } else {
