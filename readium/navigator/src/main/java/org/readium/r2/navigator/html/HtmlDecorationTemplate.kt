@@ -195,8 +195,8 @@ public class HtmlDecorationTemplates private constructor(
         public fun defaultTemplates(
             @ColorInt defaultTint: Int = Color.YELLOW,
             lineWeight: Int = 2,
-            cornerRadius: Int = 3,
-            alpha: Double = 0.3
+            cornerRadius: Int = 0,
+            alpha: Double = 0.7
         ): HtmlDecorationTemplates = HtmlDecorationTemplates {
             set(
                 Style.Highlight::class,
@@ -213,7 +213,7 @@ public class HtmlDecorationTemplates private constructor(
                     defaultTint = defaultTint,
                     lineWeight = lineWeight,
                     cornerRadius = cornerRadius,
-                    alpha = alpha
+                    alpha = 1.0
                 )
             )
         }

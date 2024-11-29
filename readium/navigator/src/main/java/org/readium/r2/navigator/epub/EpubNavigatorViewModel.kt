@@ -4,7 +4,7 @@
  * available in the top-level LICENSE file of the project.
  */
 
-@file:OptIn(ExperimentalReadiumApi::class, InternalReadiumApi::class)
+@file:OptIn(ExperimentalReadiumApi::class, InternalReadiumApi::class, InternalReadiumApi::class)
 
 package org.readium.r2.navigator.epub
 
@@ -17,14 +17,32 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlin.reflect.KClass
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import org.readium.r2.navigator.*
+import org.readium.r2.navigator.DecorableNavigator
+import org.readium.r2.navigator.Decoration
+import org.readium.r2.navigator.DecorationChange
+import org.readium.r2.navigator.DecorationId
+import org.readium.r2.navigator.HyperlinkNavigator
+import org.readium.r2.navigator.OverflowableNavigator
+import org.readium.r2.navigator.R2BasicWebView
+import org.readium.r2.navigator.SimpleOverflow
+import org.readium.r2.navigator.changesByHref
 import org.readium.r2.navigator.epub.css.ReadiumCss
 import org.readium.r2.navigator.epub.extensions.javascriptForGroup
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Axis
+import org.readium.r2.navigator.preferences.ColumnCount
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
 import org.readium.r2.navigator.util.createViewModelFactory
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -149,7 +167,7 @@ internal class EpubNavigatorViewModel(
         for ((group, decorations) in decorations) {
             val changes = decorations
                 .filter { it.locator.href == link.url() }
-                .map { DecorationChange.Added(it) }
+                .map { DecorationChange.AddedEnhanced(it) }
 
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
             script += "$groupScript\n"
@@ -287,7 +305,7 @@ internal class EpubNavigatorViewModel(
                     // The updates command are using `requestAnimationFrame()`, so we need it for
                     // `clear()` as well otherwise we might recreate a highlight after it has been
                     // cleared.
-                    "requestAnimationFrame(function () { readium.getDecorations('$group').clear(); });",
+                    "requestAnimationFrame(function () { readium.getDecorations('$group').clearEnhanced(); });",
                     scope = RunScriptCommand.Scope.LoadedResources
                 )
             )

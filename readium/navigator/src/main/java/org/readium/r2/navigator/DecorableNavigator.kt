@@ -151,6 +151,7 @@ public typealias DecorationId = String
 /** Represents an atomic change in a list of [Decoration] objects. */
 public sealed class DecorationChange {
     public data class Added(val decoration: Decoration) : DecorationChange()
+    public data class AddedEnhanced(val decoration: Decoration) : DecorationChange()
     public data class Updated(val decoration: Decoration) : DecorationChange()
     public data class Moved(val id: DecorationId, val fromPosition: Int, val toPosition: Int) : DecorationChange()
     public data class Removed(val id: DecorationId) : DecorationChange()
@@ -192,7 +193,7 @@ public suspend fun List<Decoration>.changesByHref(target: List<Decoration>): Map
         override fun onInserted(position: Int, count: Int) {
             for (i in 0 until count) {
                 val decoration = target[position + i]
-                registerChange(DecorationChange.Added(decoration), decoration.locator)
+                registerChange(DecorationChange.AddedEnhanced(decoration), decoration.locator)
             }
         }
 

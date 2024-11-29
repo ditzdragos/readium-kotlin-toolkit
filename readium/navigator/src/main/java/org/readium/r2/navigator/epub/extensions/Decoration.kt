@@ -51,6 +51,9 @@ internal fun DecorationChange.javascript(templates: HtmlDecorationTemplates): St
         is DecorationChange.Added ->
             toJSON(decoration)?.let { "group.add($it);" }
 
+        is DecorationChange.AddedEnhanced ->
+            toJSON(decoration)?.let { "group.addEnhanced($it);" }
+
         is DecorationChange.Moved ->
             null // Not supported for now
 
