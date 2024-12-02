@@ -305,7 +305,7 @@ internal class EpubNavigatorViewModel(
                     // The updates command are using `requestAnimationFrame()`, so we need it for
                     // `clear()` as well otherwise we might recreate a highlight after it has been
                     // cleared.
-                    "requestAnimationFrame(function () { readium.getDecorations('$group').clearEnhanced(); });",
+                    "requestAnimationFrame(function () { readium.getDecorations('$group').clear(); });",
                     scope = RunScriptCommand.Scope.LoadedResources
                 )
             )

@@ -19,6 +19,7 @@ import {
   scrollToLocator,
   setProperty,
   setCSSProperties,
+  getRectFromLocator
 } from "./utils";
 import { findFirstVisibleLocator } from "./dom";
 import { getCurrentSelection } from "./selection";
@@ -37,6 +38,7 @@ window.readium = {
   setCSSProperties: setCSSProperties,
   setProperty: setProperty,
   removeProperty: removeProperty,
+  getRectFromLocator: getRectFromLocator,
 
   // selection
   getCurrentSelection: getCurrentSelection,

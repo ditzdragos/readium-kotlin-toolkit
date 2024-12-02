@@ -5,6 +5,7 @@
 //
 
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
+import { toNativeRect } from "./rect";
 
 // Catch JS errors to log them in the app.
 window.addEventListener(
@@ -314,4 +315,18 @@ export function log() {
 
 export function logError(message) {
   Android.logError(message, "", 0);
+}
+
+/**
+ * Gets the bounding rect of a range from a locator.
+ * @param {Object} locator - The locator object.
+ * @returns {DOMRect | null} - The bounding rect of the range, or null if not found.
+ */
+export function getRectFromLocator(locator) {
+  let range = rangeFromLocator(locator);
+  Android.log("getRectFromLocator " + range);
+  if (range) {
+    return toNativeRect(range.getBoundingClientRect());
+  }
+  return null;
 }
