@@ -783,6 +783,14 @@ public class EpubNavigatorFragment internal constructor(
         run(viewModel.applyDecorations(decorations, group))
     }
 
+    public override fun addDecoration(group: String, decoration: Decoration) {
+        run(viewModel.addDecoration(group, decoration))
+    }
+
+    public override fun removeDecoration(group: String, id: String) {
+        run(viewModel.removeDecoration(group, id))
+    }
+
     // R2BasicWebView.Listener
 
     internal val webViewListener: R2BasicWebView.Listener = WebViewListener()
@@ -848,6 +856,12 @@ public class EpubNavigatorFragment internal constructor(
                 group = group,
                 rect = rect.adjustedToViewport(),
                 point = point.adjustedToViewport()
+            )
+
+        override fun onHighlightRect(id: DecorationId, group: String, rect: RectF): Boolean =
+            viewModel.onHighlightRect(
+                group = group,
+                rect = rect.adjustedToViewport()
             )
 
         override fun onProgressionChanged() {

@@ -36,7 +36,7 @@ internal fun List<DecorationChange>.javascriptForGroup(
 /**
  * Generates the JavaScript used to apply the receiver [DecorationChange] in a web view.
  */
-internal fun DecorationChange.javascript(templates: HtmlDecorationTemplates): String? {
+public fun DecorationChange.javascript(templates: HtmlDecorationTemplates): String? {
     fun toJSON(decoration: Decoration): JSONObject? {
         val template = templates[decoration.style::class] ?: run {
             Timber.e("Decoration style not registered: ${decoration.style::class}")
@@ -58,7 +58,7 @@ internal fun DecorationChange.javascript(templates: HtmlDecorationTemplates): St
             null // Not supported for now
 
         is DecorationChange.Removed ->
-            "group.clearEnhanced('$id');"
+            "group.remove('$id');"
 
         is DecorationChange.Updated ->
             toJSON(decoration)?.let { "group.update($it);" }

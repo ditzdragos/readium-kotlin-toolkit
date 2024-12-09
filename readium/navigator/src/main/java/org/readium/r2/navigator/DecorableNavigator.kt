@@ -59,6 +59,10 @@ public interface DecorableNavigator : Navigator {
      */
     public fun removeDecorationListener(listener: Listener)
 
+    public fun addDecoration(group: String, decoration: Decoration)
+
+    public fun removeDecoration(group: String, id: String)
+
     public interface Listener {
 
         /**
@@ -68,6 +72,8 @@ public interface DecorableNavigator : Navigator {
          * @return Whether the listener handled the interaction.
          */
         public fun onDecorationActivated(event: OnActivatedEvent): Boolean
+
+        public fun onDecorationRect(group: String, rect: RectF): Boolean = false
     }
 
     /**
@@ -193,7 +199,7 @@ public suspend fun List<Decoration>.changesByHref(target: List<Decoration>): Map
         override fun onInserted(position: Int, count: Int) {
             for (i in 0 until count) {
                 val decoration = target[position + i]
-                registerChange(DecorationChange.AddedEnhanced(decoration), decoration.locator)
+                registerChange(DecorationChange.Added(decoration), decoration.locator)
             }
         }
 

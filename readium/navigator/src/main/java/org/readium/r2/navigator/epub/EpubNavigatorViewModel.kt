@@ -37,6 +37,7 @@ import org.readium.r2.navigator.R2BasicWebView
 import org.readium.r2.navigator.SimpleOverflow
 import org.readium.r2.navigator.changesByHref
 import org.readium.r2.navigator.epub.css.ReadiumCss
+import org.readium.r2.navigator.epub.extensions.javascript
 import org.readium.r2.navigator.epub.extensions.javascriptForGroup
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
 import org.readium.r2.navigator.preferences.Axis
@@ -104,8 +105,8 @@ internal class EpubNavigatorViewModel(
 
     val settings: StateFlow<EpubSettings> = _settings.asStateFlow()
 
-    val overflow: StateFlow<OverflowableNavigator.Overflow> = _settings
-        .mapStateIn(viewModelScope) { settings ->
+    val overflow: StateFlow<OverflowableNavigator.Overflow> =
+        _settings.mapStateIn(viewModelScope) { settings ->
             SimpleOverflow(
                 readingProgression = settings.readingProgression,
                 scroll = settings.scroll,
@@ -134,40 +135,36 @@ internal class EpubNavigatorViewModel(
      */
     private fun initReadiumCss() {
         var previousCss = css.value
-        css
-            .onEach { css ->
-                val properties = mutableMapOf<String, String?>()
-                if (previousCss.rsProperties != css.rsProperties) {
-                    properties += css.rsProperties.toCssProperties()
-                }
-                if (previousCss.userProperties != css.userProperties) {
-                    properties += css.userProperties.toCssProperties()
-                }
-                if (properties.isNotEmpty()) {
-                    _events.send(
-                        Event.RunScript(
-                            RunScriptCommand(
-                                script = "readium.setCSSProperties(${JSONObject(properties.toMap())});",
-                                scope = RunScriptCommand.Scope.LoadedResources
-                            )
+        css.onEach { css ->
+            val properties = mutableMapOf<String, String?>()
+            if (previousCss.rsProperties != css.rsProperties) {
+                properties += css.rsProperties.toCssProperties()
+            }
+            if (previousCss.userProperties != css.userProperties) {
+                properties += css.userProperties.toCssProperties()
+            }
+            if (properties.isNotEmpty()) {
+                _events.send(
+                    Event.RunScript(
+                        RunScriptCommand(
+                            script = "readium.setCSSProperties(${JSONObject(properties.toMap())});",
+                            scope = RunScriptCommand.Scope.LoadedResources
                         )
                     )
-                }
-
-                previousCss = css
+                )
             }
-            .launchIn(viewModelScope)
+
+            previousCss = css
+        }.launchIn(viewModelScope)
     }
 
     fun onResourceLoaded(webView: R2BasicWebView, link: Link): RunScriptCommand {
-        val templates = decorationTemplates.toJSON().toString()
-            .replace("\\n", " ")
+        val templates = decorationTemplates.toJSON().toString().replace("\\n", " ")
         var script = "readium.registerDecorationTemplates($templates);\n"
 
         for ((group, decorations) in decorations) {
-            val changes = decorations
-                .filter { it.locator.href == link.url() }
-                .map { DecorationChange.AddedEnhanced(it) }
+            val changes = decorations.filter { it.locator.href == link.url() }
+                .map { DecorationChange.Added(it) }
 
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
             script += "$groupScript\n"
@@ -179,14 +176,12 @@ internal class EpubNavigatorViewModel(
     // Serving resources
 
     val baseUrl: AbsoluteUrl =
-        (publication.baseUrl as? AbsoluteUrl)
-            ?: WebViewServer.publicationBaseHref
+        (publication.baseUrl as? AbsoluteUrl) ?: WebViewServer.publicationBaseHref
 
     /**
      * Generates the URL to the given publication link.
      */
-    fun urlTo(link: Link): AbsoluteUrl =
-        baseUrl.resolve(link.url())
+    fun urlTo(link: Link): AbsoluteUrl = baseUrl.resolve(link.url())
 
     /**
      * Intercepts and handles web view navigation to [url].
@@ -202,7 +197,9 @@ internal class EpubNavigatorViewModel(
         }
     }
 
-    fun shouldFollowFootnoteLink(url: AbsoluteUrl, context: HyperlinkNavigator.FootnoteContext): Boolean {
+    fun shouldFollowFootnoteLink(
+        url: AbsoluteUrl, context: HyperlinkNavigator.FootnoteContext
+    ): Boolean {
         val link = internalLinkFromUrl(url) ?: return true
         return listener?.shouldFollowInternalLink(link, context) ?: true
     }
@@ -211,8 +208,7 @@ internal class EpubNavigatorViewModel(
      * Gets the publication [Link] targeted by the given [url].
      */
     fun internalLinkFromUrl(url: Url): Link? {
-        val href = (baseUrl.relativize(url) as? RelativeUrl)
-            ?: return null
+        val href = (baseUrl.relativize(url) as? RelativeUrl) ?: return null
 
         return publication.linkWithHref(href)
             // Query parameters must be kept as they might be relevant for the container.
@@ -229,16 +225,12 @@ internal class EpubNavigatorViewModel(
         _settings.value = newSettings
         css.update { it.update(newSettings, useReadiumCssFontSize = config.useReadiumCssFontSize) }
 
-        val needsInvalidation: Boolean = (
-            oldSettings.readingProgression != newSettings.readingProgression ||
-                oldSettings.language != newSettings.language ||
-                oldSettings.verticalText != newSettings.verticalText ||
-                oldSettings.spread != newSettings.spread ||
-                // We need to invalidate the resource pager when changing from scroll mode to
-                // paginated, otherwise the horizontal scroll will be broken.
-                // See https://github.com/readium/kotlin-toolkit/pull/304
-                oldSettings.scroll != newSettings.scroll
-            )
+        val needsInvalidation: Boolean =
+            (oldSettings.readingProgression != newSettings.readingProgression || oldSettings.language != newSettings.language || oldSettings.verticalText != newSettings.verticalText || oldSettings.spread != newSettings.spread ||
+                    // We need to invalidate the resource pager when changing from scroll mode to
+                    // paginated, otherwise the horizontal scroll will be broken.
+                    // See https://github.com/readium/kotlin-toolkit/pull/304
+                    oldSettings.scroll != newSettings.scroll)
 
         if (needsInvalidation) {
             _events.send(Event.InvalidateViewPager)
@@ -248,19 +240,20 @@ internal class EpubNavigatorViewModel(
     /**
      * Effective reading progression.
      */
-    val readingProgression: ReadingProgression get() =
-        settings.value.readingProgression
+    val readingProgression: ReadingProgression
+        get() = settings.value.readingProgression
 
     /**
      * Indicates whether the dual page mode is enabled.
      */
-    val dualPageMode: DualPage get() =
-        when (layout) {
+    val dualPageMode: DualPage
+        get() = when (layout) {
             EpubLayout.FIXED -> when (settings.value.spread) {
                 Spread.AUTO -> DualPage.AUTO
                 Spread.ALWAYS -> DualPage.ON
                 Spread.NEVER -> DualPage.OFF
             }
+
             EpubLayout.REFLOWABLE -> when (settings.value.columnCount) {
                 ColumnCount.ONE -> DualPage.OFF
                 ColumnCount.TWO -> DualPage.ON
@@ -271,18 +264,16 @@ internal class EpubNavigatorViewModel(
     /**
      * Indicates whether the navigator is scrollable instead of paginated.
      */
-    val isScrollEnabled: StateFlow<Boolean> get() =
-        settings.mapStateIn(viewModelScope) {
+    val isScrollEnabled: StateFlow<Boolean>
+        get() = settings.mapStateIn(viewModelScope) {
             if (layout == EpubLayout.REFLOWABLE) it.scroll else false
         }
 
     // Selection
 
-    fun clearSelection(): RunScriptCommand =
-        RunScriptCommand(
-            "window.getSelection().removeAllRanges();",
-            scope = RunScriptCommand.Scope.CurrentResource
-        )
+    fun clearSelection(): RunScriptCommand = RunScriptCommand(
+        "window.getSelection().removeAllRanges();", scope = RunScriptCommand.Scope.CurrentResource
+    )
 
     // Decorations
 
@@ -292,13 +283,14 @@ internal class EpubNavigatorViewModel(
     fun <T : Decoration.Style> supportsDecorationStyle(style: KClass<T>): Boolean =
         decorationTemplates.styles.containsKey(style)
 
-    suspend fun applyDecorations(decorations: List<Decoration>, group: String): List<RunScriptCommand> {
+    suspend fun applyDecorations(
+        decorations: List<Decoration>, group: String
+    ): List<RunScriptCommand> {
         val source = this.decorations[group] ?: emptyList()
         val target = decorations.toList()
         this.decorations[group] = target
 
         val cmds = mutableListOf<RunScriptCommand>()
-
         if (target.isEmpty()) {
             cmds.add(
                 RunScriptCommand(
@@ -319,8 +311,34 @@ internal class EpubNavigatorViewModel(
         return cmds
     }
 
+    fun addDecoration(group: String, decoration: Decoration): RunScriptCommand {
+        val decorations = this.decorations[group]?.toMutableList() ?: mutableListOf()
+        decorations.add(decoration)
+        this.decorations[group] = decorations
+        return RunScriptCommand(
+            script = """
+        // Using requestAnimationFrame helps to make sure the page is fully laid out before adding the
+        // decorations.
+        requestAnimationFrame(function () {
+            let group = readium.getDecorations('$group');
+            ${DecorationChange.AddedEnhanced(decoration).javascript(decorationTemplates)}
+        });
+        """, scope = RunScriptCommand.Scope.CurrentResource
+        )
+    }
+
+    fun removeDecoration(group: String, id: DecorationId): RunScriptCommand {
+        val decorations = this.decorations[group] ?: emptyList()
+        this.decorations[group] = decorations.filter { it.id != id }
+        return RunScriptCommand(
+            script = "readium.getDecorations('$group').clearEnhanced('$id');",
+            scope = RunScriptCommand.Scope.CurrentResource
+        )
+    }
+
     /** Decoration group listeners, indexed by the group name. */
-    private val decorationListeners: MutableMap<String, List<DecorableNavigator.Listener>> = mutableMapOf()
+    private val decorationListeners: MutableMap<String, List<DecorableNavigator.Listener>> =
+        mutableMapOf()
 
     fun addDecorationListener(group: String, listener: DecorableNavigator.Listener) {
         val listeners = decorationListeners[group] ?: emptyList()
@@ -333,19 +351,15 @@ internal class EpubNavigatorViewModel(
         }
     }
 
-    fun onDecorationActivated(id: DecorationId, group: String, rect: RectF, point: PointF): Boolean {
-        val listeners = decorationListeners[group]
-            ?: return false
+    fun onDecorationActivated(
+        id: DecorationId, group: String, rect: RectF, point: PointF
+    ): Boolean {
+        val listeners = decorationListeners[group] ?: return false
 
-        val decoration = decorations[group]
-            ?.firstOrNull { it.id == id }
-            ?: return false
+        val decoration = decorations[group]?.firstOrNull { it.id == id } ?: return false
 
         val event = DecorableNavigator.OnActivatedEvent(
-            decoration = decoration,
-            group = group,
-            rect = rect,
-            point = point
+            decoration = decoration, group = group, rect = rect, point = point
         )
         for (listener in listeners) {
             if (listener.onDecorationActivated(event)) {
@@ -354,6 +368,13 @@ internal class EpubNavigatorViewModel(
         }
 
         return false
+    }
+
+    fun onHighlightRect(group: String, rect: RectF): Boolean {
+        decorationListeners[group]?.forEach { listener ->
+            listener.onDecorationRect(group, rect)
+        }
+        return true
     }
 
     companion object {
@@ -375,15 +396,15 @@ internal class EpubNavigatorViewModel(
                 layout,
                 listener,
                 defaults = defaults,
-                server = WebViewServer(
-                    application,
-                    publication,
-                    servedAssets = config.servedAssets,
-                    disableSelectionWhenProtected = config.disableSelectionWhenProtected,
-                    onResourceLoadFailed = { url, error ->
-                        listener?.onResourceLoadFailed(url, error)
-                    }
-                )
+                server = WebViewServer(application,
+                                       publication,
+                                       servedAssets = config.servedAssets,
+                                       disableSelectionWhenProtected = config.disableSelectionWhenProtected,
+                                       onResourceLoadFailed = { url, error ->
+                                           listener?.onResourceLoadFailed(
+                                               url, error
+                                           )
+                                       })
             )
         }
     }

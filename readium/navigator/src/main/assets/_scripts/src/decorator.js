@@ -44,18 +44,9 @@ export function registerTemplates(newStyles) {
       position: absolute;
       width: 100%;
       height: 100%;
-      top: 0px;
     }
   `;
   document.head.appendChild(containStyle);
-
-  let imgStyle = document.createElement("style");
-  imgStyle.innerHTML = `
-    img {
-        pointer-events: none;
-    }
-  `;
-  document.head.appendChild(imgStyle);
 }
 
 /**
@@ -125,14 +116,13 @@ export function DecorationGroup(groupId, groupName) {
   var activable = false;
   var visibleContainers = [];
 
-   function isActivable() {
+  function isActivable() {
     return activable;
   }
 
   function setActivable() {
     activable = true;
   }
-
 
   /**
    * Adds a new decoration to the group.
@@ -151,19 +141,19 @@ export function DecorationGroup(groupId, groupName) {
     layout(item);
   }
 
-   function addEnhanced(decoration) {
-      let id = groupId + "-" + lastItemId++;
+  function addEnhanced(decoration) {
+    let id = groupId + "-" + lastItemId++;
 
-      let range = rangeFromLocator(decoration.locator);
-      if (!range) {
-        log("Can't locate DOM range for decoration", decoration);
-        return;
-      }
-
-      let item = { id, decoration, range };
-      items.push(item);
-      layoutEnhanced(item, true);
+    let range = rangeFromLocator(decoration.locator);
+    if (!range) {
+      log("Can't locate DOM range for decoration", decoration);
+      return;
     }
+
+    let item = { id, decoration, range };
+    items.push(item);
+    layoutEnhanced(item, true);
+  }
 
   /**
    * Removes the decoration with given ID from the group.
@@ -473,7 +463,7 @@ export function DecorationGroup(groupId, groupName) {
     item.container = itemContainer;
 
     if (postMessage) {
-    Android.onDecorationActivated(
+    Android.onHighlightRect(
         JSON.stringify({
           id: item.decoration.id,
           group: groupName,
@@ -495,7 +485,7 @@ export function DecorationGroup(groupId, groupName) {
 
       requestAnimationFrame(function () {
         if (container != null) {
-      document.body.append(container);
+          document.body.append(container);
         }
       });
     }
@@ -506,6 +496,15 @@ export function DecorationGroup(groupId, groupName) {
     let viewportWidth = window.innerWidth;
     let visibleAreaLeft = pageIndex * viewportWidth; // Each page is one viewport width in size
     let visibleAreaId = `visible-area-${pageIndex}`;
+
+    //const yOffset = 0; //window.innerHeight - document.documentElement.scrollHeight;
+    let yOffset = window.innerHeight - document.documentElement.scrollHeight;
+
+    log(`yoffset: ${yOffset}`);
+
+    if (yOffset < -300) {
+      yOffset = 0;
+    }
 
     let newArea = false;
     let visibleArea = null;
@@ -529,8 +528,7 @@ export function DecorationGroup(groupId, groupName) {
         visibleArea.setAttribute("id", visibleAreaId);
         visibleArea.style.position = "absolute";
         visibleArea.style.left = `${visibleAreaLeft}px`;
-        visibleArea.style.top = `0px !important`; //`${yOffset}px`;
-        visibleArea.style.marginTop = `0px`;
+        visibleArea.style.top = `${yOffset}px`;
         visibleArea.style.width = `${viewportWidth}px`;
         visibleArea.style.height = `${window.innerHeight}px`;
         visibleArea.style.pointerEvents = "none"; // Allow interactions to pass through
@@ -538,6 +536,15 @@ export function DecorationGroup(groupId, groupName) {
 
         newArea = true;
       }
+    }
+
+    if (
+      visibleArea.style.top != 0 &&
+      yOffset != 0 &&
+      visibleArea.style.top != yOffset
+    ) {
+      log(`window top offset: ${yOffset}`);
+      visibleArea.style.top = `${yOffset}px`;
     }
 
     return { visibleArea: visibleArea, new: newArea };
@@ -553,10 +560,10 @@ export function DecorationGroup(groupId, groupName) {
     }
   }
 
-  return { 
+  return {
     add,
-     addEnhanced,
-      remove, 
+    addEnhanced,
+    remove,
     update,
     clear,
     clearEnhanced,
@@ -566,7 +573,7 @@ export function DecorationGroup(groupId, groupName) {
     isActivable,
     setActivable,
   };
-  }
+}
 
 window.addEventListener(
   "load",
@@ -575,19 +582,19 @@ window.addEventListener(
     const body = document.body;
     var lastSize = { width: 0, height: 0 };
     const observer = new ResizeObserver(() => {
-        if (
-          lastSize.width === body.clientWidth &&
-          lastSize.height === body.clientHeight
-        ) {
-          return;
-        }
-        lastSize = {
-          width: body.clientWidth,
-          height: body.clientHeight,
-        };
+      if (
+        lastSize.width === body.clientWidth &&
+        lastSize.height === body.clientHeight
+      ) {
+        return;
+      }
+      lastSize = {
+        width: body.clientWidth,
+        height: body.clientHeight,
+      };
 
-        groups.forEach(function (group) {
-          group.requestLayout();
+      groups.forEach(function (group) {
+        group.requestLayout();
       });
     });
     observer.observe(body);
