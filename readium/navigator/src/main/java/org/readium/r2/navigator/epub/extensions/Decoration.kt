@@ -58,7 +58,7 @@ public fun DecorationChange.javascript(templates: HtmlDecorationTemplates): Stri
             null // Not supported for now
 
         is DecorationChange.Removed ->
-            "group.clearEnhanced('$id');"
+            "group.remove('$id');"
 
         is DecorationChange.Updated ->
             toJSON(decoration)?.let { "group.update($it);" }

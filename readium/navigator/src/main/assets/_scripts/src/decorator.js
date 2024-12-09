@@ -143,9 +143,8 @@ export function DecorationGroup(groupId, groupName) {
 
   function addEnhanced(decoration) {
     let id = groupId + "-" + lastItemId++;
-    log(`adding decoration: ${id}`);
+
     let range = rangeFromLocator(decoration.locator);
-    log(`range: ${range} for ${id}`);
     if (!range) {
       log("Can't locate DOM range for decoration", decoration);
       return;
@@ -470,16 +469,16 @@ export function DecorationGroup(groupId, groupName) {
       visibleArea.append(itemContainer);
       item.container = itemContainer;
 
-      if (postMessage) {
-      Android.onHighlightRect(
-          JSON.stringify({
-            id: item.decoration.id,
-            group: groupName,
-            rect: toNativeRect(boundingRect)
-          })
-        );
-      }
+    if (postMessage) {
+    Android.onHighlightRect(
+        JSON.stringify({
+          id: item.decoration.id,
+          group: groupName,
+          rect: toNativeRect(boundingRect)
+        })
+      );
     }
+  }
 
   /**
    * Returns the group container element, after making sure it exists.

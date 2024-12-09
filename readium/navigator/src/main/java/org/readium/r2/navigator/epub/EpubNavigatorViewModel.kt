@@ -204,6 +204,13 @@ internal class EpubNavigatorViewModel(
         }
     }
 
+    fun shouldFollowFootnoteLink(
+        url: AbsoluteUrl, context: HyperlinkNavigator.FootnoteContext
+    ): Boolean {
+        val link = internalLinkFromUrl(url) ?: return true
+        return listener?.shouldFollowInternalLink(link, context) ?: true
+    }
+
     /**
      * Gets the publication [Link] targeted by the given [url].
      */
