@@ -330,6 +330,20 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         return listener?.onHighlightRect(id, group, rect) == true
     }
 
+    @android.webkit.JavascriptInterface
+    fun onHighlightRect(eventJson: String): Boolean {
+        val obj = tryOrLog { JSONObject(eventJson) }
+        val id = obj?.optNullableString("id")
+        val group = obj?.optNullableString("group")
+        val rect = obj?.optRectF("rect")
+        Log.d("HighlightRect", "onHighlightRect: $eventJson")
+        if (id == null || rect == null || group == null) {
+            Timber.e("Invalid JSON for onHighlightRect: $eventJson")
+            return false
+        }
+        return listener?.onHighlightRect(id, group, rect) ?: false
+    }
+
     /** Produced by gestures.js */
     private data class TapEvent(
         val defaultPrevented: Boolean,
