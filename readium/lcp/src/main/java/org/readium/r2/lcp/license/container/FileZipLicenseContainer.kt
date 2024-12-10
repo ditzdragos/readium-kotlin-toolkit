@@ -38,10 +38,13 @@ internal class FileZipLicenseContainer(
         }
 
         return try {
-            archive.getInputStream(entry).readBytes()
+            val bytes = archive.getInputStream(entry).readBytes()
+            archive.close()
+            bytes
         } catch (e: Exception) {
             throw LcpException(LcpError.Container.ReadFailed(pathInZIP))
         }
+
     }
 
     override fun write(license: LicenseDocument) {

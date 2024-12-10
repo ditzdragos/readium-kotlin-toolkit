@@ -36,7 +36,7 @@ public fun ByteArray.inflate(nowrap: Boolean = false, bufferSize: Int = 32 * 102
                 val count = inflater.inflate(buffer)
                 output.write(buffer, 0, count)
             }
-
+            inflater.end()
             Try.success(output.toByteArray())
         }
     } catch (e: DataFormatException) {

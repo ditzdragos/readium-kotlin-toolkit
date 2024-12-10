@@ -14,6 +14,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.util.AttributeSet
+import android.util.Log
 import android.view.*
 import android.webkit.URLUtil
 import android.webkit.WebResourceRequest
@@ -70,6 +71,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         fun onDragEnd(event: DragEvent): Boolean = false
         fun onKey(event: KeyEvent): Boolean = false
         fun onDecorationActivated(id: DecorationId, group: String, rect: RectF, point: PointF): Boolean = false
+        fun onHighlightRect(id: DecorationId, group: String, rect: RectF): Boolean = false
         fun onProgressionChanged() {}
         fun goForward(animated: Boolean = false): Boolean = false
         fun goBackward(animated: Boolean = false): Boolean = false
@@ -320,6 +322,20 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         return listener?.onDecorationActivated(id, group, rect, click.point) ?: false
     }
 
+    @android.webkit.JavascriptInterface
+    fun onHighlightRect(eventJson: String): Boolean {
+        val obj = tryOrLog { JSONObject(eventJson) }
+        val id = obj?.optNullableString("id")
+        val group = obj?.optNullableString("group")
+        val rect = obj?.optRectF("rect")
+        Log.d("HighlightRect", "onHighlightRect: $eventJson")
+        if (id == null || rect == null || group == null) {
+            Timber.e("Invalid JSON for onHighlightRect: $eventJson")
+            return false
+        }
+        return listener?.onHighlightRect(id, group, rect) ?: false
+    }
+
     /** Produced by gestures.js */
     private data class TapEvent(
         val defaultPrevented: Boolean,
@@ -486,11 +502,13 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
 
     @android.webkit.JavascriptInterface
     fun logError(message: String, filename: String, line: Int) {
+        Log.e("Readium", "JavaScript error: $filename:$line $message")
         Timber.e("JavaScript error: $filename:$line $message")
     }
 
     @android.webkit.JavascriptInterface
     fun log(message: String) {
+        Log.d("Readium", "Javascript: $message")
         Timber.d("JavaScript: $message")
     }
 
