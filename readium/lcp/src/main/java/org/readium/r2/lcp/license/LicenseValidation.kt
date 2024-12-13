@@ -59,7 +59,7 @@ internal enum class ObserverPolicy {
     Always
 }
 
-internal data class ValidatedDocuments constructor(
+internal data class ValidatedDocuments(
     val license: LicenseDocument,
     private val context: Context,
     val status: StatusDocument? = null

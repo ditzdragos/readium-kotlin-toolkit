@@ -300,7 +300,7 @@ public abstract class ZipUtil {
             return;
         }
         final int month = c.get(Calendar.MONTH) + 1;
-        final long value =  ((year - 1980) << 25)
+        final long value = ((long) (year - 1980) << 25)
                 |         (month << 21)
                 |         (c.get(Calendar.DAY_OF_MONTH) << 16)
                 |         (c.get(Calendar.HOUR_OF_DAY) << 11)

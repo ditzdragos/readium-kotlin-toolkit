@@ -22,7 +22,7 @@ public class Fetcher(
     private val userPropertiesPath: String?
 ) {
 
-    public fun data(path: String): ByteArray? = throw NotImplementedError()
+    public fun data(path: String): ByteArray = throw NotImplementedError()
 
     public fun dataStream(path: String): InputStream = throw NotImplementedError()
 

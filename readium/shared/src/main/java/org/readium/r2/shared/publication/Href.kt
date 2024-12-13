@@ -6,11 +6,11 @@
 
 package org.readium.r2.shared.publication
 
+import org.readium.r2.shared.util.Url as SharedUrl
 import android.os.Parcelable
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import org.readium.r2.shared.util.URITemplate
-import org.readium.r2.shared.util.Url as SharedUrl
 import timber.log.Timber
 
 /**
@@ -87,9 +87,7 @@ public class Href private constructor(private val href: Url) : Parcelable {
 
         other as Href
 
-        if (href != other.href) return false
-
-        return true
+        return href == other.href
     }
 
     override fun hashCode(): Int =

@@ -8,20 +8,40 @@
 
 package org.readium.navigator.media.tts.android
 
+import android.speech.tts.Voice as AndroidVoice
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.speech.tts.TextToSpeech
-import android.speech.tts.TextToSpeech.*
+import android.speech.tts.TextToSpeech.ERROR_INVALID_REQUEST
+import android.speech.tts.TextToSpeech.ERROR_NETWORK
+import android.speech.tts.TextToSpeech.ERROR_NETWORK_TIMEOUT
+import android.speech.tts.TextToSpeech.ERROR_NOT_INSTALLED_YET
+import android.speech.tts.TextToSpeech.ERROR_OUTPUT
+import android.speech.tts.TextToSpeech.ERROR_SERVICE
+import android.speech.tts.TextToSpeech.ERROR_SYNTHESIS
+import android.speech.tts.TextToSpeech.Engine
+import android.speech.tts.TextToSpeech.LANG_AVAILABLE
+import android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED
+import android.speech.tts.TextToSpeech.OnInitListener
+import android.speech.tts.TextToSpeech.QUEUE_ADD
+import android.speech.tts.TextToSpeech.SUCCESS
 import android.speech.tts.UtteranceProgressListener
-import android.speech.tts.Voice as AndroidVoice
-import android.speech.tts.Voice.*
-import kotlinx.coroutines.*
+import android.speech.tts.Voice.QUALITY_HIGH
+import android.speech.tts.Voice.QUALITY_LOW
+import android.speech.tts.Voice.QUALITY_NORMAL
+import android.speech.tts.Voice.QUALITY_VERY_HIGH
+import android.speech.tts.Voice.QUALITY_VERY_LOW
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.readium.navigator.media.tts.TtsEngine
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
@@ -242,7 +262,7 @@ public class AndroidTtsEngine private constructor(
         ) : State()
 
         data class Failure(
-            val error: AndroidTtsEngine.Error
+            val error: Error
         ) : State()
     }
 

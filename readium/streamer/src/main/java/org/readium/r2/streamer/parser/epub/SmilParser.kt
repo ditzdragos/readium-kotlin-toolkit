@@ -26,17 +26,17 @@ internal object SmilParser {
 
     fun parse(document: ElementNode, filePath: Url): MediaOverlays? {
         val body = document.getFirst("body", Namespaces.SMIL) ?: return null
-        return parseSeq(body, filePath)?.let { MediaOverlays(it) }
+        return parseSeq(body, filePath).let { MediaOverlays(it) }
     }
 
     @OptIn(DelicateReadiumApi::class)
-    private fun parseSeq(node: ElementNode, filePath: Url): List<MediaOverlayNode>? {
+    private fun parseSeq(node: ElementNode, filePath: Url): List<MediaOverlayNode> {
         val children: MutableList<MediaOverlayNode> = mutableListOf()
         for (child in node.getAll()) {
             if (child.name == "par" && child.namespace == Namespaces.SMIL) {
                 parsePar(child, filePath)?.let { children.add(it) }
             } else if (child.name == "seq" && child.namespace == Namespaces.SMIL) {
-                parseSeq(child, filePath)?.let { children.addAll(it) }
+                parseSeq(child, filePath).let { children.addAll(it) }
             }
         }
 

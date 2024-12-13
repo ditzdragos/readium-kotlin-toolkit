@@ -212,9 +212,7 @@ public sealed class Url : Parcelable {
 
         other as Url
 
-        if (uri.toString() != other.uri.toString()) return false
-
-        return true
+        return uri.toString() == other.uri.toString()
     }
 
     /**

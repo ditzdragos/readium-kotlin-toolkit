@@ -31,7 +31,6 @@ import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
 import org.readium.r2.navigator.preferences.ReadingProgression;
-import org.readium.r2.shared.ExperimentalReadiumApi;
 
 import java.util.HashMap;
 
@@ -48,7 +47,7 @@ import java.util.HashMap;
 class R2RTLViewPager extends ViewPager {
     public ReadingProgression direction = ReadingProgression.LTR;
     private int mLayoutDirection = ViewCompat.LAYOUT_DIRECTION_LTR;
-    private HashMap<OnPageChangeListener, ReversingOnPageChangeListener> mPageChangeListeners = new HashMap<>();
+    private final HashMap<OnPageChangeListener, ReversingOnPageChangeListener> mPageChangeListeners = new HashMap<>();
 
     public R2RTLViewPager(Context context) {
         super(context);

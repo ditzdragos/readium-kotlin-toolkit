@@ -44,5 +44,5 @@ public interface ReadableByteChannel extends Channel {
      * @throws NonReadableChannelException
      *             if the channel was not opened for reading.
      */
-    public int read(ByteBuffer buffer) throws IOException;
+    int read(ByteBuffer buffer) throws IOException;
 }

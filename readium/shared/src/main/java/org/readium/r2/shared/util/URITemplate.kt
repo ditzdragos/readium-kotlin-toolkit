@@ -34,7 +34,7 @@ internal data class URITemplate(val uri: String) {
     /**
      * Expands the HREF by replacing URI template variables by the given parameters.
      */
-    public fun expand(parameters: Map<String, String>): String {
+    fun expand(parameters: Map<String, String>): String {
         // `+` is considered like an encoded space, and will not be properly encoded in parameters.
         // This is an issue for ISO 8601 date for example.
         // As a workaround, we encode manually this character. We don't do it in the full URI,

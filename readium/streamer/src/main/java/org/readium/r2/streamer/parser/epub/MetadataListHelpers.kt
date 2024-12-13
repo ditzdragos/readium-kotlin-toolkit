@@ -24,21 +24,21 @@ internal class MetadataItemsHolder(private var items: List<MetadataItem>) {
  * Return all meta elements with the given [property].
  */
 internal fun List<MetadataItem>.metasWithProperty(property: String) = this
-    .filterIsInstance(MetadataItem.Meta::class.java)
+    .filterIsInstance<MetadataItem.Meta>()
     .filter { it.property == property }
 
 /**
  * Return the first meta element with the given [property].
  */
 internal fun List<MetadataItem>.firstWithProperty(property: String) = this
-    .filterIsInstance(MetadataItem.Meta::class.java)
+    .filterIsInstance<MetadataItem.Meta>()
     .firstOrNull { it.property == property }
 
 /**
  * Return the first link element with the given [rel].
  */
 internal fun List<MetadataItem>.firstWithRel(rel: String) = this
-    .filterIsInstance(MetadataItem.Link::class.java)
+    .filterIsInstance<MetadataItem.Link>()
     .firstOrNull { it.rels.contains(rel) }
 
 /**

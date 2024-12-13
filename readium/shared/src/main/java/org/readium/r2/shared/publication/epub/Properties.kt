@@ -20,7 +20,7 @@ import org.readium.r2.shared.publication.Properties
  */
 public val Properties.contains: Set<String>
     get() = (this["contains"] as? List<*>)
-        ?.filterIsInstance(String::class.java)
+        ?.filterIsInstance<String>()
         ?.toSet()
         ?: emptySet()
 

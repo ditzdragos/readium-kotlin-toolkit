@@ -1201,7 +1201,7 @@ public class ZipArchiveEntry extends java.util.zip.ZipEntry implements ArchiveEn
      */
     public void setUnixMode(final int mode) {
         // CheckStyle:MagicNumberCheck OFF - no point
-        setExternalAttributes((mode << SHORT_SHIFT)
+        setExternalAttributes(((long) mode << SHORT_SHIFT)
                               // MS-DOS read-only attribute
                               | ((mode & 0200) == 0 ? 1 : 0)
                               // MS-DOS directory flag

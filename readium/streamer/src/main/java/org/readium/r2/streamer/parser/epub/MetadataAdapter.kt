@@ -192,7 +192,7 @@ private class LanguageAdapter {
         .mapFirst { it.map(MetadataItem.Meta::value) }
 }
 
-private class TitleAdapter() {
+private class TitleAdapter {
 
     data class Result(
         val localizedTitle: LocalizedString?,
@@ -357,7 +357,7 @@ private class CollectionAdapter {
 private class OtherMetadataAdapter {
 
     fun adapt(items: List<MetadataItem>): Map<String, Any> =
-        items.filterIsInstance(MetadataItem.Meta::class.java)
+        items.filterIsInstance<MetadataItem.Meta>()
             .groupBy(MetadataItem.Meta::property)
             .mapValues { entry ->
                 val values = entry.value.map { it.toMap() }
@@ -372,10 +372,10 @@ private class OtherMetadataAdapter {
             value
         } else {
             val mappedMetaChildren = children
-                .filterIsInstance(MetadataItem.Meta::class.java)
+                .filterIsInstance<MetadataItem.Meta>()
                 .associate { Pair(it.property, it.toMap()) }
             val mappedLinkChildren = children
-                .filterIsInstance(MetadataItem.Link::class.java)
+                .filterIsInstance<MetadataItem.Link>()
                 .flatMap { link -> link.rels.map { rel -> Pair(rel, link.url()) } }
                 .toMap()
             mappedMetaChildren + mappedLinkChildren + Pair("@value", value)

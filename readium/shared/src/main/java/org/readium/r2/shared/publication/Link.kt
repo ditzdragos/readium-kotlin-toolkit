@@ -113,7 +113,7 @@ public data class Link(
         level = DeprecationLevel.ERROR
     )
     @Suppress("UNUSED_PARAMETER")
-    public fun expandTemplate(parameters: Map<String, String>): Link? =
+    public fun expandTemplate(parameters: Map<String, String>): Link =
         throw NotImplementedError()
 
     /**
@@ -127,7 +127,7 @@ public data class Link(
         level = DeprecationLevel.ERROR
     )
     @Suppress("UNUSED_PARAMETER")
-    public fun toUrl(baseUrl: Url?): String? =
+    public fun toUrl(baseUrl: Url?): String =
         throw NotImplementedError()
 
     /**
@@ -247,10 +247,10 @@ public data class Link(
         ReplaceWith("mediaType.toString()"),
         level = DeprecationLevel.ERROR
     )
-    val type: String? get() = throw NotImplementedError()
+    val type: String get() = throw NotImplementedError()
 
     @Deprecated("Use [type] instead", ReplaceWith("type"), level = DeprecationLevel.ERROR)
-    val typeLink: String? get() = throw NotImplementedError()
+    val typeLink: String get() = throw NotImplementedError()
 
     @Deprecated("Use [rels] instead.", ReplaceWith("rels"), level = DeprecationLevel.ERROR)
     val rel: List<String>

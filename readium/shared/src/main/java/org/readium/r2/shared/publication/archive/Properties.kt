@@ -14,5 +14,5 @@ public data class ArchiveProperties(
 )
 
 @Deprecated("Not used anymore", level = DeprecationLevel.ERROR)
-public val Properties.archive: ArchiveProperties?
+public val Properties.archive: ArchiveProperties
     get() = throw NotImplementedError()

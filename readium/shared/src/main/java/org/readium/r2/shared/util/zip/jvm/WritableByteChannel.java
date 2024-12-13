@@ -42,5 +42,5 @@ public interface WritableByteChannel extends Channel {
      * @throws IOException
      *             another IO exception occurs, details are in the message.
      */
-    public int write(ByteBuffer buffer) throws IOException;
+    int write(ByteBuffer buffer) throws IOException;
 }

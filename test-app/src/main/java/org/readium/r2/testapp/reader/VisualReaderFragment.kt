@@ -593,11 +593,11 @@ abstract class VisualReaderFragment : BaseReaderFragment() {
             // Call requires API level 21
             mPopupWindow.elevation = 5.0f
 
-            val textView = customView.findViewById(R.id.footnote) as TextView
+            val textView: TextView = customView.findViewById(R.id.footnote)
             textView.text = text
 
             // Get a reference for the custom view close button
-            val closeButton = customView.findViewById(R.id.ib_close) as ImageButton
+            val closeButton: ImageButton = customView.findViewById(R.id.ib_close)
 
             // Set a click listener for the popup window close button
             closeButton.setOnClickListener {

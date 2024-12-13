@@ -63,7 +63,7 @@ public value class FormatSpecification(public val specifications: Set<Specificat
 
 public interface Specification {
 
-    public companion object {}
+    public companion object;
 
     /*
      * Archive specifications

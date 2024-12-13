@@ -18,7 +18,7 @@ public interface Channel extends Closeable {
     /**
      * Returns true if this channel is open.
      */
-    public boolean isOpen();
+    boolean isOpen();
     /**
      * Closes an open channel. If the channel is already closed then this method
      * has no effect. If there is a problem with closing the channel then the
@@ -35,5 +35,5 @@ public interface Channel extends Closeable {
      * @throws IOException
      *             if a problem occurs closing the channel.
      */
-    public void close() throws IOException;
+    void close() throws IOException;
 }

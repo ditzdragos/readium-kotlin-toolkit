@@ -75,7 +75,7 @@ public data class Link(
         ReplaceWith("mediaType.toString()"),
         level = DeprecationLevel.ERROR
     )
-    public val type: String? get() = throw NotImplementedError()
+    public val type: String get() = throw NotImplementedError()
 
     @Deprecated(
         "Renamed `rels`",

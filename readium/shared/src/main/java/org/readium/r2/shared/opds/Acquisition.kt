@@ -79,7 +79,7 @@ public data class Acquisition(
     }
 
     @Deprecated("Use [type] instead", ReplaceWith("type"), level = DeprecationLevel.ERROR)
-    val typeAcquisition: String?
+    val typeAcquisition: String
         get() = type
 
     @Deprecated("Use [children] instead", ReplaceWith("children"), level = DeprecationLevel.ERROR)

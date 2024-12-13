@@ -32,9 +32,9 @@ internal abstract class R2FXLScroller {
     )
     abstract fun forceFinished(finished: Boolean)
 
-    private class Scroller internal constructor(context: Context) : R2FXLScroller() {
+    private class Scroller(context: Context) : R2FXLScroller() {
 
-        internal var scroller: OverScroller = OverScroller(context)
+        var scroller: OverScroller = OverScroller(context)
 
         override val isFinished: Boolean
             get() = scroller.isFinished

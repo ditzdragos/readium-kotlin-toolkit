@@ -25,7 +25,6 @@ import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import java.util.*
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -123,15 +122,15 @@ public class LcpDialogAuthentication : LcpAuthenticating {
         @SuppressLint("InflateParams") // https://stackoverflow.com/q/26404951/1474476
         val dialogView = inflater.inflate(R.layout.readium_lcp_auth_dialog, null)
 
-        val title = dialogView.findViewById(R.id.r2_title) as TextView
-        val description = dialogView.findViewById(R.id.r2_description) as TextView
-        val hint = dialogView.findViewById(R.id.r2_hint) as TextView
-        val passwordLayout = dialogView.findViewById(R.id.r2_passwordLayout) as TextInputLayout
-        val password = dialogView.findViewById(R.id.r2_password) as TextInputEditText
-        val confirmButton = dialogView.findViewById(R.id.r2_confirmButton) as Button
-        val cancelButton = dialogView.findViewById(R.id.r2_cancelButton) as Button
-        val forgotButton = dialogView.findViewById(R.id.r2_forgotButton) as Button
-        val helpButton = dialogView.findViewById(R.id.r2_helpButton) as Button
+        val title: TextView = dialogView.findViewById(R.id.r2_title)
+        val description: TextView = dialogView.findViewById(R.id.r2_description)
+        val hint: TextView = dialogView.findViewById(R.id.r2_hint)
+        val passwordLayout: TextInputLayout = dialogView.findViewById(R.id.r2_passwordLayout)
+        val password: TextInputEditText = dialogView.findViewById(R.id.r2_password)
+        val confirmButton: Button = dialogView.findViewById(R.id.r2_confirmButton)
+        val cancelButton: Button = dialogView.findViewById(R.id.r2_cancelButton)
+        val forgotButton: Button = dialogView.findViewById(R.id.r2_forgotButton)
+        val helpButton: Button = dialogView.findViewById(R.id.r2_helpButton)
 
         password.text = suspendedCall.currentInput
         password.addTextChangedListener { suspendedCall.currentInput = it }

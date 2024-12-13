@@ -525,10 +525,10 @@ internal class R2FXLLayout : FrameLayout {
         return matrixValues[value]
     }
 
-    private inner class AnimatedZoomRunnable internal constructor() : Runnable {
+    private inner class AnimatedZoomRunnable : Runnable {
 
-        internal var mCancelled = false
-        internal var mFinished = false
+        var mCancelled = false
+        var mFinished = false
 
         private val mStartTime: Long = System.currentTimeMillis()
         private var mZoomStart: Float = 0.toFloat()
@@ -540,15 +540,15 @@ internal class R2FXLLayout : FrameLayout {
         private var mTargetX: Float = 0.toFloat()
         private var mTargetY: Float = 0.toFloat()
 
-        internal fun doScale(): Boolean {
+        fun doScale(): Boolean {
             return !mZoomStart.equalsDelta(mZoomEnd)
         }
 
-        internal fun doTranslate(): Boolean {
+        fun doTranslate(): Boolean {
             return !mStartX.equalsDelta(mTargetX) || !mStartY.equalsDelta(mTargetY)
         }
 
-        internal fun runValidation(): Boolean {
+        fun runValidation(): Boolean {
             val scale = scale
             val newScale = scale.coerceIn(minScale, maxScale)
             scale(scale, newScale, focusX, focusY, true)
@@ -559,7 +559,7 @@ internal class R2FXLLayout : FrameLayout {
             return false
         }
 
-        internal fun scale(
+        fun scale(
             currentZoom: Float,
             targetZoom: Float,
             focalX: Float,
@@ -600,7 +600,7 @@ internal class R2FXLLayout : FrameLayout {
             return this
         }
 
-        internal fun cancel() {
+        fun cancel() {
             mCancelled = true
             finish()
         }
@@ -649,14 +649,14 @@ internal class R2FXLLayout : FrameLayout {
         }
     }
 
-    private inner class FlingRunnable internal constructor(context: Context) : Runnable {
+    private inner class FlingRunnable(context: Context) : Runnable {
 
         private val mScroller: R2FXLScroller = R2FXLScroller.getScroller(context)
         private var mCurrentX: Int = 0
         private var mCurrentY: Int = 0
         private var mFinished = false
 
-        internal fun fling(velocityX: Int, velocityY: Int) {
+        fun fling(velocityX: Int, velocityY: Int) {
             val startX = viewPortRect.left.roundToInt()
             val minX: Int
             val maxX: Int
@@ -690,7 +690,7 @@ internal class R2FXLLayout : FrameLayout {
             }
         }
 
-        internal fun cancelFling() {
+        fun cancelFling() {
             mScroller.forceFinished(true)
             finish()
         }
@@ -866,9 +866,9 @@ internal class R2FXLLayout : FrameLayout {
 
     private inner class ZoomDispatcher {
 
-        internal var mCount = 0
+        var mCount = 0
 
-        internal fun onZoomBegin(scale: Float) {
+        fun onZoomBegin(scale: Float) {
             if (mCount++ == 0) {
                 if (onZoomListeners != null) {
                     var i = 0
@@ -882,7 +882,7 @@ internal class R2FXLLayout : FrameLayout {
             }
         }
 
-        internal fun onZoom(scale: Float) {
+        fun onZoom(scale: Float) {
             if (onZoomListeners != null) {
                 var i = 0
                 val z = onZoomListeners!!.size
@@ -894,7 +894,7 @@ internal class R2FXLLayout : FrameLayout {
             }
         }
 
-        internal fun onZoomEnd(scale: Float) {
+        fun onZoomEnd(scale: Float) {
             if (--mCount == 0) {
                 if (onZoomListeners != null) {
                     var i = 0
@@ -911,9 +911,9 @@ internal class R2FXLLayout : FrameLayout {
 
     private inner class PanDispatcher {
 
-        internal var mCount = 0
+        var mCount = 0
 
-        internal fun onPanBegin() {
+        fun onPanBegin() {
             if (mCount++ == 0) {
                 if (onPanListeners != null) {
                     var i = 0
@@ -927,7 +927,7 @@ internal class R2FXLLayout : FrameLayout {
             }
         }
 
-        internal fun onPan() {
+        fun onPan() {
             if (onPanListeners != null) {
                 var i = 0
                 val z = onPanListeners!!.size
@@ -939,7 +939,7 @@ internal class R2FXLLayout : FrameLayout {
             }
         }
 
-        internal fun onPanEnd() {
+        fun onPanEnd() {
             if (--mCount == 0) {
                 if (onPanListeners != null) {
                     var i = 0
