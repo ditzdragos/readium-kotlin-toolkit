@@ -334,6 +334,14 @@ export function DecorationGroup(groupId, groupName) {
     if (item.clickableElements.length === 0) {
       item.clickableElements = Array.from(itemContainer.children);
     }
+
+    Android.onHighlightRect(
+            JSON.stringify({
+              id: item.decoration.id,
+              group: groupName,
+              rect: toNativeRect(boundingRect)
+            })
+          );
   }
 
   function layoutEnhanced(item, postMessage) {

@@ -11,6 +11,7 @@ package org.readium.r2.navigator.epub
 import android.app.Application
 import android.graphics.PointF
 import android.graphics.RectF
+import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.lifecycle.AndroidViewModel
@@ -371,6 +372,7 @@ internal class EpubNavigatorViewModel(
     }
 
     fun onHighlightRect(group: String, rect: RectF): Boolean {
+        Log.d("EpubNavigatorViewModel", "onHighlightRect: $group, $rect")
         decorationListeners[group]?.forEach { listener ->
             listener.onDecorationRect(group, rect)
         }
