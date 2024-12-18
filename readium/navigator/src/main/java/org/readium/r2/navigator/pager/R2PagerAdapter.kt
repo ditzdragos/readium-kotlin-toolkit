@@ -21,6 +21,8 @@ import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Url
+import org.readium.r2.shared.util.toAbsoluteUrl
+import org.readium.r2.shared.util.toUri
 
 internal class R2PagerAdapter internal constructor(
     val fm: FragmentManager,
@@ -47,6 +49,7 @@ internal class R2PagerAdapter internal constructor(
     private var currentFragment: Fragment? = null
     private var previousFragment: Fragment? = null
     private var nextFragment: Fragment? = null
+    private var isWebviewCenter: Boolean = false
 
     fun getCurrentFragment(): Fragment? {
         return currentFragment
@@ -84,7 +87,13 @@ internal class R2PagerAdapter internal constructor(
                 )
             }
             is PageResource.EpubFxl -> {
-                R2FXLPageFragment.newInstance(
+                resource.leftUrl?.toUri()?.toAbsoluteUrl()?.let {
+                    R2EpubPageFragment.newInstance(
+                        it,
+                        resource.leftLink,
+                        initialLocator = locator,
+                    )
+                } ?: R2FXLPageFragment.newInstance(
                     left = let(resource.leftLink, resource.leftUrl) { l, u -> Pair(l, u) },
                     right = let(resource.rightLink, resource.rightUrl) { l, u -> Pair(l, u) }
                 )
@@ -102,6 +111,7 @@ internal class R2PagerAdapter internal constructor(
                     }
             }
         }
+        (fragment as? R2EpubPageFragment)?.setWebviewCenterInScreen(isWebviewCenter)
         listener?.onCreatePageFragment(fragment)
         return fragment
     }
@@ -117,6 +127,10 @@ internal class R2PagerAdapter internal constructor(
             (mFragments.get(i) as? R2EpubPageFragment)?.loadLocator(locator)
         }
         pendingLocators.clear()
+    }
+
+    fun setWebviewCenterInScreen(center: Boolean) {
+        isWebviewCenter = center
     }
 
     private val pendingLocators = LongSparseArray<Locator>()

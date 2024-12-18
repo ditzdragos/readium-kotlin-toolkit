@@ -66,6 +66,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         fun onPageChanged(pageIndex: Int, totalPages: Int, url: String) {}
         fun onPageEnded(end: Boolean) {}
         fun onTap(point: PointF): Boolean = false
+        fun onLongTap(point: PointF): Boolean = false
         fun onDragStart(event: DragEvent): Boolean = false
         fun onDragMove(event: DragEvent): Boolean = false
         fun onDragEnd(event: DragEvent): Boolean = false
@@ -301,7 +302,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             return handleFootnote(event.interactiveElement)
         }
 
-        return runBlocking(uiScope.coroutineContext) { listener?.onTap(event.point) ?: false }
+        return runBlocking(uiScope.coroutineContext) { listener?.onTap(event.point) == true }
     }
 
     /**
@@ -319,7 +320,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             return false
         }
 
-        return listener?.onDecorationActivated(id, group, rect, click.point) ?: false
+        return listener?.onDecorationActivated(id, group, rect, click.point) == true
     }
 
     @android.webkit.JavascriptInterface
@@ -333,7 +334,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             Timber.e("Invalid JSON for onHighlightRect: $eventJson")
             return false
         }
-        return listener?.onHighlightRect(id, group, rect) ?: false
+        return listener?.onHighlightRect(id, group, rect) == true
     }
 
     /** Produced by gestures.js */
@@ -398,7 +399,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             noteContent = safe
         )
 
-        val shouldFollowLink = listener?.shouldFollowFootnoteLink(absoluteUrl, context) ?: true
+        val shouldFollowLink = listener?.shouldFollowFootnoteLink(absoluteUrl, context) != false
 
         if (shouldFollowLink) {
             urlNotToOverrideLoading = absoluteUrl
@@ -413,7 +414,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         val event = DragEvent.fromJSON(eventJson)?.takeIf { it.isValid }
             ?: return false
 
-        return runBlocking(uiScope.coroutineContext) { listener?.onDragStart(event) ?: false }
+        return runBlocking(uiScope.coroutineContext) { listener?.onDragStart(event) == true }
     }
 
     @android.webkit.JavascriptInterface
@@ -421,7 +422,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         val event = DragEvent.fromJSON(eventJson)?.takeIf { it.isValid }
             ?: return false
 
-        return runBlocking(uiScope.coroutineContext) { listener?.onDragMove(event) ?: false }
+        return runBlocking(uiScope.coroutineContext) { listener?.onDragMove(event) == true }
     }
 
     @android.webkit.JavascriptInterface
@@ -429,7 +430,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         val event = DragEvent.fromJSON(eventJson)?.takeIf { it.isValid }
             ?: return false
 
-        return runBlocking(uiScope.coroutineContext) { listener?.onDragEnd(event) ?: false }
+        return runBlocking(uiScope.coroutineContext) { listener?.onDragEnd(event) == true }
     }
 
     @android.webkit.JavascriptInterface
@@ -446,7 +447,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             characters = jsonObject.optNullableString("characters")?.takeUnless { it.isBlank() }
         )
 
-        return listener?.onKey(event) ?: false
+        return listener?.onKey(event) == true
     }
 
     @android.webkit.JavascriptInterface
@@ -614,7 +615,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             urlNotToOverrideLoading = null
             false
         } else {
-            listener?.shouldOverrideUrlLoading(this, request) ?: false
+            listener?.shouldOverrideUrlLoading(this, request) == true
         }
     }
 

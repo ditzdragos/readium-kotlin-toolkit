@@ -19,6 +19,8 @@ public interface InputListener {
      * Called when the user pressed or released a key, but nothing handled the event internally.
      */
     public fun onKey(event: KeyEvent): Boolean = false
+
+    public fun onLongTap(event: TapEvent): Boolean = false
 }
 
 @OptIn(ExperimentalReadiumApi::class)
@@ -41,4 +43,7 @@ internal class CompositeInputListener : InputListener {
 
     override fun onKey(event: KeyEvent): Boolean =
         listeners.any { it.onKey(event) }
+
+    override fun onLongTap(event: TapEvent): Boolean =
+        listeners.any { it.onLongTap(event) }
 }

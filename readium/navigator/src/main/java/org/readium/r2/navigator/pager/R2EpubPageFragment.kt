@@ -15,10 +15,13 @@ import android.annotation.SuppressLint
 import android.graphics.PointF
 import android.os.Bundle
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.*
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.os.BundleCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.postDelayed
@@ -107,7 +110,7 @@ internal class R2EpubPageFragment : Fragment() {
         get() = parentFragment as? EpubNavigatorFragment
 
     private val shouldApplyInsetsPadding: Boolean
-        get() = navigator?.config?.shouldApplyInsetsPadding ?: true
+        get() = navigator?.config?.shouldApplyInsetsPadding != false
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt(textZoomBundleKey, textZoom)
@@ -164,13 +167,14 @@ internal class R2EpubPageFragment : Fragment() {
         webView.isHorizontalScrollBarEnabled = false
         webView.settings.useWideViewPort = true
         webView.settings.loadWithOverviewMode = true
-        webView.settings.setSupportZoom(true)
-        webView.settings.builtInZoomControls = true
+        webView.settings.setSupportZoom(false)
+        webView.settings.builtInZoomControls = false
         webView.settings.displayZoomControls = false
         webView.settings.textZoom = textZoom
         webView.resourceUrl = resourceUrl
         webView.setPadding(0, 0, 0, 0)
         webView.addJavascriptInterface(webView, "Android")
+        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
 
         var endReached = false
         webView.setOnOverScrolledCallback(object : R2BasicWebView.OnOverScrolledCallback {
@@ -205,8 +209,11 @@ internal class R2EpubPageFragment : Fragment() {
 
         webView.webViewClient = object : WebViewClientCompat() {
 
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                (webView as? R2BasicWebView)?.shouldOverrideUrlLoading(request) ?: false
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest
+            ): Boolean =
+                (webView as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
 
             override fun shouldOverrideKeyEvent(view: WebView, event: KeyEvent): Boolean {
                 // Do something with the event here
@@ -227,7 +234,10 @@ internal class R2EpubPageFragment : Fragment() {
                 }
             }
 
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest
+            ): WebResourceResponse? =
                 (webView as? R2BasicWebView)?.shouldInterceptRequest(view, request)
         }
 
@@ -381,11 +391,14 @@ internal class R2EpubPageFragment : Fragment() {
     internal val paddingTop: Int get() = containerView.paddingTop
     internal val paddingBottom: Int get() = containerView.paddingBottom
 
-    private val isCurrentResource: Boolean get() {
-        val epubNavigator = navigator ?: return false
-        val currentFragment = (epubNavigator.resourcePager.adapter as? R2PagerAdapter)?.getCurrentFragment() as? R2EpubPageFragment ?: return false
-        return tag == currentFragment.tag
-    }
+    private val isCurrentResource: Boolean
+        get() {
+            val epubNavigator = navigator ?: return false
+            val currentFragment =
+                (epubNavigator.resourcePager.adapter as? R2PagerAdapter)?.getCurrentFragment() as? R2EpubPageFragment
+                    ?: return false
+            return tag == currentFragment.tag
+        }
 
     private fun onLoadPage() {
         if (!isLoading) return
@@ -481,6 +494,20 @@ internal class R2EpubPageFragment : Fragment() {
     suspend fun runJavaScriptSuspend(javascript: String): String = suspendCoroutine { cont ->
         runJavaScript(javascript) { result ->
             cont.resume(result)
+        }
+    }
+
+    fun setWebviewCenterInScreen(center: Boolean) {
+        Log.d("R2EpubPageFragment", "setWebviewCenterInScreen: $center $webView")
+        whenPageFinished {
+            val layoutParams = webView?.layoutParams
+            if (center) {
+                layoutParams?.height = CoordinatorLayout.LayoutParams.WRAP_CONTENT
+            } else {
+                layoutParams?.height = CoordinatorLayout.LayoutParams.MATCH_PARENT
+            }
+            webView?.layoutParams = layoutParams
+            webView?.requestLayout()
         }
     }
 

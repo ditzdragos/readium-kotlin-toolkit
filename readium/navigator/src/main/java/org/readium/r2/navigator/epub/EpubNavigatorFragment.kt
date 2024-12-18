@@ -700,6 +700,10 @@ public class EpubNavigatorFragment internal constructor(
         }
     }
 
+    public fun setWebviewCenterInScreen(center: Boolean) {
+        r2PagerAdapter?.setWebviewCenterInScreen(center)
+    }
+
     // VisualNavigator
 
     override val publicationView: View
@@ -823,6 +827,9 @@ public class EpubNavigatorFragment internal constructor(
 
         override fun onTap(point: PointF): Boolean =
             inputListener.onTap(TapEvent(point))
+
+        override fun onLongTap(point: PointF): Boolean =
+            inputListener.onLongTap(TapEvent(point))
 
         override fun onDragStart(event: R2BasicWebView.DragEvent): Boolean =
             onDrag(DragEvent.Type.Start, event)
