@@ -341,7 +341,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             Timber.e("Invalid JSON for onHighlightRect: $eventJson")
             return false
         }
-        return listener?.onHighlightRect(id, group, rect) ?: false
+        return listener?.onHighlightRect(id, group, rect) == true
     }
 
     /** Produced by gestures.js */
