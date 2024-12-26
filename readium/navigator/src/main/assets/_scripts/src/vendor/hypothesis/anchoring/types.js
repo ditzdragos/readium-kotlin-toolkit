@@ -224,22 +224,28 @@ export class TextQuoteAnchor {
   /**
    * @param {QuoteMatchOptions} [options]
    */
-  toRange(options = {}) {
-    return this.toPositionAnchor(options).toRange();
+  toRange(options = {}, approximateStart = null, approximateEnd = null) {
+    return this.toPositionAnchor(options, approximateStart, approximateEnd).toRange();
   }
 
   /**
    * @param {QuoteMatchOptions} [options]
    */
-  toPositionAnchor(options = {}) {
+  toPositionAnchor(options = {}, approximateStart = null, approximateEnd = null) {
     const text = /** @type {string} */ (this.root.textContent);
+//    log(`passing hint: ${options.hint}`)
     const match = matchQuote(text, this.exact, {
       ...this.context,
       hint: options.hint,
-    });
+    }, approximateStart, approximateEnd);
     if (!match) {
       throw new Error('Quote not found');
     }
     return new TextPositionAnchor(this.root, match.start, match.end);
   }
+}
+
+function log() {
+  var message = Array.prototype.slice.call(arguments).join(" ");
+  webkit.messageHandlers.log.postMessage(message);
 }

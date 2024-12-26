@@ -7,6 +7,44 @@
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 import { toNativeRect } from "./rect";
 
+/**
+ * Least Recently Used Cache with a limit wraping a Map object
+ * The LRUCache constructor takes a limit argument which specifies the maximum number of items the cache can hold.
+ * The get method removes and re-adds an item to ensure it's marked as the most recently used.
+ * The set method checks the size of the cache, and removes the least recently used item if necessary before adding the new item.
+ * The clear method clears the cache.
+ */
+class LRUCache {
+  constructor(limit = 100) {
+    // Default limit of 100 items
+    this.limit = limit;
+    this.map = new Map();
+  }
+
+  get(key) {
+    if (!this.map.has(key)) return undefined;
+
+    // Remove and re-add to ensure this item is the most recently used
+    const value = this.map.get(key);
+    this.map.delete(key);
+    this.map.set(key, value);
+    return value;
+  }
+
+  set(key, value) {
+    if (this.map.size >= this.limit) {
+      // Remove the least recently used item
+      const firstKey = this.map.keys().next().value;
+      this.map.delete(firstKey);
+    }
+    this.map.set(key, value);
+  }
+
+  clear() {
+    this.map.clear();
+  }
+}
+
 // Catch JS errors to log them in the app.
 window.addEventListener(
   "error",
@@ -229,6 +267,100 @@ export function snapCurrentOffset() {
   document.scrollingElement.scrollLeft = snapOffset(currentOffset + delta);
 }
 
+// Cache the higher level css elements range for faster calculating the word by word dom ranges
+let elementRangeCache = new LRUCache(10); // Key: cssSelector, Value: entire element range
+
+// Caches the css element range
+function cacheElementRange(cssSelector) {
+  const element = document.querySelector(cssSelector);
+  if (element) {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    elementRangeCache.set(cssSelector, range);
+  }
+}
+
+// Returns a range from a locator; it first searches for the higher level css element in the cache
+function rangeFromCachedLocator(locator) {
+  const cssSelector = locator.locations.cssSelector;
+  const entireRange = elementRangeCache.get(cssSelector);
+  if (!entireRange) {
+    cacheElementRange(cssSelector);
+    return rangeFromCachedLocator(locator);
+  }
+
+  const entireText = entireRange.toString();
+  let startIndex = 0;
+  let foundIndex = -1;
+
+  while (startIndex < entireText.length) {
+    const highlightIndex = entireText.indexOf(
+      locator.text.highlight,
+      startIndex
+    );
+    if (highlightIndex === -1) {
+      break; // No more occurrences of highlight text
+    }
+
+    const beforeText = locator.text.before
+      ? entireText.slice(
+          Math.max(0, highlightIndex - locator.text.before.length),
+          highlightIndex
+        )
+      : "";
+    const afterText = locator.text.after
+      ? entireText.slice(
+          highlightIndex + locator.text.highlight.length,
+          highlightIndex +
+            locator.text.highlight.length +
+            locator.text.after.length
+        )
+      : "";
+
+    const beforeTextMatches =
+      !locator.text.before || locator.text.before.endsWith(beforeText);
+    const afterTextMatches =
+      !locator.text.after || locator.text.after.startsWith(afterText);
+
+    if (beforeTextMatches && afterTextMatches) {
+      // Highlight text from locator was found
+      foundIndex = highlightIndex;
+      break;
+    }
+
+    // Update startIndex for next iteration to search for next occurrence of highlight text
+    startIndex = highlightIndex + 1;
+  }
+
+  if (foundIndex === -1) {
+    throw new Error("Locator range could not be calculated");
+  }
+
+  const highlightStartIndex = foundIndex;
+  const highlightEndIndex = foundIndex + locator.text.highlight.length;
+
+  const subRange = document.createRange();
+  let count = 0;
+  let node;
+  const nodeIterator = document.createNodeIterator(
+    entireRange.commonAncestorContainer, // This should be a Document or DocumentFragment node
+    NodeFilter.SHOW_TEXT
+  );
+
+  for (node = nodeIterator.nextNode(); node; node = nodeIterator.nextNode()) {
+    const nodeEndIndex = count + node.nodeValue.length;
+    if (nodeEndIndex > startIndex) {
+      break;
+    }
+    count = nodeEndIndex;
+  }
+
+  subRange.setStart(node, highlightStartIndex - count);
+  subRange.setEnd(node, highlightEndIndex - count);
+
+  return subRange;
+}
+
 export function rangeFromLocator(locator) {
   try {
     let locations = locator.locations;
@@ -236,17 +368,40 @@ export function rangeFromLocator(locator) {
     if (text && text.highlight) {
       var root;
       if (locations && locations.cssSelector) {
-        root = document.querySelector(locations.cssSelector);
+        try {
+          const range = rangeFromCachedLocator(locator);
+          return range;
+        } catch {
+          log("failed getting the range from css selector");
+          // root = document.querySelector(locations.cssSelector);
+        }
       }
+
       if (!root) {
         root = document.body;
+      }
+
+      let start = null;
+      let end = null;
+
+      if (locations) {
+        // If there is info about the start and end positions from the client, use that
+
+        if (locations.start !== undefined && locations.end !== undefined) {
+          log(`actual start and end: [${locations.start}, ${locations.end}]`);
+          start = Math.max(locations.start - 5, 0);
+          end = Math.min(locations.end + 5, root.textContent.length);
+          log(`adjusted start and end: [${start}, ${end}] with ${root.textContent}`);
+        }
       }
 
       let anchor = new TextQuoteAnchor(root, text.highlight, {
         prefix: text.before,
         suffix: text.after,
       });
-      return anchor.toRange();
+
+      log("rangeFromLocator: anchor", anchor, text.highlight ,start, end);
+      return anchor.toRange({}, start, end);
     }
 
     if (locations) {
@@ -269,14 +424,74 @@ export function rangeFromLocator(locator) {
         let range = document.createRange();
         range.setStartBefore(element);
         range.setEndAfter(element);
+        log("rangeFromLocator: found element", element);
         return range;
       }
     }
   } catch (e) {
-    logError(e);
+    logError(`Cannot parse range `,e);
   }
 
   return null;
+}
+
+export function getFirstVisibleWordText() {
+  const range = document.createRange();
+  const nodeIterator = document.createNodeIterator(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: function (node) {
+        // Only accept text nodes that are not empty
+        if (node.nodeValue.trim().length > 0) {
+          range.selectNodeContents(node);
+          const rect = range.getBoundingClientRect();
+
+          // Check if any part of the rect is within the viewport (horizontal and vertical)
+          if (
+            rect.right > 0 &&
+            rect.left < window.innerWidth &&
+            rect.bottom > 0 &&
+            rect.top < window.innerHeight
+          ) {
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        }
+        return NodeFilter.FILTER_REJECT;
+      },
+    }
+  );
+
+  let documentNode;
+  while ((documentNode = nodeIterator.nextNode())) {
+    const words = documentNode.nodeValue.trim().split(/\s+/);
+    if (words.length > 0) {
+      // Loop through each word to find the first visible word within the viewport
+      for (let i = 0; i < words.length; i++) {
+        const wordIndex = documentNode.nodeValue.indexOf(words[i]);
+
+        // Create a range for each word
+        const wordRange = document.createRange();
+        wordRange.setStart(documentNode, wordIndex);
+        wordRange.setEnd(documentNode, wordIndex + words[i].length);
+
+        const wordRect = wordRange.getBoundingClientRect();
+
+        // Check if the word is within the current viewport
+        if (
+          wordRect.right > 0 &&
+          wordRect.left < window.innerWidth &&
+          wordRect.bottom > 0 &&
+          wordRect.top < window.innerHeight
+        ) {
+          // Return the locator for the first visible word
+          return { text: getTextFrom(words[i], wordRange) };
+        }
+      }
+    }
+  }
+
+  return null; // Return null if no visible word is found
 }
 
 /// User Settings.
@@ -289,7 +504,7 @@ export function setCSSProperties(properties) {
 
 // For setting user setting.
 export function setProperty(key, value) {
-  if (value === null || value === "") {
+  if (value === null) {
     removeProperty(key);
   } else {
     var root = document.documentElement;
@@ -307,6 +522,20 @@ export function removeProperty(key) {
 }
 
 /// Toolkit
+
+function debounce(delay, func) {
+  var timeout;
+  return function () {
+    var self = this;
+    var args = arguments;
+    function callback() {
+      func.apply(self, args);
+      timeout = null;
+    }
+    clearTimeout(timeout);
+    timeout = setTimeout(callback, delay);
+  };
+}
 
 export function log() {
   var message = Array.prototype.slice.call(arguments).join(" ");

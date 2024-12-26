@@ -21,17 +21,23 @@ import approxSearch from 'approx-string-match';
  * @param {number} maxErrors
  * @return {StringMatch[]}
  */
-function search(text, str, maxErrors) {
-  // Do a fast search for exact matches. The `approx-string-match` library
-  // doesn't currently incorporate this optimization itself.
+function search(text, str, maxErrors, approximateStart = null, approximateEnd = null) {
+  // If approximate positions are provided, limit the search area
+  let searchText = text;
+  if (approximateStart !== null && approximateEnd !== null) {
+    searchText = text.slice(approximateStart, approximateEnd);
+  }
+
+  // Perform fast search for exact matches in the search area
   let matchPos = 0;
   let exactMatches = [];
+
   while (matchPos !== -1) {
-    matchPos = text.indexOf(str, matchPos);
+    matchPos = searchText.indexOf(str, matchPos);
     if (matchPos !== -1) {
       exactMatches.push({
-        start: matchPos,
-        end: matchPos + str.length,
+        start: approximateStart !== null ? matchPos + approximateStart : matchPos,
+        end: approximateStart !== null ? matchPos + str.length + approximateStart : matchPos + str.length,
         errors: 0,
       });
       matchPos += 1;
@@ -40,9 +46,15 @@ function search(text, str, maxErrors) {
   if (exactMatches.length > 0) {
     return exactMatches;
   }
+  //  else {
+  //   if (approximateStart != null && approximateEnd != null && (approximateStart > 0 || approximateEnd < text.length)) {
+  //     const newApproxStart = Math.max(0, approximateStart-100);
+  //     const newApproxEnd = Math.min(approximateEnd+100, text.length);
+  //     return search(text, str, maxErrors, newApproxStart, newApproxEnd)
+  //   }
+  // }
 
-  // If there are no exact matches, do a more expensive search for matches
-  // with errors.
+  // If no exact matches, fallback to approximate search
   return approxSearch(text, str, maxErrors);
 }
 
@@ -78,7 +90,7 @@ function textMatchScore(text, str) {
  *   @param {number} [context.hint] - Expected offset of match within text
  * @return {Match|null}
  */
-export function matchQuote(text, quote, context = {}) {
+export function matchQuote(text, quote, context = {}, approximateStart = null, approximateEnd = null) {
   if (quote.length === 0) {
     return null;
   }
@@ -95,7 +107,7 @@ export function matchQuote(text, quote, context = {}) {
   const maxErrors = Math.min(256, quote.length / 2);
 
   // Find closest matches for `quote` in `text` based on edit distance.
-  const matches = search(text, quote, maxErrors);
+  const matches = search(text, quote, maxErrors, approximateStart, approximateEnd);
 
   if (matches.length === 0) {
     return null;
