@@ -52,7 +52,8 @@ import org.readium.r2.shared.util.use
 import timber.log.Timber
 
 @OptIn(ExperimentalReadiumApi::class)
-internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebView(context, attrs) {
+internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
+    WebView(context, attrs) {
 
     interface Listener {
         val readingProgression: ReadingProgression
@@ -70,7 +71,13 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         fun onDragMove(event: DragEvent): Boolean = false
         fun onDragEnd(event: DragEvent): Boolean = false
         fun onKey(event: KeyEvent): Boolean = false
-        fun onDecorationActivated(id: DecorationId, group: String, rect: RectF, point: PointF): Boolean = false
+        fun onDecorationActivated(
+            id: DecorationId,
+            group: String,
+            rect: RectF,
+            point: PointF
+        ): Boolean = false
+
         fun onHighlightRect(id: DecorationId, group: String, rect: RectF): Boolean = false
         fun onProgressionChanged() {}
         fun goForward(animated: Boolean = false): Boolean = false
@@ -88,7 +95,10 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         fun shouldOverrideUrlLoading(webView: WebView, request: WebResourceRequest): Boolean = false
 
         @InternalReadiumApi
-        fun shouldInterceptRequest(webView: WebView, request: WebResourceRequest): WebResourceResponse? = null
+        fun shouldInterceptRequest(
+            webView: WebView,
+            request: WebResourceRequest
+        ): WebResourceResponse? = null
 
         @InternalReadiumApi
         fun onFootnoteLinkActivated(url: AbsoluteUrl, context: HyperlinkNavigator.FootnoteContext)
@@ -109,13 +119,16 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         fun goToPreviousResource(jump: Boolean, animated: Boolean): Boolean = false
 
         @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onScroll() {}
+        fun onScroll() {
+        }
 
         @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onHighlightActivated(id: String) {}
+        fun onHighlightActivated(id: String) {
+        }
 
         @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onHighlightAnnotationMarkActivated(id: String) {}
+        fun onHighlightAnnotationMarkActivated(id: String) {
+        }
     }
 
     var listener: Listener? = null
@@ -138,42 +151,43 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
     }
 
     /** Computes the current progression in the resource. */
-    val progression: Double get() =
-        if (scrollMode) {
-            val y = scrollY.toDouble()
-            val contentHeight = computeVerticalScrollRange()
+    val progression: Double
+        get() =
+            if (scrollMode) {
+                val y = scrollY.toDouble()
+                val contentHeight = computeVerticalScrollRange()
 
-            var progression = 0.0
-            if (contentHeight > 0) {
-                progression = (y / contentHeight).coerceIn(0.0, 1.0)
+                var progression = 0.0
+                if (contentHeight > 0) {
+                    progression = (y / contentHeight).coerceIn(0.0, 1.0)
+                }
+
+                progression
+            } else {
+                var x = scrollX.toDouble()
+                val pageWidth = computeHorizontalScrollExtent()
+                val contentWidth = computeHorizontalScrollRange()
+
+                val isRtl = (listener?.readingProgression == ReadingProgression.RTL)
+
+                // For RTL, we need to add the equivalent of one page to the x position, otherwise the
+                // progression will be one page off.
+                if (isRtl) {
+                    x += pageWidth
+                }
+
+                var progression = 0.0
+                if (contentWidth > 0) {
+                    progression = (x / contentWidth).coerceIn(0.0, 1.0)
+                }
+                // For RTL, we need to reverse the progression because the web view is always scrolling
+                // from left to right, no matter the reading direction.
+                if (isRtl) {
+                    progression = 1 - progression
+                }
+
+                progression
             }
-
-            progression
-        } else {
-            var x = scrollX.toDouble()
-            val pageWidth = computeHorizontalScrollExtent()
-            val contentWidth = computeHorizontalScrollRange()
-
-            val isRtl = (listener?.readingProgression == ReadingProgression.RTL)
-
-            // For RTL, we need to add the equivalent of one page to the x position, otherwise the
-            // progression will be one page off.
-            if (isRtl) {
-                x += pageWidth
-            }
-
-            var progression = 0.0
-            if (contentWidth > 0) {
-                progression = (x / contentWidth).coerceIn(0.0, 1.0)
-            }
-            // For RTL, we need to reverse the progression because the web view is always scrolling
-            // from left to right, no matter the reading direction.
-            if (isRtl) {
-                progression = 1 - progression
-            }
-
-            progression
-        }
 
     interface OnOverScrolledCallback {
         fun onOverScrolled(scrollX: Int, scrollY: Int, clampedX: Boolean, clampedY: Boolean)
@@ -330,20 +344,6 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         return listener?.onHighlightRect(id, group, rect) == true
     }
 
-    @android.webkit.JavascriptInterface
-    fun onHighlightRect(eventJson: String): Boolean {
-        val obj = tryOrLog { JSONObject(eventJson) }
-        val id = obj?.optNullableString("id")
-        val group = obj?.optNullableString("group")
-        val rect = obj?.optRectF("rect")
-        Log.d("HighlightRect", "onHighlightRect: $eventJson")
-        if (id == null || rect == null || group == null) {
-            Timber.e("Invalid JSON for onHighlightRect: $eventJson")
-            return false
-        }
-        return listener?.onHighlightRect(id, group, rect) == true
-    }
-
     /** Produced by gestures.js */
     private data class TapEvent(
         val defaultPrevented: Boolean,
@@ -471,8 +471,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         val offset: PointF,
         val interactiveElement: String?
     ) {
-        internal val isValid: Boolean get() =
-            !defaultPrevented && (interactiveElement == null)
+        internal val isValid: Boolean
+            get() =
+                !defaultPrevented && (interactiveElement == null)
 
         companion object {
             fun fromJSONObject(obj: JSONObject?): DragEvent? {
@@ -604,17 +605,21 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         }
     }
 
-    internal suspend fun runJavaScriptSuspend(javascript: String): String = suspendCoroutine { cont ->
-        runJavaScript(javascript) { result ->
-            cont.resume(result)
+    internal suspend fun runJavaScriptSuspend(javascript: String): String =
+        suspendCoroutine { cont ->
+            runJavaScript(javascript) { result ->
+                cont.resume(result)
+            }
         }
-    }
 
     internal fun shouldOverrideUrlLoading(request: WebResourceRequest): Boolean {
-        return listener?.shouldOverrideUrlLoading(this, request) ?: false
+        return listener?.shouldOverrideUrlLoading(this, request) == true
     }
 
-    internal fun shouldInterceptRequest(webView: WebView, request: WebResourceRequest): WebResourceResponse? {
+    internal fun shouldInterceptRequest(
+        webView: WebView,
+        request: WebResourceRequest
+    ): WebResourceResponse? {
         // Prevent favicon.ico to be loaded, this was causing a NullPointerException in NanoHttp
         if (!request.isForMainFrame && request.url.path?.endsWith("/favicon.ico") == true) {
             tryOrLog<Unit> {
@@ -643,7 +648,8 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
      * A wrapper for the app-provided custom [ActionMode.Callback] which clears the selection when
      * activating one of the menu items.
      */
-    inner class CallbackWrapper(val callback: ActionMode.Callback) : ActionMode.Callback by callback {
+    inner class CallbackWrapper(val callback: ActionMode.Callback) :
+        ActionMode.Callback by callback {
         override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
             uiScope.launch { clearFocus() }
             return callback.onActionItemClicked(mode, item)
