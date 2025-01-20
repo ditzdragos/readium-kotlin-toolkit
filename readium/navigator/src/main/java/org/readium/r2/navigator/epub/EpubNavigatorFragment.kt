@@ -898,11 +898,12 @@ public class EpubNavigatorFragment internal constructor(
             return true
         }
 
-        override fun shouldFollowFootnoteLink(
+        override fun onFootnoteLinkActivated(
             url: AbsoluteUrl,
             context: HyperlinkNavigator.FootnoteContext
-        ): Boolean =
-            viewModel.shouldFollowFootnoteLink(url, context)
+        ) {
+            viewModel.navigateToUrl(url, context)
+        }
 
         override fun shouldInterceptRequest(
             webView: WebView,
