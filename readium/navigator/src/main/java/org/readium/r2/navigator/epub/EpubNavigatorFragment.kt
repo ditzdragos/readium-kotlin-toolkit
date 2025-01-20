@@ -8,7 +8,6 @@
 
 package org.readium.r2.navigator.epub
 
-import android.content.SharedPreferences
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Bundle
@@ -88,7 +87,6 @@ import org.readium.r2.shared.publication.Href
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
-import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
 import org.readium.r2.shared.publication.epub.EpubLayout
 import org.readium.r2.shared.publication.presentation.presentation
 import org.readium.r2.shared.publication.services.positionsByReadingOrder
@@ -120,7 +118,7 @@ public class EpubNavigatorFragment internal constructor(
     internal val paginationListener: PaginationListener?,
     epubLayout: EpubLayout,
     private val defaults: EpubDefaults,
-    configuration: Configuration
+    configuration: Configuration,
 ) : NavigatorFragment(publication),
     OverflowableNavigator,
     SelectableNavigator,
@@ -206,14 +204,14 @@ public class EpubNavigatorFragment internal constructor(
         var disableSelectionWhenProtected: Boolean,
 
         internal var fontFamilyDeclarations: List<FontFamilyDeclaration>,
-        internal var javascriptInterfaces: Map<String, JavascriptInterfaceFactory>
+        internal var javascriptInterfaces: Map<String, JavascriptInterfaceFactory>,
     ) {
         public constructor(
             servedAssets: List<String> = emptyList(),
             readiumCssRsProperties: RsProperties = RsProperties(),
             decorationTemplates: HtmlDecorationTemplates = HtmlDecorationTemplates.defaultTemplates(),
             selectionActionModeCallback: ActionMode.Callback? = null,
-            shouldApplyInsetsPadding: Boolean? = true
+            shouldApplyInsetsPadding: Boolean? = true,
         ) : this(
             servedAssets = servedAssets,
             readiumCssRsProperties = readiumCssRsProperties,
@@ -245,7 +243,7 @@ public class EpubNavigatorFragment internal constructor(
         public fun addFontFamilyDeclaration(
             fontFamily: FontFamily,
             alternates: List<FontFamily> = emptyList(),
-            builderAction: (MutableFontFamilyDeclaration).() -> Unit
+            builderAction: (MutableFontFamilyDeclaration).() -> Unit,
         ) {
             fontFamilyDeclarations += buildFontFamilyDeclaration(
                 fontFamily = fontFamily.name,
@@ -327,12 +325,6 @@ public class EpubNavigatorFragment internal constructor(
     private lateinit var resourcesSingle: List<PageResource>
     private lateinit var resourcesDouble: List<PageResource>
 
-    @Deprecated(
-        "Migrate to the new Settings API (see migration guide)",
-        level = DeprecationLevel.ERROR
-    )
-    public val preferences: SharedPreferences get() = throw NotImplementedError()
-
     internal var currentPagerPosition: Int = 0
     internal lateinit var adapter: R2PagerAdapter
     private lateinit var currentActivity: FragmentActivity
@@ -343,7 +335,7 @@ public class EpubNavigatorFragment internal constructor(
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         currentActivity = requireActivity()
         _binding = ReadiumNavigatorViewpagerBinding.inflate(inflater, container, false)
@@ -693,14 +685,6 @@ public class EpubNavigatorFragment internal constructor(
     override val overflow: StateFlow<OverflowableNavigator.Overflow>
         get() = viewModel.overflow
 
-    @Deprecated(
-        "Use `presentation.value.readingProgression` instead",
-        replaceWith = ReplaceWith("presentation.value.readingProgression"),
-        level = DeprecationLevel.ERROR
-    )
-    override val readingProgression: PublicationReadingProgression
-        get() = throw NotImplementedError()
-
     private val inputListener = CompositeInputListener()
 
     override fun addInputListener(listener: InputListener) {
@@ -826,7 +810,7 @@ public class EpubNavigatorFragment internal constructor(
             id: DecorationId,
             group: String,
             rect: RectF,
-            point: PointF
+            point: PointF,
         ): Boolean =
             viewModel.onDecorationActivated(
                 id = id,
@@ -861,7 +845,7 @@ public class EpubNavigatorFragment internal constructor(
 
         override fun onFootnoteLinkActivated(
             url: AbsoluteUrl,
-            context: HyperlinkNavigator.FootnoteContext
+            context: HyperlinkNavigator.FootnoteContext,
         ) {
             viewModel.navigateToUrl(url, context)
         }
@@ -1115,37 +1099,6 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     public companion object {
-
-        /**
-         * Creates a factory for [EpubNavigatorFragment].
-         *
-         * @param publication EPUB publication to render in the navigator.
-         * @param baseUrl A base URL where this publication is served from. This is optional, only
-         * if you use a local HTTP server.
-         * @param initialLocator The first location which should be visible when rendering the
-         * publication. Can be used to restore the last reading location.
-         * @param readingOrder Custom order of resources to display. Used for example to display a
-         * non-linear resource on its own.
-         * @param listener Optional listener to implement to observe events, such as user taps.
-         * @param readingOrder Custom order of resources to display. Used for example to display a
-         * non-linear resource on its own.
-         * @param config Additional configuration.
-         */
-        @Deprecated(
-            "Use `EpubNavigatorFactory().createFragmentFactory()` instead",
-            level = DeprecationLevel.ERROR
-        )
-        @Suppress("UNUSED_PARAMETER")
-        public fun createFactory(
-            publication: Publication,
-            baseUrl: String? = null,
-            initialLocator: Locator? = null,
-            readingOrder: List<Link>? = null,
-            listener: Listener? = null,
-            paginationListener: PaginationListener? = null,
-            config: Configuration = Configuration(),
-            initialPreferences: EpubPreferences = EpubPreferences()
-        ): FragmentFactory { throw NotImplementedError() }
 
         /**
          * Creates a factory for a dummy [EpubNavigatorFragment].

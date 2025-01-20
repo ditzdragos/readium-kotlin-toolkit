@@ -12,7 +12,6 @@
 package org.readium.r2.shared.publication
 
 import android.os.Parcelable
-import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import org.json.JSONArray
 import org.json.JSONObject
@@ -60,7 +59,7 @@ public data class Link(
     val duration: Double? = null,
     val languages: List<String> = listOf(),
     val alternates: List<Link> = listOf(),
-    val children: List<Link> = listOf()
+    val children: List<Link> = listOf(),
 ) : JSONable, Parcelable {
 
     /**
@@ -73,7 +72,7 @@ public data class Link(
         rels: Set<String> = setOf(),
         properties: Properties = Properties(),
         alternates: List<Link> = listOf(),
-        children: List<Link> = listOf()
+        children: List<Link> = listOf(),
     ) : this(
         href = Href(href),
         mediaType = mediaType,
@@ -91,44 +90,8 @@ public data class Link(
      */
     public fun url(
         base: Url? = null,
-        parameters: Map<String, String> = emptyMap()
+        parameters: Map<String, String> = emptyMap(),
     ): Url = href.resolve(base, parameters)
-
-    /**
-     * List of URI template parameter keys, if the [Link] is templated.
-     */
-    @IgnoredOnParcel
-    @Deprecated("Open a GitHub issue if you were using this", level = DeprecationLevel.ERROR)
-    val templateParameters: List<String> get() =
-        throw NotImplementedError()
-
-    /**
-     * Expands the HREF by replacing URI template variables by the given parameters.
-     *
-     * See RFC 6570 on URI template.
-     */
-    @Deprecated(
-        "Use `url(parameters)` instead",
-        ReplaceWith("this.url(parameters = parameters)"),
-        level = DeprecationLevel.ERROR
-    )
-    @Suppress("UNUSED_PARAMETER")
-    public fun expandTemplate(parameters: Map<String, String>): Link? =
-        throw NotImplementedError()
-
-    /**
-     * Computes an absolute URL to the link, relative to the given [baseUrl].
-     *
-     * If the link's [href] is already absolute, the [baseUrl] is ignored.
-     */
-    @Deprecated(
-        "Use `url(baseUrl)` instead",
-        ReplaceWith("this.url(baseUrl)"),
-        level = DeprecationLevel.ERROR
-    )
-    @Suppress("UNUSED_PARAMETER")
-    public fun toUrl(baseUrl: Url?): String? =
-        throw NotImplementedError()
 
     /**
      * Serializes a [Link] to its RWPM JSON representation.
@@ -164,7 +127,7 @@ public data class Link(
          */
         public fun fromJSON(
             json: JSONObject?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): Link? {
             json ?: return null
 
@@ -191,7 +154,7 @@ public data class Link(
 
         private fun parseHref(
             json: JSONObject,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): Href? {
             val hrefString = json.optNullableString("href")
             if (hrefString == null) {
@@ -231,7 +194,7 @@ public data class Link(
          */
         public fun fromJSONArray(
             json: JSONArray?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): List<Link> {
             return json.parseObjects {
                 fromJSON(
@@ -241,20 +204,6 @@ public data class Link(
             }
         }
     }
-
-    @Deprecated(
-        "Use [mediaType.toString()] instead",
-        ReplaceWith("mediaType.toString()"),
-        level = DeprecationLevel.ERROR
-    )
-    val type: String? get() = throw NotImplementedError()
-
-    @Deprecated("Use [type] instead", ReplaceWith("type"), level = DeprecationLevel.ERROR)
-    val typeLink: String? get() = throw NotImplementedError()
-
-    @Deprecated("Use [rels] instead.", ReplaceWith("rels"), level = DeprecationLevel.ERROR)
-    val rel: List<String>
-        get() = rels.toList()
 }
 
 /**

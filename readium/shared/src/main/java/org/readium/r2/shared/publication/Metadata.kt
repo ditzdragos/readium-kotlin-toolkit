@@ -21,8 +21,6 @@ import org.readium.r2.shared.extensions.optPositiveInt
 import org.readium.r2.shared.extensions.optStringsFromArrayOrSingle
 import org.readium.r2.shared.extensions.putIfNotEmpty
 import org.readium.r2.shared.extensions.toMap
-import org.readium.r2.shared.publication.presentation.Presentation
-import org.readium.r2.shared.publication.presentation.presentation
 import org.readium.r2.shared.util.Instant
 import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.logging.WarningLogger
@@ -64,7 +62,7 @@ public data class Metadata(
     val duration: Double? = null,
     val numberOfPages: Int? = null,
     val belongsTo: Map<String, List<Collection>> = emptyMap(),
-    val otherMetadata: @WriteWith<JSONParceler> Map<String, Any> = mapOf()
+    val otherMetadata: @WriteWith<JSONParceler> Map<String, Any> = mapOf(),
 ) : JSONable, Parcelable {
 
     public constructor(
@@ -99,7 +97,7 @@ public data class Metadata(
         belongsTo: Map<String, List<Collection>> = emptyMap(),
         belongsToCollections: List<Collection> = emptyList(),
         belongsToSeries: List<Collection> = emptyList(),
-        otherMetadata: Map<String, Any> = mapOf()
+        otherMetadata: Map<String, Any> = mapOf(),
     ) : this(
         identifier = identifier,
         type = type,
@@ -168,20 +166,6 @@ public data class Metadata(
     }
 
     /**
-     * Computes a [ReadingProgression] when the value of [readingProgression] is set to
-     * auto, using the publication language.
-     *
-     * See this issue for more details: https://github.com/readium/architecture/issues/113
-     */
-    @Deprecated(
-        "You should resolve [ReadingProgression.AUTO] by yourself.",
-        level = DeprecationLevel.ERROR
-    )
-    @IgnoredOnParcel
-    val effectiveReadingProgression: ReadingProgression get() =
-        throw NotImplementedError()
-
-    /**
      * Serializes a [Metadata] to its RWPM JSON representation.
      */
     override fun toJSON(): JSONObject = JSONObject(otherMetadata).apply {
@@ -231,7 +215,7 @@ public data class Metadata(
          */
         public fun fromJSON(
             json: JSONObject?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): Metadata? {
             json ?: return null
             val localizedTitle = LocalizedString.fromJSON(json.remove("title"), warnings)
@@ -365,63 +349,4 @@ public data class Metadata(
             )
         }
     }
-
-    @Deprecated("Use [type] instead", ReplaceWith("type"), level = DeprecationLevel.ERROR)
-    val rdfType: String? get() = type
-
-    @Deprecated(
-        "Use [localizeTitle] instead.",
-        ReplaceWith("localizedTitle"),
-        level = DeprecationLevel.ERROR
-    )
-    val multilanguageTitle: LocalizedString?
-        get() = localizedTitle
-
-    @Deprecated(
-        "Use [localizedTitle.get] instead",
-        ReplaceWith("localizedTitle.translationForLanguage(key)?.string"),
-        level = DeprecationLevel.ERROR
-    )
-    public fun titleForLang(key: String): String? =
-        localizedTitle?.getOrFallback(key)?.string
-
-    @Deprecated(
-        "Use [readingProgression] instead.",
-        ReplaceWith("readingProgression"),
-        level = DeprecationLevel.ERROR
-    )
-    val direction: String
-        get() {
-            throw NotImplementedError()
-        }
-
-    @Deprecated(
-        "Use [published] instead",
-        ReplaceWith("published?.toIso8601String()"),
-        level = DeprecationLevel.ERROR
-    )
-    val publicationDate: String?
-        get() = published?.toString()
-
-    @Deprecated(
-        "Use [presentation] instead",
-        ReplaceWith("presentation", "org.readium.r2.shared.publication.presentation.presentation"),
-        level = DeprecationLevel.ERROR
-    )
-    val rendition: Presentation
-        get() = presentation
-
-    @Deprecated(
-        "Access from [otherMetadata] instead",
-        ReplaceWith("otherMetadata[\"source\"] as? String"),
-        level = DeprecationLevel.ERROR
-    )
-    val source: String?
-        get() = otherMetadata["source"] as? String
-
-    @Deprecated("Not used anymore", ReplaceWith("null"), level = DeprecationLevel.ERROR)
-    val rights: String? get() = null
-
-    @Deprecated("Renamed into [toJSON]", ReplaceWith("toJSON()"), level = DeprecationLevel.ERROR)
-    public fun writeJSON(): JSONObject = toJSON()
 }

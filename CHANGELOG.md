@@ -4,9 +4,37 @@ All notable changes to this project will be documented in this file. Take a look
 
 **Warning:** Features marked as *experimental* may change or be removed in a future release without notice. Use with caution.
 
-## [Unreleased]
+<!-- ## [Unreleased] -->
+
+## [3.0.3]
 
 ### Fixed
+
+#### LCP
+
+* Fixed `IllegalArgumentException` when trying to decrypt the end of a `CbcLcpResource`.
+
+
+## [3.0.2]
+
+### Fixed
+
+#### Navigator
+
+* Fixed the value of the `scroll` setting when switching from a reflowable EPUB to a fixed-layout one.
+
+#### LCP
+
+* Fixed `IndexOutOfBoundsException` occurring when an LCP-protected EPUB contains incorrect original lengths in its `META-INF/encryption.xml` file.
+
+
+## [3.0.1]
+
+### Fixed
+
+#### Shared
+
+* Improved performance when accessing a publication from the Shared Storage.
 
 #### Navigator
 
@@ -895,4 +923,6 @@ progression. Now if no reading progression is set, the `effectiveReadingProgress
 [3.0.0-beta.1]: https://github.com/readium/kotlin-toolkit/compare/3.0.0-alpha.2...3.0.0-beta.1
 [3.0.0-beta.2]: https://github.com/readium/kotlin-toolkit/compare/3.0.0-beta.1...3.0.0-beta.2
 [3.0.0]: https://github.com/readium/kotlin-toolkit/compare/3.0.0-beta.2...3.0.0
-
+[3.0.1]: https://github.com/readium/kotlin-toolkit/compare/3.0.0...3.0.1
+[3.0.2]: https://github.com/readium/kotlin-toolkit/compare/3.0.1...3.0.2
+[3.0.3]: https://github.com/readium/kotlin-toolkit/compare/3.0.2...3.0.3

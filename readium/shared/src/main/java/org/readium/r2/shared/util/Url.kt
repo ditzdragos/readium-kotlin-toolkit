@@ -82,7 +82,7 @@ public sealed class Url : Parcelable {
      * Represents a list of query parameters in a URL.
      */
     public data class Query(
-        public val parameters: List<QueryParameter>
+        public val parameters: List<QueryParameter>,
     ) {
 
         /**
@@ -103,7 +103,7 @@ public sealed class Url : Parcelable {
      */
     public data class QueryParameter(
         public val name: String,
-        public val value: String?
+        public val value: String?,
     )
 
     /**
@@ -205,7 +205,6 @@ public sealed class Url : Parcelable {
      * WARNING: Strict URL comparisons can be a source of bug, if the URLs are not normalized.
      * In most cases, you should compare using [Url.isEquivalent].
      */
-    @DelicateReadiumApi
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -419,7 +418,7 @@ private fun String.isValidUrl(): Boolean =
 
 @JvmInline
 public value class FileExtension(
-    public val value: String
+    public val value: String,
 ) {
     override fun toString(): String = value
 }

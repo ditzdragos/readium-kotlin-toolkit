@@ -45,7 +45,6 @@ import org.readium.r2.shared.extensions.mapStateIn
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
-import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
 import org.readium.r2.shared.publication.services.isRestricted
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.mediatype.MediaType
@@ -65,7 +64,7 @@ public class PdfNavigatorFragment<S : Configurable.Settings, P : Configurable.Pr
     private val initialLocator: Locator? = null,
     private val initialPreferences: P,
     private val listener: Listener?,
-    private val pdfEngineProvider: PdfEngineProvider<S, P, *>
+    private val pdfEngineProvider: PdfEngineProvider<S, P, *>,
 ) : NavigatorFragment(publication), VisualNavigator, OverflowableNavigator, Configurable<S, P> {
 
     public interface Listener : VisualNavigator.Listener
@@ -88,7 +87,7 @@ public class PdfNavigatorFragment<S : Configurable.Settings, P : Configurable.Pr
             initialLocator: Locator? = null,
             preferences: P? = null,
             listener: Listener? = null,
-            pdfEngineProvider: PdfEngineProvider<*, P, *>
+            pdfEngineProvider: PdfEngineProvider<*, P, *>,
         ): FragmentFactory = createFragmentFactory {
             PdfNavigatorFragment(
                 publication,
@@ -106,7 +105,7 @@ public class PdfNavigatorFragment<S : Configurable.Settings, P : Configurable.Pr
          * to make sure the fragment is removed from the screen before `onResume` is called.
          */
         public fun <P : Configurable.Preferences<P>> createDummyFactory(
-            pdfEngineProvider: PdfEngineProvider<*, P, *>
+            pdfEngineProvider: PdfEngineProvider<*, P, *>,
         ): FragmentFactory = createFragmentFactory {
             PdfNavigatorFragment(
                 publication = dummyPublication,
@@ -165,7 +164,7 @@ public class PdfNavigatorFragment<S : Configurable.Settings, P : Configurable.Pr
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         val view = FragmentContainerView(inflater.context)
         view.id = R.id.readium_pdf_container
@@ -258,14 +257,6 @@ public class PdfNavigatorFragment<S : Configurable.Settings, P : Configurable.Pr
         get() = settings.mapStateIn(lifecycleScope) { settings ->
             pdfEngineProvider.computeOverflow(settings)
         }
-
-    @Deprecated(
-        "Use `presentation.value.readingProgression` instead",
-        replaceWith = ReplaceWith("presentation.value.readingProgression"),
-        level = DeprecationLevel.ERROR
-    )
-    override val readingProgression: PublicationReadingProgression
-        get() = throw NotImplementedError()
 
     override fun addInputListener(listener: InputListener) {
         inputListener.add(listener)

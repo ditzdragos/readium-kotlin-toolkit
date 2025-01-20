@@ -30,12 +30,12 @@ public data class Link(
     val rels: Set<String> = setOf(),
     val profile: String? = null,
     val length: Int? = null,
-    val hash: String? = null
+    val hash: String? = null,
 ) {
 
     public companion object {
         public operator fun invoke(
-            json: JSONObject
+            json: JSONObject,
         ): Link {
             val href = json.optNullableString("href")
                 ?.let {
@@ -67,20 +67,6 @@ public data class Link(
      * If the HREF is a template, the [parameters] are used to expand it according to RFC 6570.
      */
     public fun url(
-        parameters: Map<String, String> = emptyMap()
+        parameters: Map<String, String> = emptyMap(),
     ): Url = href.resolve(parameters = parameters)
-
-    @Deprecated(
-        "Use [mediaType.toString()] instead",
-        ReplaceWith("mediaType.toString()"),
-        level = DeprecationLevel.ERROR
-    )
-    public val type: String? get() = throw NotImplementedError()
-
-    @Deprecated(
-        "Renamed `rels`",
-        ReplaceWith("rels"),
-        level = DeprecationLevel.ERROR
-    )
-    public val rel: List<String> get() = throw NotImplementedError()
 }

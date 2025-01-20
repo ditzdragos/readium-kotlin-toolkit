@@ -11,7 +11,6 @@
 
 package org.readium.r2.opds
 
-import java.net.URL
 import org.json.JSONArray
 import org.json.JSONObject
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -40,7 +39,7 @@ public enum class OPDS2ParserError {
     InvalidLink,
     MissingTitle,
     InvalidFacet,
-    InvalidGroup
+    InvalidGroup,
 }
 
 public class OPDS2Parser {
@@ -49,7 +48,7 @@ public class OPDS2Parser {
 
         public suspend fun parseUrlString(
             url: String,
-            client: HttpClient = DefaultHttpClient()
+            client: HttpClient = DefaultHttpClient(),
         ): Try<ParseData, Exception> =
             AbsoluteUrl(url)
                 ?.let { parseRequest(HttpRequest(it), client) }
@@ -57,7 +56,7 @@ public class OPDS2Parser {
 
         public suspend fun parseRequest(
             request: HttpRequest,
-            client: HttpClient = DefaultHttpClient()
+            client: HttpClient = DefaultHttpClient(),
         ): Try<ParseData, Exception> {
             return client.fetchWithDecoder(request) {
                 this.parse(it.body, request.url)
@@ -78,15 +77,6 @@ public class OPDS2Parser {
                 )
             }
         }
-
-        @Deprecated(
-            "Provide an instance of `Url` instead",
-            ReplaceWith("parse(jsonData, url.toUrl()!!)"),
-            DeprecationLevel.ERROR
-        )
-        @Suppress("UNUSED_PARAMETER")
-        public fun parse(jsonData: ByteArray, url: URL): ParseData =
-            throw NotImplementedError()
 
         private fun isFeed(jsonData: ByteArray) =
             JSONObject(String(jsonData)).let {

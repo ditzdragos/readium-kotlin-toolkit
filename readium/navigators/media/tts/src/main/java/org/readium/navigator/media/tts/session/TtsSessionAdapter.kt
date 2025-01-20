@@ -60,7 +60,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     private val onStop: () -> Unit,
     private val playbackParametersState: StateFlow<PlaybackParameters>,
     private val updatePlaybackParameters: (PlaybackParameters) -> Unit,
-    private val mapEngineError: (E) -> PlaybackException
+    private val mapEngineError: (E) -> PlaybackException,
 ) : Player {
 
     private val coroutineScope: CoroutineScope =
@@ -181,7 +181,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     override fun setMediaItems(
         mediaItems: MutableList<MediaItem>,
         startIndex: Int,
-        startPositionMs: Long
+        startPositionMs: Long,
     ) {
     }
 
@@ -218,7 +218,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     override fun replaceMediaItems(
         fromIndex: Int,
         toIndex: Int,
-        mediaItems: MutableList<MediaItem>
+        mediaItems: MutableList<MediaItem>,
     ) {
     }
 
@@ -343,23 +343,8 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
         ttsPlayer.nextUtterance()
     }
 
-    @Deprecated("Deprecated in Java", ReplaceWith("hasPreviousMediaItem()"))
-    override fun hasPrevious(): Boolean {
-        return hasPreviousMediaItem()
-    }
-
-    @Deprecated("Deprecated in Java", ReplaceWith("hasPreviousMediaItem()"))
-    override fun hasPreviousWindow(): Boolean {
-        return hasPreviousMediaItem()
-    }
-
     override fun hasPreviousMediaItem(): Boolean {
         return previousMediaItemIndex != INDEX_UNSET
-    }
-
-    @Deprecated("Deprecated in Java", ReplaceWith("TODO(\"Not yet implemented\")"))
-    override fun previous() {
-        seekToPreviousMediaItem()
     }
 
     @Deprecated("Deprecated in Java", ReplaceWith("TODO(\"Not yet implemented\")"))
@@ -778,7 +763,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
 
     private fun notifyListenersPlaybackChanged(
         previousPlaybackInfo: TtsPlayer.Playback,
-        playbackInfo: TtsPlayer.Playback
+        playbackInfo: TtsPlayer.Playback,
         // playWhenReadyChangeReason: @Player.PlayWhenReadyChangeReason Int,
     ) {
         if (previousPlaybackInfo.state as? TtsPlayer.State.Failure != playbackInfo.state as? Error) {
@@ -836,7 +821,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
 
     private fun notifyListenersPlaybackParametersChanged(
         previousPlaybackParameters: PlaybackParameters,
-        playbackParameters: PlaybackParameters
+        playbackParameters: PlaybackParameters,
     ) {
         if (previousPlaybackParameters != playbackParameters) {
             listeners.sendEvent(

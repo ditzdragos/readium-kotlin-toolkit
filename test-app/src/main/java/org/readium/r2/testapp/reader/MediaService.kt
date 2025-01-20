@@ -36,7 +36,7 @@ class MediaService : MediaSessionService() {
     class Session(
         val bookId: Long,
         val navigator: AnyMediaNavigator,
-        val mediaSession: MediaSession
+        val mediaSession: MediaSession,
     ) {
         val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     }
@@ -68,7 +68,7 @@ class MediaService : MediaSessionService() {
         @OptIn(FlowPreview::class)
         fun <N> openSession(
             navigator: N,
-            bookId: Long
+            bookId: Long,
         ) where N : AnyMediaNavigator, N : Media3Adapter {
             Timber.d("openSession")
             val activityIntent = createSessionActivityIntent()
@@ -94,7 +94,7 @@ class MediaService : MediaSessionService() {
             navigator.currentLocator
                 .sample(3000)
                 .onEach { locator ->
-                    Timber.d("Saving TTS progression $locator")
+                    Timber.d("Saving progression $locator")
                     app.bookRepository.saveProgression(locator, bookId)
                 }.launchIn(session.coroutineScope)
         }
@@ -171,7 +171,7 @@ class MediaService : MediaSessionService() {
         return binder.session.value?.mediaSession
     }
 
-    override fun onTaskRemoved(rootIntent: Intent) {
+    override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Timber.d("Task removed. Stopping session and service.")
         // Close the session to allow the service to be stopped.

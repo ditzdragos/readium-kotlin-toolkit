@@ -104,15 +104,6 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
 
         @InternalReadiumApi
         fun goToPreviousResource(jump: Boolean, animated: Boolean): Boolean = false
-
-        @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onScroll() {}
-
-        @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onHighlightActivated(id: String) {}
-
-        @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onHighlightAnnotationMarkActivated(id: String) {}
     }
 
     var listener: Listener? = null
@@ -318,7 +309,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         val defaultPrevented: Boolean,
         val point: PointF,
         val targetElement: String,
-        val interactiveElement: String?
+        val interactiveElement: String?,
     ) {
         companion object {
             fun fromJSONObject(obj: JSONObject?): TapEvent? {
@@ -438,7 +429,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         val startPoint: PointF,
         val currentPoint: PointF,
         val offset: PointF,
-        val interactiveElement: String?
+        val interactiveElement: String?,
     ) {
         internal val isValid: Boolean get() =
             !defaultPrevented && (interactiveElement == null)
@@ -628,7 +619,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
     @RequiresApi(Build.VERSION_CODES.M)
     inner class Callback2Wrapper(
         val callback: ActionMode.Callback,
-        val callback2: ActionMode.Callback2?
+        val callback2: ActionMode.Callback2?,
     ) : ActionMode.Callback by callback, ActionMode.Callback2() {
         override fun onGetContentRect(mode: ActionMode?, view: View?, outRect: Rect?) =
             callback2?.onGetContentRect(mode, view, outRect)

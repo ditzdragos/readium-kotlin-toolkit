@@ -12,7 +12,6 @@
 package org.readium.r2.lcp.license.model
 
 import java.nio.charset.Charset
-import java.util.*
 import org.json.JSONObject
 import org.readium.r2.lcp.LcpError
 import org.readium.r2.lcp.LcpException
@@ -46,10 +45,8 @@ public class StatusDocument(public val data: ByteArray) {
         Revoked("revoked"),
         Returned("returned"),
         Cancelled("cancelled"),
-        Expired("expired");
-
-        @Deprecated("Use [value] instead", ReplaceWith("value"), level = DeprecationLevel.ERROR)
-        public val rawValue: String get() = value
+        Expired("expired"),
+        ;
 
         public companion object {
             public operator fun invoke(value: String): Status? = entries.firstOrNull { it.value == value }
@@ -60,10 +57,8 @@ public class StatusDocument(public val data: ByteArray) {
         Register("register"),
         License("license"),
         Return("return"),
-        Renew("renew");
-
-        @Deprecated("Use [value] instead", ReplaceWith("value"), level = DeprecationLevel.ERROR)
-        public val rawValue: String get() = value
+        Renew("renew"),
+        ;
 
         public companion object {
             public operator fun invoke(value: String): Rel? = entries.firstOrNull { it.value == value }
@@ -118,7 +113,7 @@ public class StatusDocument(public val data: ByteArray) {
     public fun url(
         rel: Rel,
         preferredType: MediaType? = null,
-        parameters: URLParameters = emptyMap()
+        parameters: URLParameters = emptyMap(),
     ): Url {
         val link = link(rel, preferredType)
             ?: linkWithNoType(rel)

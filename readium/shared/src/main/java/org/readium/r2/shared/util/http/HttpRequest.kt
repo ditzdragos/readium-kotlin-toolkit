@@ -39,37 +39,17 @@ public class HttpRequest(
     public val extras: Bundle = Bundle(),
     public val connectTimeout: Duration? = null,
     public val readTimeout: Duration? = null,
-    public val allowUserInteraction: Boolean = false
+    public val allowUserInteraction: Boolean = false,
 ) : Serializable {
-
-    @Deprecated(
-        message = "Provide an instance of `AbsoluteUrl` instead of a string.",
-        replaceWith = ReplaceWith("HttpRequest(AbsoluteUrl(url)!!)"),
-        level = DeprecationLevel.ERROR
-    )
-    public constructor(
-        url: String,
-        method: Method = Method.GET,
-        headers: Map<String, String> = mapOf(),
-        body: Body? = null,
-        extras: Bundle = Bundle(),
-        connectTimeout: Duration? = null,
-        readTimeout: Duration? = null,
-        allowUserInteraction: Boolean = false
-    ) : this(
-        url = AbsoluteUrl(url)!!,
-        method = method,
-        headers = headers.mapValues { (_, value) -> listOf(value) },
-        body = body,
-        extras = extras,
-        connectTimeout = connectTimeout,
-        readTimeout = readTimeout,
-        allowUserInteraction = allowUserInteraction
-    )
 
     /** Supported HTTP methods. */
     public enum class Method : Serializable {
-        DELETE, GET, HEAD, PATCH, POST, PUT;
+        DELETE,
+        GET,
+        HEAD,
+        PATCH,
+        POST,
+        PUT,
     }
 
     /** Supported body values. */
@@ -105,7 +85,7 @@ public class HttpRequest(
         public var extras: Bundle = Bundle(),
         public var connectTimeout: Duration? = null,
         public var readTimeout: Duration? = null,
-        public var allowUserInteraction: Boolean = false
+        public var allowUserInteraction: Boolean = false,
     ) {
 
         private var uriBuilder: Uri.Builder = url.toUri().buildUpon()

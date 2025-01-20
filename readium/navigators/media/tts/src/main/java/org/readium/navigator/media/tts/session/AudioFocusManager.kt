@@ -29,6 +29,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.Log
 import androidx.media3.common.util.Util
+import java.util.Objects
 import org.readium.navigator.media.tts.session.AudioFocusManager.PlayerControl
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -41,7 +42,7 @@ import org.readium.navigator.media.tts.session.AudioFocusManager.PlayerControl
 internal class AudioFocusManager(
     context: Context,
     eventHandler: Handler,
-    playerControl: PlayerControl
+    playerControl: PlayerControl,
 ) {
     /** Interface to allow AudioFocusManager to give commands to a player.  */
     interface PlayerControl {
@@ -134,7 +135,7 @@ internal class AudioFocusManager(
      * managed automatically.
      */
     fun setAudioAttributes(audioAttributes: AudioAttributes?) {
-        if (!Util.areEqual(this.audioAttributes, audioAttributes)) {
+        if (!Objects.equals(this.audioAttributes, audioAttributes)) {
             this.audioAttributes = audioAttributes
             focusGainToRequest = convertAudioAttributesToFocusGain(audioAttributes)
             require(
@@ -152,7 +153,7 @@ internal class AudioFocusManager(
      */
     fun updateAudioFocus(
         playWhenReady: Boolean,
-        playbackState: @Player.State Int
+        playbackState: @Player.State Int,
     ): @PlayerCommand Int {
         if (shouldAbandonAudioFocusIfHeld(playbackState)) {
             abandonAudioFocusIfHeld()
@@ -380,7 +381,7 @@ internal class AudioFocusManager(
          * @return The type of audio focus gain that should be requested.
          */
         private fun convertAudioAttributesToFocusGain(
-            audioAttributes: AudioAttributes?
+            audioAttributes: AudioAttributes?,
         ): @AudioFocusGain Int {
             return if (audioAttributes == null) {
                 // Don't handle audio focus. It may be either video only contents or developers
@@ -402,7 +403,8 @@ internal class AudioFocusManager(
                     C.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE, C.USAGE_ASSISTANCE_SONIFICATION,
                     C.USAGE_NOTIFICATION, C.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
                     C.USAGE_NOTIFICATION_COMMUNICATION_INSTANT, C.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
-                    C.USAGE_NOTIFICATION_EVENT, C.USAGE_NOTIFICATION_RINGTONE ->
+                    C.USAGE_NOTIFICATION_EVENT, C.USAGE_NOTIFICATION_RINGTONE,
+                    ->
                         AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
                     C.USAGE_ASSISTANT ->
                         if (Util.SDK_INT >= 19) {

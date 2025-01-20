@@ -11,7 +11,6 @@
 
 package org.readium.r2.opds
 
-import java.net.URL
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.toList
@@ -47,12 +46,12 @@ import org.readium.r2.shared.util.xml.ElementNode
 import org.readium.r2.shared.util.xml.XmlParser
 
 public enum class OPDSParserError {
-    MissingTitle
+    MissingTitle,
 }
 
 public data class MimeTypeParameters(
     var type: String,
-    var parameters: MutableMap<String, String> = mutableMapOf()
+    var parameters: MutableMap<String, String> = mutableMapOf(),
 )
 
 public object Namespaces {
@@ -69,7 +68,7 @@ public class OPDS1Parser {
 
         public suspend fun parseUrlString(
             url: String,
-            client: HttpClient = DefaultHttpClient()
+            client: HttpClient = DefaultHttpClient(),
         ): Try<ParseData, Exception> =
             AbsoluteUrl(url)
                 ?.let { parseRequest(HttpRequest(it), client) }
@@ -77,7 +76,7 @@ public class OPDS1Parser {
 
         public suspend fun parseRequest(
             request: HttpRequest,
-            client: HttpClient = DefaultHttpClient()
+            client: HttpClient = DefaultHttpClient(),
         ): Try<ParseData, Exception> {
             return client.fetchWithDecoder(request) {
                 this.parse(it.body, request.url)
@@ -93,16 +92,6 @@ public class OPDS1Parser {
             }
         }
 
-        @Suppress("UNUSED_PARAMETER")
-        @Deprecated(
-            "Provide an instance of `Url` instead",
-            ReplaceWith("parse(jsonData, url.toUrl()!!)"),
-            DeprecationLevel.ERROR
-        )
-        public fun parse(xmlData: ByteArray, url: URL): ParseData =
-            throw NotImplementedError()
-
-        @OptIn(DelicateReadiumApi::class)
         private fun parseFeed(root: ElementNode, url: Url): Feed {
             val feedTitle = root.getFirst("title", Namespaces.Atom)?.text
                 ?: throw Exception(OPDSParserError.MissingTitle.name)
@@ -223,7 +212,7 @@ public class OPDS1Parser {
         @Suppress("unused")
         public suspend fun retrieveOpenSearchTemplate(
             feed: Feed,
-            client: HttpClient = DefaultHttpClient()
+            client: HttpClient = DefaultHttpClient(),
         ): Try<String?, Exception> {
             var openSearchURL: Href? = null
             var selfMimeType: MediaType? = null
@@ -404,7 +393,7 @@ public class OPDS1Parser {
         private fun addPublicationInGroup(
             feed: Feed.Builder,
             publication: Publication,
-            collectionLink: Link
+            collectionLink: Link,
         ) {
             for (group in feed.groups) {
                 for (l in group.links) {

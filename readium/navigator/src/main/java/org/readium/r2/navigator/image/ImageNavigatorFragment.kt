@@ -58,13 +58,13 @@ import org.readium.r2.shared.util.mediatype.MediaType
 public class ImageNavigatorFragment private constructor(
     publication: Publication,
     private val initialLocator: Locator? = null,
-    internal val listener: Listener? = null
+    internal val listener: Listener? = null,
 ) : NavigatorFragment(publication), OverflowableNavigator {
 
     public interface Listener : VisualNavigator.Listener
 
     internal lateinit var positions: List<Locator>
-    internal lateinit var resourcePager: R2ViewPager
+    private lateinit var resourcePager: R2ViewPager
 
     internal lateinit var adapter: R2PagerAdapter
     private lateinit var currentActivity: FragmentActivity
@@ -75,7 +75,7 @@ public class ImageNavigatorFragment private constructor(
             ?: requireNotNull(publication.locatorFromLink(publication.readingOrder.first()))
     )
 
-    internal var currentPagerPosition: Int = 0
+    private var currentPagerPosition: Int = 0
     internal var resources: List<String> = emptyList()
 
     private var _binding: ReadiumNavigatorViewpagerBinding? = null
@@ -95,7 +95,7 @@ public class ImageNavigatorFragment private constructor(
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         currentActivity = requireActivity()
         _binding = ReadiumNavigatorViewpagerBinding.inflate(inflater, container, false)
@@ -158,26 +158,6 @@ public class ImageNavigatorFragment private constructor(
         _binding = null
     }
 
-    @Deprecated(
-        "Use goForward instead",
-        replaceWith = ReplaceWith("goForward()"),
-        level = DeprecationLevel.ERROR
-    )
-    @Suppress("UNUSED_PARAMETER")
-    public fun nextResource(v: View?) {
-        goForward()
-    }
-
-    @Deprecated(
-        "Use goBackward instead",
-        replaceWith = ReplaceWith("goBackward()"),
-        level = DeprecationLevel.ERROR
-    )
-    @Suppress("UNUSED_PARAMETER")
-    public fun previousResource(v: View?) {
-        goBackward()
-    }
-
     private fun notifyCurrentLocation() {
         val locator = positions.getOrNull(resourcePager.currentItem)
             ?.takeUnless { it == _currentLocator.value }
@@ -238,14 +218,6 @@ public class ImageNavigatorFragment private constructor(
     override val publicationView: View
         get() = requireView()
 
-    @Deprecated(
-        "Use `overflow.value.readingProgression` instead",
-        replaceWith = ReplaceWith("overflow.value.readingProgression"),
-        level = DeprecationLevel.ERROR
-    )
-    override val readingProgression: PublicationReadingProgression get() =
-        throw NotImplementedError()
-
     @ExperimentalReadiumApi
     override val overflow: StateFlow<OverflowableNavigator.Overflow> =
         MutableStateFlow(
@@ -282,7 +254,7 @@ public class ImageNavigatorFragment private constructor(
         public fun createFactory(
             publication: Publication,
             initialLocator: Locator? = null,
-            listener: Listener? = null
+            listener: Listener? = null,
         ): FragmentFactory =
             createFragmentFactory { ImageNavigatorFragment(publication, initialLocator, listener) }
 

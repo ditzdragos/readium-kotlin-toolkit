@@ -91,3 +91,9 @@ lcp.patch
 
 # direnv file containing Maven Central secrets
 .envrc
+
+# Kotlin
+.kotlin/
+
+# Script outpouts
+readium/navigators/web/scripts/dist/

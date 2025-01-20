@@ -37,14 +37,6 @@ public interface PdfEngineProvider<S : Configurable.Settings, P : Configurable.P
      */
     public fun computeSettings(metadata: Metadata, preferences: P): S
 
-    @Deprecated(
-        "Renamed to computeOverflow",
-        replaceWith = ReplaceWith("computeOverflow"),
-        level = DeprecationLevel.ERROR
-    )
-    public fun computePresentation(settings: S): Any =
-        throw NotImplementedError()
-
     /**
      * Infers a [OverflowableNavigator.Overflow] from [settings].
      */
@@ -93,5 +85,5 @@ public data class PdfDocumentFragmentInput<S : Configurable.Settings>(
     val pageIndex: Int,
     val settings: S,
     val navigatorListener: Navigator.Listener?,
-    val inputListener: InputListener?
+    val inputListener: InputListener?,
 )

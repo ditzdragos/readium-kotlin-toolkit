@@ -9,7 +9,6 @@
 
 package org.readium.r2.shared.publication.services
 
-import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.mapNotNull
@@ -23,7 +22,6 @@ import org.readium.r2.shared.publication.ServiceFactory
 import org.readium.r2.shared.publication.firstWithMediaType
 import org.readium.r2.shared.publication.firstWithRel
 import org.readium.r2.shared.util.AbsoluteUrl
-import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.http.HttpClient
 import org.readium.r2.shared.util.http.HttpRequest
 import org.readium.r2.shared.util.http.fetchString
@@ -64,17 +62,6 @@ public suspend fun PublicationServicesHolder.positions(): List<Locator> =
         ?.positions()
         .orEmpty()
 
-/**
- * List of all the positions in each resource, indexed by their href.
- */
-@Deprecated(
-    "Use [positionsByReadingOrder] instead",
-    ReplaceWith("positionsByReadingOrder"),
-    level = DeprecationLevel.ERROR
-)
-public val Publication.positionsByResource: Map<Url, List<Locator>>
-    get() = runBlocking { positions().groupBy { it.href } }
-
 /** Factory to build a [PositionsService] */
 public var Publication.ServicesBuilder.positionsServiceFactory: ServiceFactory?
     get() = get(PositionsService::class)
@@ -89,7 +76,7 @@ public var Publication.ServicesBuilder.positionsServiceFactory: ServiceFactory?
  */
 public class PerResourcePositionsService(
     private val readingOrder: List<Link>,
-    private val fallbackMediaType: MediaType
+    private val fallbackMediaType: MediaType,
 ) : PositionsService {
 
     override suspend fun positionsByReadingOrder(): List<List<Locator>> {
@@ -124,7 +111,7 @@ public class PerResourcePositionsService(
 @InternalReadiumApi
 public class WebPositionsService(
     private val manifest: Manifest,
-    private val httpClient: HttpClient
+    private val httpClient: HttpClient,
 ) : PositionsService {
 
     private lateinit var _positions: List<Locator>

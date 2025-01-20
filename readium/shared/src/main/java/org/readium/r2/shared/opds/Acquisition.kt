@@ -32,7 +32,7 @@ import org.readium.r2.shared.util.mediatype.MediaType
 @Parcelize
 public data class Acquisition(
     val type: String,
-    val children: List<Acquisition> = emptyList()
+    val children: List<Acquisition> = emptyList(),
 ) : JSONable, Parcelable {
 
     /** Media type of the resource to acquire. */
@@ -72,33 +72,9 @@ public data class Acquisition(
          */
         public fun fromJSONArray(
             json: JSONArray?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): List<Acquisition> {
             return json.parseObjects { fromJSON(it as? JSONObject, warnings) }
         }
     }
-
-    @Deprecated("Use [type] instead", ReplaceWith("type"), level = DeprecationLevel.ERROR)
-    val typeAcquisition: String?
-        get() = type
-
-    @Deprecated("Use [children] instead", ReplaceWith("children"), level = DeprecationLevel.ERROR)
-    val child: List<Acquisition>
-        get() = children
 }
-
-@Deprecated(
-    "Renamed into [Acquisition]",
-    ReplaceWith("Acquisition"),
-    level = DeprecationLevel.ERROR
-)
-public typealias IndirectAcquisition = Acquisition
-
-@Deprecated(
-    "Use [Acquisition::fromJSON] instead",
-    ReplaceWith("Acquisition.fromJSON"),
-    level = DeprecationLevel.ERROR
-)
-public fun parseIndirectAcquisition(indirectAcquisitionDict: JSONObject): Acquisition =
-    Acquisition.fromJSON(indirectAcquisitionDict)
-        ?: throw Exception("Invalid indirect acquisition")

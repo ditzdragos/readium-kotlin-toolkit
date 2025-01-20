@@ -122,13 +122,11 @@ public class LicenseDocument internal constructor(public val json: JSONObject) {
         Publication("publication"),
         Self("self"),
         Support("support"),
-        Status("status");
-
-        @Deprecated("Use [value] instead", ReplaceWith("value"), level = DeprecationLevel.ERROR)
-        public val rawValue: String get() = value
+        Status("status"),
+        ;
 
         public companion object {
-            public operator fun invoke(value: String): Rel? = values().firstOrNull { it.value == value }
+            public operator fun invoke(value: String): Rel? = entries.firstOrNull { it.value == value }
         }
     }
 
@@ -144,7 +142,7 @@ public class LicenseDocument internal constructor(public val json: JSONObject) {
     public fun url(
         rel: Rel,
         preferredType: MediaType? = null,
-        parameters: URLParameters = emptyMap()
+        parameters: URLParameters = emptyMap(),
     ): Url {
         val link = link(rel, preferredType)
             ?: links.firstWithRelAndNoType(rel.value)

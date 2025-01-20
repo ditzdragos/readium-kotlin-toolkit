@@ -10,12 +10,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.flowWithLifecycle
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 /**
  * Collects safely the [Flow] as a [State] when the local lifecycle is started.
@@ -77,7 +84,7 @@ suspend fun <P> Flow<P>.stateInFirst(scope: CoroutineScope, sharingStarted: Shar
  */
 fun <T, M> StateFlow<T>.mapStateIn(
     coroutineScope: CoroutineScope,
-    transform: (value: T) -> M
+    transform: (value: T) -> M,
 ): StateFlow<M> =
     map { transform(it) }
         .stateIn(
