@@ -914,6 +914,11 @@ public class EpubNavigatorFragment internal constructor(
         override fun resourceAtUrl(url: Url): Resource? =
             viewModel.internalLinkFromUrl(url)
                 ?.let { publication.get(it) }
+
+        override fun onError(error: String, errorDisplayed: Boolean) {
+            super.onError(error, errorDisplayed)
+            inputListener.onError(errorDisplayed)
+        }
     }
 
     override fun goForward(animated: Boolean): Boolean {
@@ -1179,7 +1184,7 @@ public class EpubNavigatorFragment internal constructor(
                     }
                 } catch (e: Exception) {
                     // Handle any JSON parsing or other errors
-                    Timber.e("Highlight", "Error parsing JSON to RectF", e)
+                    Timber.e("Error parsing JSON to RectF $e")
                     continuation.resume(null) { throwable ->
                         continuation.cancel(throwable)
                     }

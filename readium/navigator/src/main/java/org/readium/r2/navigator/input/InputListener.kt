@@ -21,6 +21,8 @@ public interface InputListener {
     public fun onKey(event: KeyEvent): Boolean = false
 
     public fun onLongTap(event: TapEvent): Boolean = false
+
+    public fun onError(isErrorDisplayed: Boolean) {}
 }
 
 @OptIn(ExperimentalReadiumApi::class)
@@ -46,4 +48,8 @@ internal class CompositeInputListener : InputListener {
 
     override fun onLongTap(event: TapEvent): Boolean =
         listeners.any { it.onLongTap(event) }
+
+    override fun onError(isErrorDisplayed: Boolean) {
+        listeners.forEach { it.onError(isErrorDisplayed) }
+    }
 }

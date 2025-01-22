@@ -82,6 +82,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         fun onProgressionChanged() {}
         fun goForward(animated: Boolean = false): Boolean = false
         fun goBackward(animated: Boolean = false): Boolean = false
+        fun onError(error: String, errorDisplayed: Boolean) {}
 
         /**
          * Returns the custom [ActionMode.Callback] to be used with the text selection menu.

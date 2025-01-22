@@ -31,6 +31,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.webkit.WebResourceErrorCompat
 import androidx.webkit.WebViewClientCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -63,9 +64,6 @@ internal class R2EpubPageFragment : Fragment() {
         get() = BundleCompat.getParcelable(requireArguments(), "link", Link::class.java)
 
     private var pendingLocator: Locator? = null
-
-    private val positionCount: Long
-        get() = requireArguments().getLong("positionCount")
 
     var webView: R2WebView? = null
         private set
@@ -197,6 +195,7 @@ internal class R2EpubPageFragment : Fragment() {
                             webView.listener?.onPageEnded(endReached)
                         }
                     }
+
                     else -> {
                         if (endReached) {
                             endReached = false
@@ -232,6 +231,21 @@ internal class R2EpubPageFragment : Fragment() {
                 webView.onContentReady {
                     onLoadPage()
                 }
+            }
+
+            @SuppressLint("RequiresFeature")
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceErrorCompat
+            ) {
+                super.onReceivedError(view, request, error)
+
+                val errorDescription = error.description.toString()
+                webView.listener?.onError(
+                    errorDescription,
+                    errorDescription == NET_ERROR
+                )
             }
 
             override fun shouldInterceptRequest(
@@ -391,14 +405,6 @@ internal class R2EpubPageFragment : Fragment() {
     internal val paddingTop: Int get() = containerView.paddingTop
     internal val paddingBottom: Int get() = containerView.paddingBottom
 
-    private val isCurrentResource: Boolean
-        get() {
-            val epubNavigator = navigator ?: return false
-            val currentFragment =
-                (epubNavigator.resourcePager.adapter as? R2PagerAdapter)?.getCurrentFragment() as? R2EpubPageFragment
-                    ?: return false
-            return tag == currentFragment.tag
-        }
 
     private fun onLoadPage() {
         if (!isLoading) return
@@ -512,6 +518,7 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     companion object {
+        private const val NET_ERROR = "net::ERR_FAILED"
         private const val textZoomBundleKey = "org.readium.textZoom"
 
         fun newInstance(
