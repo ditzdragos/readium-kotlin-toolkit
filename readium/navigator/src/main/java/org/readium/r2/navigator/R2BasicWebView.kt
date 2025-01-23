@@ -14,7 +14,6 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.util.AttributeSet
-import android.util.Log
 import android.view.*
 import android.webkit.URLUtil
 import android.webkit.WebResourceRequest
@@ -337,7 +336,6 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         val id = obj?.optNullableString("id")
         val group = obj?.optNullableString("group")
         val rect = obj?.optRectF("rect")
-        Log.d("HighlightRect", "onHighlightRect: $eventJson")
         if (id == null || rect == null || group == null) {
             Timber.e("Invalid JSON for onHighlightRect: $eventJson")
             return false
@@ -508,14 +506,12 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
     @android.webkit.JavascriptInterface
     fun logError(message: String, filename: String, line: Int) {
-        Log.e("Readium", "JavaScript error: $filename:$line $message")
         Timber.e("JavaScript error: $filename:$line $message")
     }
 
     @android.webkit.JavascriptInterface
     fun log(message: String) {
-        Log.d("Readium", "Javascript: $message")
-        Timber.d("JavaScript: $message")
+//            Timber.d("JavaScript: $message")
     }
 
     fun Boolean.toInt() = if (this) 1 else 0
@@ -597,8 +593,8 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
     fun runJavaScript(javascript: String, callback: ((String) -> Unit)? = null) {
         if (BuildConfig.DEBUG) {
-            val filename = URLUtil.guessFileName(url, null, null)
-            Timber.d("runJavaScript in $filename: $javascript")
+            URLUtil.guessFileName(url, null, null)
+//            Timber.d("runJavaScript in $filename: $javascript")
         }
 
         this.evaluateJavascript(javascript) { result ->
