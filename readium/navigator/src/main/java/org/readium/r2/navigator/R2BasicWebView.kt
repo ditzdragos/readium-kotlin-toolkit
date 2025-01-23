@@ -511,7 +511,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
     @android.webkit.JavascriptInterface
     fun log(message: String) {
-//            Timber.d("JavaScript: $message")
+        if (BuildConfig.DEBUG) {
+            Timber.d("JavaScript: $message")
+        }
     }
 
     fun Boolean.toInt() = if (this) 1 else 0
