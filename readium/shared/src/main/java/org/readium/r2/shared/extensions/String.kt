@@ -78,3 +78,14 @@ internal fun String.percentEncodedQuery(): String =
  */
 internal fun String.isPrintableAscii(): Boolean =
     all { it.code in 0x20..0x7F }
+
+/**
+ * Cleans HTML content by removing:
+ * - Byte Order Mark (BOM)
+ * - XML declarations
+ * - XML comments
+ */
+public fun String.cleanHtmlContent(): String = this
+    .replaceFirst(Regex("^\\uFEFF"), "") // Remove BOM
+    .replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "") // Remove XML declaration
+    .replace(Regex("<!--\\?xml[^>]*\\?-->"), "") // Remove XML comments

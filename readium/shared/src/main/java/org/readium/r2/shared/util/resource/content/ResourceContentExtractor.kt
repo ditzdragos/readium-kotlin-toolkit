@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.extensions.cleanHtmlContent
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.data.DecodeError
 import org.readium.r2.shared.util.data.ReadError
@@ -19,6 +20,7 @@ import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.mediatype.MediaType
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.tryRecover
+import timber.log.Timber
 
 /**
  * Extracts pure content from a marked-up (e.g. HTML) or binary (e.g. PDF) resource.
@@ -37,14 +39,20 @@ public interface ResourceContentExtractor {
          *
          * Return null if the resource format is not supported.
          */
-        public suspend fun createExtractor(resource: Resource, mediaType: MediaType): ResourceContentExtractor?
+        public suspend fun createExtractor(
+            resource: Resource,
+            mediaType: MediaType
+        ): ResourceContentExtractor?
     }
 }
 
 @ExperimentalReadiumApi
 public class DefaultResourceContentExtractorFactory : ResourceContentExtractor.Factory {
 
-    override suspend fun createExtractor(resource: Resource, mediaType: MediaType): ResourceContentExtractor? =
+    override suspend fun createExtractor(
+        resource: Resource,
+        mediaType: MediaType
+    ): ResourceContentExtractor? =
         when (mediaType) {
             MediaType.HTML, MediaType.XHTML -> HtmlResourceContentExtractor()
             else -> null
@@ -67,12 +75,17 @@ public class HtmlResourceContentExtractor : ResourceContentExtractor {
                     when (it) {
                         is DecodeError.OutOfMemory ->
                             return@withContext Try.failure(ReadError.OutOfMemory(it.cause))
+
                         is DecodeError.Decoding ->
                             Try.success("")
                     }
                 }
                 .map { html ->
-                    val body = Jsoup.parse(html).body().text()
+                    Timber.d("Html content: $html")
+                    val body = Jsoup.parse(
+                        html.cleanHtmlContent()
+                    ).body().text()
+                    Timber.d("Extracted text: $body")
                     // Transform HTML entities into their actual characters.
                     Parser.unescapeEntities(body, false)
                 }
