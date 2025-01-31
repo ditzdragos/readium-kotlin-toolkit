@@ -815,7 +815,7 @@ public class EpubNavigatorFragment internal constructor(
         }
 
         override fun onPageLoaded(webView: R2BasicWebView, link: Link) {
-            paginationListener?.onPageLoaded()
+            Timber.d("onPageLoaded: ${link.href} ${state}")
 
             val href = link.url()
             if (state is State.Initializing || (state as? State.Loading)?.initialResourceHref?.isEquivalent(
@@ -823,6 +823,10 @@ public class EpubNavigatorFragment internal constructor(
                 ) == true
             ) {
                 state = State.Ready
+            }
+
+            if (state == State.Ready) {
+                paginationListener?.onPageLoaded()
             }
 
             notifyCurrentLocation()
