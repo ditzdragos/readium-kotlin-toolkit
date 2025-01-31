@@ -36,6 +36,7 @@ import androidx.lifecycle.withStarted
 import androidx.viewpager.widget.ViewPager
 import kotlin.math.ceil
 import kotlin.reflect.KClass
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -419,6 +420,7 @@ public class EpubNavigatorFragment internal constructor(
         resourcePager.addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
 
             override fun onPageSelected(position: Int) {
+                Timber.d("onPageSelected: $position")
 //                if (viewModel.layout == EpubLayout.REFLOWABLE) {
 //                    resourcePager.disableTouchEvents = true
 //                }
@@ -443,7 +445,7 @@ public class EpubNavigatorFragment internal constructor(
                 }
                 currentPagerPosition = position // Update current position
 
-                notifyCurrentLocation()
+//                notifyCurrentLocation()
             }
         })
 
@@ -648,6 +650,7 @@ public class EpubNavigatorFragment internal constructor(
             r2PagerAdapter?.loadLocatorAt(index, locator)
         }
 
+        Timber.d("go: $locator")
         if (publication.metadata.presentation.layout != EpubLayout.FIXED) {
             setCurrent(resourcesSingle)
         } else {
@@ -676,26 +679,29 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun run(command: RunScriptCommand) {
-        when (command.scope) {
-            RunScriptCommand.Scope.CurrentResource -> {
-                currentReflowablePageFragment
-                    ?.runJavaScript(command.script)
-            }
-
-            RunScriptCommand.Scope.LoadedResources -> {
-                r2PagerAdapter?.mFragments?.forEach { _, fragment ->
-                    (fragment as? R2EpubPageFragment)
+        Timber.d("run: $command")
+        lifecycleScope.launch(Dispatchers.Main) {
+            when (command.scope) {
+                RunScriptCommand.Scope.CurrentResource -> {
+                    currentReflowablePageFragment
                         ?.runJavaScript(command.script)
                 }
-            }
 
-            is RunScriptCommand.Scope.Resource -> {
-                loadedFragmentForHref(command.scope.href)
-                    ?.runJavaScript(command.script)
-            }
+                RunScriptCommand.Scope.LoadedResources -> {
+                    r2PagerAdapter?.mFragments?.forEach { _, fragment ->
+                        (fragment as? R2EpubPageFragment)
+                            ?.runJavaScript(command.script)
+                    }
+                }
 
-            is RunScriptCommand.Scope.WebView -> {
-                command.scope.webView.runJavaScript(command.script)
+                is RunScriptCommand.Scope.Resource -> {
+                    loadedFragmentForHref(command.scope.href)
+                        ?.runJavaScript(command.script)
+                }
+
+                is RunScriptCommand.Scope.WebView -> {
+                    command.scope.webView.runJavaScript(command.script)
+                }
             }
         }
     }
@@ -922,6 +928,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     override fun goForward(animated: Boolean): Boolean {
+        Timber.d("goForward isFixed: ${publication.metadata.presentation.layout == EpubLayout.FIXED}")
         if (publication.metadata.presentation.layout == EpubLayout.FIXED) {
             return goToNextResource(jump = false, animated = animated)
         }
@@ -939,6 +946,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     override fun goBackward(animated: Boolean): Boolean {
+        Timber.d("goBackward isFixed: ${publication.metadata.presentation.layout == EpubLayout.FIXED}")
         if (publication.metadata.presentation.layout == EpubLayout.FIXED) {
             return goToPreviousResource(jump = false, animated = animated)
         }
@@ -956,21 +964,27 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun goToNextResource(jump: Boolean, animated: Boolean): Boolean {
+        Timber.d("goToNextResource")
         val adapter = resourcePager.adapter ?: return false
         if (resourcePager.currentItem >= adapter.count - 1) {
             return false
         }
 
         if (jump) {
+            Timber.d("goToNextResource jump")
             locatorToNextResource()?.let { listener?.onJumpToLocator(it) }
         }
 
         resourcePager.setCurrentItem(resourcePager.currentItem + 1, animated)
 
+        Timber.d("goToNextResource setCurrentItem")
+
         currentReflowablePageFragment?.webView?.let { webView ->
             if (settings.value.readingProgression == ReadingProgression.RTL) {
+                Timber.d("goToNextResource RTL")
                 webView.setCurrentItem(webView.numPages - 1, false)
             } else {
+                Timber.d("goToNextResource LTR")
                 webView.setCurrentItem(0, false)
             }
         }
@@ -979,6 +993,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun goToPreviousResource(jump: Boolean, animated: Boolean): Boolean {
+        Timber.d("goToPreviousResource")
         if (resourcePager.currentItem <= 0) {
             return false
         }
@@ -1105,11 +1120,16 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun notifyCurrentLocation() {
+        val trace = Thread.currentThread().stackTrace
+        val callStack = trace.slice(3..5)
+            .joinToString(" -> ") { "${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})" }
+        Timber.d("Call stack: $callStack")
+        Timber.d("notifyCurrentLocation")
         // Make sure viewLifecycleOwner is accessible.
         view ?: return
 
         debounceLocationNotificationJob?.cancel()
-        debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch {
+        debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             delay(100L)
 
             // We don't want to notify the current location if the navigator is still loading a
