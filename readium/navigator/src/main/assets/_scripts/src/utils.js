@@ -4,8 +4,8 @@
 //  available in the top-level LICENSE file of the project.
 //
 
-import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 import { toNativeRect } from "./rect";
+import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 
 /**
  * Least Recently Used Cache with a limit wraping a Map object
@@ -553,7 +553,6 @@ export function logError(message) {
  */
 export function getRectFromLocator(locator) {
   let range = rangeFromLocator(locator);
-  Android.log("getRectFromLocator " + range);
   if (range) {
     return toNativeRect(range.getBoundingClientRect());
   }

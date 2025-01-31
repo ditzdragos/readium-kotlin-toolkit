@@ -13,12 +13,26 @@ const debug = false;
  */
 export function toNativeRect(rect) {
   const pixelRatio = window.devicePixelRatio;
+  // Get the WebView's viewport dimensions
+  const viewportWidth = Android.getViewportWidth();
+  const viewportHeight = window.innerHeight;
+  
+  // Convert coordinates to device pixels
   const width = rect.width * pixelRatio;
   const height = rect.height * pixelRatio;
   const left = rect.left * pixelRatio;
   const top = rect.top * pixelRatio;
   const right = left + width;
   const bottom = top + height;
+
+  // If the element is partially above the viewport but still visible, adjust its coordinates
+  // to be relative to the WebView's top edge
+  if (top < 0 && bottom > 0) {
+    const adjustedTop = 0;
+    const adjustedBottom = height;
+    return { width, height, left, top: adjustedTop, right, bottom: adjustedBottom };
+  }
+
   return { width, height, left, top, right, bottom };
 }
 
