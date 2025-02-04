@@ -7,7 +7,6 @@
 package org.readium.r2.navigator.epub.css
 
 import android.net.Uri
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.readium.r2.navigator.preferences.FontFamily
@@ -17,7 +16,11 @@ import org.readium.r2.shared.util.Url
 
 @ExperimentalReadiumApi
 internal data class ReadiumCss(
-    val layout: Layout = Layout(language = null, Layout.Stylesheets.Default, ReadingProgression.LTR),
+    val layout: Layout = Layout(
+        language = null,
+        Layout.Stylesheets.Default,
+        ReadingProgression.LTR
+    ),
     val rsProperties: RsProperties = RsProperties(),
     val userProperties: UserProperties = UserProperties(),
     val fontFamilyDeclarations: List<FontFamilyDeclaration> = emptyList(),
@@ -33,12 +36,13 @@ internal data class ReadiumCss(
     // FIXME: Replace existing attributes instead of adding new ones
     @Throws
     internal fun injectHtml(html: String): String {
-        val document = Jsoup.parse(html)
+//        if (true) return html
+//        val document = Jsoup.parse(html)
         val content = StringBuilder(html)
         injectStyles(content)
         injectCssProperties(content)
         injectDir(content)
-        injectLang(content, document)
+//        injectLang(content, document)
         return content.toString()
     }
 
@@ -56,10 +60,10 @@ internal data class ReadiumCss(
 
                 add(stylesheetLink(beforeCss))
 
-                // Fix Readium CSS issue with the positioning of <audio> elements.
-                // https://github.com/readium/readium-css/issues/94
-                // https://github.com/readium/r2-navigator-kotlin/issues/193
-                add("<style>audio[controls] { width: revert; height: revert; }</style>")
+//                // Fix Readium CSS issue with the positioning of <audio> elements.
+//                // https://github.com/readium/readium-css/issues/94
+//                // https://github.com/readium/r2-navigator-kotlin/issues/193
+//                add("<style>audio[controls] { width: revert; height: revert; }</style>")
 
                 // Fix broken pagination when a book contains `overflow-x: hidden`.
                 // https://github.com/readium/kotlin-toolkit/issues/292
@@ -158,10 +162,13 @@ internal data class ReadiumCss(
      */
     private fun CharSequence.hasStyles(): Boolean {
         return indexOf("<link ", 0, true) != -1 ||
-            indexOf(" style=", 0, true) != -1 ||
-            Regex("<style.*?>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).containsMatchIn(
-                this
-            )
+                indexOf(" style=", 0, true) != -1 ||
+                Regex(
+                    "<style.*?>",
+                    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+                ).containsMatchIn(
+                    this
+                )
     }
 
     private fun stylesheetLink(href: Url): String =
@@ -238,10 +245,10 @@ internal data class ReadiumCss(
 
     private fun CharSequence.indexForOpeningTag(tag: String): Int =
         (
-            Regex("""<$tag.*?>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                .find(this, 0)
-                ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
-            ).range.last + 1
+                Regex("""<$tag.*?>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    .find(this, 0)
+                    ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
+                ).range.last + 1
 
     private fun CharSequence.indexForClosingTag(tag: String): Int =
         indexOf("</$tag>", 0, true)
@@ -250,10 +257,10 @@ internal data class ReadiumCss(
 
     private fun CharSequence.indexForTagAttributes(tag: String): Int =
         (
-            indexOf("<$tag", 0, true)
-                .takeIf { it != -1 }
-                ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
-            ) + tag.length + 1
+                indexOf("<$tag", 0, true)
+                    .takeIf { it != -1 }
+                    ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
+                ) + tag.length + 1
 }
 
 private val dirRegex = Regex(
