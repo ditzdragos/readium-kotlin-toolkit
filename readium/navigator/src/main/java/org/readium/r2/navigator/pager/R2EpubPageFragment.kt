@@ -78,6 +78,53 @@ internal class R2EpubPageFragment : Fragment() {
 
     private var isLoading: Boolean = false
     private val _isLoaded = MutableStateFlow(false)
+    private var webViewClient = object : WebViewClientCompat() {
+        override fun shouldOverrideUrlLoading(
+            view: WebView,
+            request: WebResourceRequest
+        ): Boolean =
+            (webView as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
+
+        override fun shouldOverrideKeyEvent(view: WebView, event: KeyEvent): Boolean {
+            // Do something with the event here
+            return false
+        }
+
+        override fun onPageFinished(view: WebView?, url: String?) {
+            super.onPageFinished(view, url)
+
+            onPageFinished()
+
+            link?.let {
+                webView?.listener?.onResourceLoaded(webView!!, it)
+            }
+
+            webView?.onContentReady {
+                onLoadPage()
+            }
+        }
+
+        @SuppressLint("RequiresFeature")
+        override fun onReceivedError(
+            view: WebView,
+            request: WebResourceRequest,
+            error: WebResourceErrorCompat
+        ) {
+            super.onReceivedError(view, request, error)
+
+            val errorDescription = error.description.toString()
+            webView?.listener?.onError(
+                errorDescription,
+                errorDescription == NET_ERROR
+            )
+        }
+
+        override fun shouldInterceptRequest(
+            view: WebView,
+            request: WebResourceRequest
+        ): WebResourceResponse? =
+            (webView as? R2BasicWebView)?.shouldInterceptRequest(view, request)
+    }
 
     internal fun setFontSize(fontSize: Double) {
         textZoom = (fontSize * 100).roundToInt()
@@ -171,6 +218,8 @@ internal class R2EpubPageFragment : Fragment() {
         webView.settings.textZoom = textZoom
         webView.resourceUrl = resourceUrl
         webView.setPadding(0, 0, 0, 0)
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        webView.webViewClient = webViewClient
         webView.addJavascriptInterface(webView, "Android")
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
 
@@ -256,10 +305,7 @@ internal class R2EpubPageFragment : Fragment() {
         }
 
         webView.isHapticFeedbackEnabled = false
-        webView.isLongClickable = false
-        webView.setOnLongClickListener {
-            false
-        }
+        webView.isLongClickable = true
 
         resourceUrl?.let {
             isLoading = true

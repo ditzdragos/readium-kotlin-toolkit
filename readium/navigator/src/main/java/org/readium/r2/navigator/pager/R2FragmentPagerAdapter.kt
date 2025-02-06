@@ -19,14 +19,14 @@ import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
-import androidx.viewpager.widget.PagerAdapter
 
 // This class will be going away when the navigator is rewritten
 @Suppress("DEPRECATION")
-internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: FragmentManager) : androidx.fragment.app.FragmentStatePagerAdapter(
-    mFragmentManager,
-    BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT
-) {
+internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: FragmentManager) :
+    androidx.fragment.app.FragmentStatePagerAdapter(
+        mFragmentManager,
+        BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT
+    ) {
 
     val mFragments = LongSparseArray<Fragment>()
     private val mSavedStates = LongSparseArray<Fragment.SavedState>()
@@ -80,7 +80,7 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
             mFragments.removeAt(index)
         }
 
-        if (fragment.isAdded && currentPosition != PagerAdapter.POSITION_NONE) {
+        if (fragment.isAdded && currentPosition != POSITION_NONE) {
             mFragmentManager.saveFragmentInstanceState(fragment)?.let { state ->
                 mSavedStates.put(fragmentKey, state)
             }
@@ -112,7 +112,7 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
 
     override fun finishUpdate(container: ViewGroup) {
         if (mCurTransaction != null) {
-            mCurTransaction!!.commitNowAllowingStateLoss()
+            mCurTransaction?.commitAllowingStateLoss()
             mCurTransaction = null
         }
     }
