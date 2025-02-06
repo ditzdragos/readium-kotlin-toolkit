@@ -1203,13 +1203,13 @@ public class EpubNavigatorFragment internal constructor(
 
                     val rect = RectF(left, top, right, bottom)
 
-                    continuation.resume(rect) { throwable, r, context ->
+                    continuation.resume(rect) { throwable, _, _ ->
                         continuation.cancel(throwable)
                     }
                 } catch (e: Exception) {
                     // Handle any JSON parsing or other errors
                     Timber.e("Error parsing JSON to RectF $e")
-                    continuation.resume(null) { throwable, r, context ->
+                    continuation.resume(null) { throwable, _, _ ->
                         continuation.cancel(throwable)
                     }
                 }
