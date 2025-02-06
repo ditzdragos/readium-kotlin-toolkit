@@ -29,8 +29,8 @@ android {
         ndk.abiFilters.add("x86_64")
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_20
+        targetCompatibility = JavaVersion.VERSION_20
         isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {

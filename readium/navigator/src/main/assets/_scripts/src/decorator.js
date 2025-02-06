@@ -128,7 +128,7 @@ export function DecorationGroup(groupId, groupName) {
    * Adds a new decoration to the group.
    */
   function add(decoration) {
-    let id = groupId + "-" + lastItemId++;
+    let id = decoration.id;
 
     let range = rangeFromLocator(decoration.locator);
     if (!range) {
@@ -142,7 +142,7 @@ export function DecorationGroup(groupId, groupName) {
   }
 
   function addEnhanced(decoration) {
-    let id = groupId + "-" + lastItemId++;
+    let id = decoration.id;
 
     let range = rangeFromLocator(decoration.locator);
     if (!range) {
