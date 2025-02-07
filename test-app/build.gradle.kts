@@ -29,8 +29,8 @@ android {
         ndk.abiFilters.add("x86_64")
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_20
-        targetCompatibility = JavaVersion.VERSION_20
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
         isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
@@ -84,7 +84,11 @@ dependencies {
     implementation(project(":readium:readium-opds"))
     implementation(project(":readium:readium-lcp"))
     // Only required if you want to support PDF files using PDFium.
-    implementation(project(":readium:adapters:pdfium"))
+    implementation(project(":readium:adapters:pdfium")) {
+        exclude(group = "com.android.support")
+        exclude(module = "support-media-compat")
+        exclude(module = "support-v4")
+    }
 
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
