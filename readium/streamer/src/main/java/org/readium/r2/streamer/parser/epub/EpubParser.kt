@@ -4,10 +4,11 @@
  * available in the top-level LICENSE file of the project.
  */
 
-@file:OptIn(InternalReadiumApi::class)
+@file:OptIn(InternalReadiumApi::class, DelicateReadiumApi::class)
 
 package org.readium.r2.streamer.parser.epub
 
+import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Link
@@ -15,7 +16,7 @@ import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.encryption.Encryption
 import org.readium.r2.shared.publication.epub.EpubEncryptionParser
 import org.readium.r2.shared.publication.services.content.DefaultContentService
-import org.readium.r2.shared.publication.services.content.iterators.HtmlResourceContentIterator
+import org.readium.r2.shared.publication.services.content.iterators.EfficientHtmlResourceContentIterator
 import org.readium.r2.shared.publication.services.search.StringSearchService
 import org.readium.r2.shared.util.DebugError
 import org.readium.r2.shared.util.Try
@@ -107,7 +108,7 @@ public class EpubParser(
                 search = StringSearchService.createDefaultFactory(),
                 content = DefaultContentService.createFactory(
                     resourceContentIteratorFactories = listOf(
-                        HtmlResourceContentIterator.Factory()
+                        EfficientHtmlResourceContentIterator.Factory()
                     )
                 )
             )
@@ -202,7 +203,7 @@ public class EpubParser(
             ?.toMap().orEmpty()
     }
 
-    public suspend inline fun<R> Readable.readDecodeOrElse(
+    public suspend inline fun <R> Readable.readDecodeOrElse(
         url: Url,
         decode: (value: ByteArray) -> Try<R, DecodeError>,
         recover: (ReadError) -> R
