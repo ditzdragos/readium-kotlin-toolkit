@@ -825,9 +825,9 @@ public class EpubNavigatorFragment internal constructor(
                 state = State.Ready
             }
 
-            if (state == State.Ready) {
-                paginationListener?.onPageLoaded()
-            }
+//            if (state == State.Ready) {
+            paginationListener?.onPageLoaded()
+//            }
 
             notifyCurrentLocation()
         }
