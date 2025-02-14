@@ -1124,14 +1124,6 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun notifyCurrentLocation() {
-        val trace = Thread.currentThread().stackTrace
-        val callStack = trace.slice(3..5)
-            .joinToString(" -> ") { "${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})" }
-        Timber.d("Call stack: $callStack")
-        Timber.d("notifyCurrentLocation")
-        // Make sure viewLifecycleOwner is accessible.
-        view ?: return
-
         debounceLocationNotificationJob?.cancel()
         debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             delay(100L)
