@@ -1,5 +1,8 @@
 package org.readium.r2.shared.util.resource.content
 
+import org.jsoup.Jsoup
+import org.readium.r2.shared.extensions.cleanHtmlContent
+
 
 /**
  * A lightweight HTML parser for text extraction without external dependencies.
@@ -11,6 +14,10 @@ public object HtmlParser {
     )
 
     private val IGNORED_TAGS = setOf("script", "style", "noscript", "head", "meta", "link")
+
+    public fun getFullText(html: String): String {
+        return Jsoup.parse(html.cleanHtmlContent()).body().wholeText()
+    }
 
     /**
      * Extracts all text from the <body> of the given HTML.
@@ -42,7 +49,7 @@ public object HtmlParser {
         private var html = ""
 
         fun parse(input: String): String {
-            html = input
+            html = input.trim()
             pos = 0
             output.clear()
             lastCharIsWhitespace = false
@@ -106,8 +113,7 @@ public object HtmlParser {
                 return
             }
 
-            val entity = html.substring(pos + 1, entityEnd)
-            val char = when (entity) {
+            val char = when (val entity = html.substring(pos + 1, entityEnd)) {
                 "nbsp" -> ' '
                 "lt" -> '<'
                 "gt" -> '>'
