@@ -363,6 +363,7 @@ function rangeFromCachedLocator(locator) {
 
 export function rangeFromLocator(locator) {
   try {
+    log("rangeFromLocator: locator", JSON.stringify(locator));
     let locations = locator.locations;
     let text = locator.text;
     if (text && text.highlight) {
@@ -370,6 +371,7 @@ export function rangeFromLocator(locator) {
       if (locations && locations.cssSelector) {
         try {
           const range = rangeFromCachedLocator(locator);
+            log("rangeFromLocator: found range from cached locator", range);
           return range;
         } catch {
           log("failed getting the range from css selector");
@@ -384,14 +386,17 @@ export function rangeFromLocator(locator) {
       let start = null;
       let end = null;
 
+      log("rangeFromLocator: text", text.highlight, text.before, text.after);
+
       if (locations && root.textContent.length > 0) {
+        log("rangeFromLocator: otherLocations", JSON.stringify(location.otherLocations));
         // If there is info about the start and end positions from the client, use that
 
         if (locations.start !== undefined && locations.end !== undefined) {
-          log(`actual start and end: [${locations.start}, ${locations.end}]`);
+          log("actual start and end:", locations.start, locations.end, root.textContent.length);
           start = Math.max(locations.start, 0);
           end = Math.min(locations.end, root.textContent.length);
-          log(`adjusted start and end: [${start}, ${end}] with ${root.textContent}`);
+          log("adjusted start and end: ",start, end, root.textContent);
         }
       }
 

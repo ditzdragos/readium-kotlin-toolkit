@@ -1,6 +1,7 @@
 package org.readium.r2.shared.util.resource.content
 
 import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 import org.readium.r2.shared.extensions.cleanHtmlContent
 
 
@@ -16,7 +17,8 @@ public object HtmlParser {
     private val IGNORED_TAGS = setOf("script", "style", "noscript", "head", "meta", "link")
 
     public fun getFullText(html: String): String {
-        return Jsoup.parse(html.cleanHtmlContent()).body().wholeText()
+        val text = Jsoup.parse(html.cleanHtmlContent()).body().wholeText()
+        return Parser.unescapeEntities(text, false)
     }
 
     /**
