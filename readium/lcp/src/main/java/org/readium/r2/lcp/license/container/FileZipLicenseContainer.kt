@@ -40,9 +40,7 @@ internal class FileZipLicenseContainer(
         }
 
         return try {
-            val bytes = archive.getInputStream(entry).readBytes()
-            archive.close()
-            bytes
+            archive.getInputStream(entry).readBytes()
         } catch (e: Exception) {
             throw LcpException(LcpError.Container.ReadFailed(pathInZIP))
         } finally {

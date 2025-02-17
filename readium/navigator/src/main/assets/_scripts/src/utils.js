@@ -390,9 +390,7 @@ export function rangeFromLocator(locator) {
 //      log("rangeFromLocator: text", text.highlight, text.before, text.after);
 
       if (locations && root.textContent.length > 0) {
-        log("rangeFromLocator: otherLocations", JSON.stringify(location.otherLocations));
         // If there is info about the start and end positions from the client, use that
-
         if (locations.start !== undefined && locations.end !== undefined) {
           log("actual start and end:", locations.start, locations.end, root.textContent.length);
           start = Math.max(locations.start-5, 0);
@@ -407,7 +405,9 @@ export function rangeFromLocator(locator) {
       });
 
       log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
-      return anchor.toRange({}, start, end);
+      let result = anchor.toRange({}, start, end);
+      log("rangeFromLocator: found range", result);
+      return result;
     }
 
     if (locations) {
@@ -435,7 +435,7 @@ export function rangeFromLocator(locator) {
       }
     }
   } catch (e) {
-    logError("Cannot parse range",e);
+    logError("Cannot parse range "+e);
   }
 
   return null;

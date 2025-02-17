@@ -323,7 +323,7 @@ internal class EpubNavigatorViewModel(
             let group = readium.getDecorations('$group');
             ${DecorationChange.AddedEnhanced(decoration).javascript(decorationTemplates)}
         });
-        """, scope = RunScriptCommand.Scope.CurrentResource
+        """, scope = RunScriptCommand.Scope.Resource(decoration.locator.href)
         )
     }
 

@@ -239,14 +239,19 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
             }
 
             when {
-                scrollMode ->
+                scrollMode -> {
+                    Timber.d("scrollRight: scrollMode")
                     goRight(jump = true)
+                }
 
-                !this@R2BasicWebView.canScrollHorizontally(1) ->
+                !this@R2BasicWebView.canScrollHorizontally(1) -> {
+                    Timber.d("scrollRight: canScrollHorizontally")
                     goRight(jump = false)
+                }
 
                 else ->
                     runJavaScript("readium.scrollRight();") { success ->
+                        Timber.d("scrollRight: readium.scrollRight() $success")
                         if (!success.toBoolean()) {
                             goRight(jump = false)
                         }

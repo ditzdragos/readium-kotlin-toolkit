@@ -680,28 +680,26 @@ public class EpubNavigatorFragment internal constructor(
 
     private fun run(command: RunScriptCommand) {
         Timber.d("run: $command")
-        lifecycleScope.launch(Dispatchers.Main) {
-            when (command.scope) {
-                RunScriptCommand.Scope.CurrentResource -> {
-                    currentReflowablePageFragment
+        when (command.scope) {
+            RunScriptCommand.Scope.CurrentResource -> {
+                currentReflowablePageFragment
+                    ?.runJavaScript(command.script)
+            }
+
+            RunScriptCommand.Scope.LoadedResources -> {
+                r2PagerAdapter?.mFragments?.forEach { _, fragment ->
+                    (fragment as? R2EpubPageFragment)
                         ?.runJavaScript(command.script)
                 }
+            }
 
-                RunScriptCommand.Scope.LoadedResources -> {
-                    r2PagerAdapter?.mFragments?.forEach { _, fragment ->
-                        (fragment as? R2EpubPageFragment)
-                            ?.runJavaScript(command.script)
-                    }
-                }
+            is RunScriptCommand.Scope.Resource -> {
+                loadedFragmentForHref(command.scope.href)
+                    ?.runJavaScript(command.script)
+            }
 
-                is RunScriptCommand.Scope.Resource -> {
-                    loadedFragmentForHref(command.scope.href)
-                        ?.runJavaScript(command.script)
-                }
-
-                is RunScriptCommand.Scope.WebView -> {
-                    command.scope.webView.runJavaScript(command.script)
-                }
+            is RunScriptCommand.Scope.WebView -> {
+                command.scope.webView.runJavaScript(command.script)
             }
         }
     }
@@ -811,6 +809,7 @@ public class EpubNavigatorFragment internal constructor(
             get() = viewModel.readingProgression
 
         override fun onResourceLoaded(webView: R2BasicWebView, link: Link) {
+            Timber.d("onResourceLoaded: ${link.href} ${state}")
             run(viewModel.onResourceLoaded(webView, link))
         }
 
@@ -968,7 +967,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun goToNextResource(jump: Boolean, animated: Boolean): Boolean {
-        Timber.d("goToNextResource")
+        Timber.d("goToNextResource ${resourcePager.currentItem} vs ${adapter.count}")
         val adapter = resourcePager.adapter ?: return false
         if (resourcePager.currentItem >= adapter.count - 1) {
             return false
@@ -979,11 +978,12 @@ public class EpubNavigatorFragment internal constructor(
             locatorToNextResource()?.let { listener?.onJumpToLocator(it) }
         }
 
+        Timber.d("goToNextResource setCurrentItem ${resourcePager.currentItem}")
+
         resourcePager.setCurrentItem(resourcePager.currentItem + 1, animated)
 
-        Timber.d("goToNextResource setCurrentItem")
-
         currentReflowablePageFragment?.webView?.let { webView ->
+            Timber.d("goToNextResource webView 0 -> ${webView.numPages}")
             if (settings.value.readingProgression == ReadingProgression.RTL) {
                 Timber.d("goToNextResource RTL")
                 webView.setCurrentItem(webView.numPages - 1, false)
