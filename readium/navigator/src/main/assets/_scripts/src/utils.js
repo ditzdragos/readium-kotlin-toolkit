@@ -363,6 +363,7 @@ function rangeFromCachedLocator(locator) {
 
 export function rangeFromLocator(locator) {
   try {
+    log("=========================")
     log("rangeFromLocator: locator", JSON.stringify(locator));
     let locations = locator.locations;
     let text = locator.text;
@@ -386,7 +387,7 @@ export function rangeFromLocator(locator) {
       let start = null;
       let end = null;
 
-      log("rangeFromLocator: text", text.highlight, text.before, text.after);
+//      log("rangeFromLocator: text", text.highlight, text.before, text.after);
 
       if (locations && root.textContent.length > 0) {
         log("rangeFromLocator: otherLocations", JSON.stringify(location.otherLocations));
@@ -394,9 +395,9 @@ export function rangeFromLocator(locator) {
 
         if (locations.start !== undefined && locations.end !== undefined) {
           log("actual start and end:", locations.start, locations.end, root.textContent.length);
-          start = Math.max(locations.start, 0);
-          end = Math.min(locations.end, root.textContent.length);
-          log("adjusted start and end: ",start, end, root.textContent);
+          start = Math.max(locations.start-5, 0);
+          end = Math.min(locations.end+5, root.textContent.length);
+          log("adjusted start and end: ",start, end, root.textContent.length);
         }
       }
 
@@ -405,7 +406,7 @@ export function rangeFromLocator(locator) {
         suffix: text.after,
       });
 
-      log("rangeFromLocator: anchor", anchor, text.highlight ,start, end);
+      log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
       return anchor.toRange({}, start, end);
     }
 
@@ -434,7 +435,7 @@ export function rangeFromLocator(locator) {
       }
     }
   } catch (e) {
-    logError(`Cannot parse range `,e);
+    logError("Cannot parse range",e);
   }
 
   return null;
@@ -559,6 +560,10 @@ export function logError(message) {
 export function getRectFromLocator(locator) {
   let range = rangeFromLocator(locator);
   if (range) {
+    log("getRectFromLocator: found range", range);
+    log("getRectFromLocator: getBoundingClientRect", JSON.stringify(range.getBoundingClientRect()));
+    log("getRectFromLocator: toNativeRect", JSON.stringify(toNativeRect(range.getBoundingClientRect())));
+    log("getRectFromLocator =============================================")
     return toNativeRect(range.getBoundingClientRect());
   }
   return null;

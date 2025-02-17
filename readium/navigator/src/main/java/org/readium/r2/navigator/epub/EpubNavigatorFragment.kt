@@ -445,7 +445,7 @@ public class EpubNavigatorFragment internal constructor(
                 }
                 currentPagerPosition = position // Update current position
 
-//                notifyCurrentLocation()
+                notifyCurrentLocation()
             }
         })
 
@@ -1195,7 +1195,7 @@ public class EpubNavigatorFragment internal constructor(
 
                     val rect = RectF(left, top, right, bottom)
 
-                    continuation.resume(rect) { throwable ->
+                    continuation.resume(rect.adjustedToViewport()) { throwable ->
                         continuation.cancel(throwable)
                     }
                 } catch (e: Exception) {

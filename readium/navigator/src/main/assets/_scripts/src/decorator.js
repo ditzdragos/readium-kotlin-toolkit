@@ -178,7 +178,7 @@ export function DecorationGroup(groupId, groupName) {
    */
   function update(decoration) {
     remove(decoration.id);
-    addEnhanced(decoration);
+    add(decoration);
   }
 
   /**
