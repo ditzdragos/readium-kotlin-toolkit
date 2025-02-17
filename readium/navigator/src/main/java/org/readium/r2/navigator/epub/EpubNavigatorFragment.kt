@@ -36,7 +36,6 @@ import androidx.lifecycle.withStarted
 import androidx.viewpager.widget.ViewPager
 import kotlin.math.ceil
 import kotlin.reflect.KClass
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -1124,8 +1123,11 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun notifyCurrentLocation() {
+        // Make sure viewLifecycleOwner is accessible.
+        view ?: return
+
         debounceLocationNotificationJob?.cancel()
-        debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+        debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(100L)
 
             // We don't want to notify the current location if the navigator is still loading a

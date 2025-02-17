@@ -112,7 +112,7 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
 
     override fun finishUpdate(container: ViewGroup) {
         if (mCurTransaction != null) {
-            mCurTransaction?.commitAllowingStateLoss()
+            mCurTransaction!!.commitNowAllowingStateLoss()
             mCurTransaction = null
         }
     }

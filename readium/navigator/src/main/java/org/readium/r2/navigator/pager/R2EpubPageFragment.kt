@@ -15,13 +15,16 @@ import android.annotation.SuppressLint
 import android.graphics.PointF
 import android.os.Bundle
 import android.util.DisplayMetrics
-import android.util.Log
-import android.view.*
+import android.view.KeyEvent
+import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
-import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.os.BundleCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.postDelayed
@@ -38,7 +41,11 @@ import androidx.webkit.WebViewFeature
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.math.roundToInt
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.R
 import org.readium.r2.navigator.R2BasicWebView
@@ -53,6 +60,7 @@ import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
+import timber.log.Timber
 
 @OptIn(ExperimentalReadiumApi::class)
 internal class R2EpubPageFragment : Fragment() {
@@ -550,17 +558,17 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     fun setWebviewCenterInScreen(center: Boolean) {
-        Log.d("R2EpubPageFragment", "setWebviewCenterInScreen: $center $webView")
-        whenPageFinished {
-            val layoutParams = webView?.layoutParams
-            if (center) {
-                layoutParams?.height = CoordinatorLayout.LayoutParams.WRAP_CONTENT
-            } else {
-                layoutParams?.height = CoordinatorLayout.LayoutParams.MATCH_PARENT
-            }
-            webView?.layoutParams = layoutParams
-            webView?.requestLayout()
-        }
+        Timber.d("setWebviewCenterInScreen: $center $webView")
+//        whenPageFinished {
+//            val layoutParams = webView?.layoutParams
+//            if (center) {
+//                layoutParams?.height = CoordinatorLayout.LayoutParams.WRAP_CONTENT
+//            } else {
+//                layoutParams?.height = CoordinatorLayout.LayoutParams.MATCH_PARENT
+//            }
+//            webView?.layoutParams = layoutParams
+//            webView?.requestLayout()
+//        }
     }
 
     companion object {

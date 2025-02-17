@@ -600,8 +600,8 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
     fun runJavaScript(javascript: String, callback: ((String) -> Unit)? = null) {
         if (BuildConfig.DEBUG) {
-            URLUtil.guessFileName(url, null, null)
-//            Timber.d("runJavaScript in $filename: $javascript")
+            val filename = URLUtil.guessFileName(url, null, null)
+            Timber.d("runJavaScript in $filename: $javascript")
         }
 
         this.evaluateJavascript(javascript) { result ->
