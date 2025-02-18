@@ -234,6 +234,7 @@ export class TextQuoteAnchor {
   toPositionAnchor(options = {}, approximateStart = null, approximateEnd = null) {
     const text = /** @type {string} */ (this.root.textContent);
 //    log(`passing hint: ${options.hint}`)
+    Android.log("Text at approximation: "+text.slice(approximateStart, approximateEnd));
     const match = matchQuote(text, this.exact, {
       ...this.context,
       hint: options.hint,
