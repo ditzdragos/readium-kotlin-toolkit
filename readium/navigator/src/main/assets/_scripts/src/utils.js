@@ -393,8 +393,8 @@ export function rangeFromLocator(locator) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
           log("actual start and end:", locations.start, locations.end, root.textContent.length);
-          start = Math.max(locations.start-5, 0);
-          end = Math.min(locations.end+5, root.textContent.length);
+          start = Math.max(locations.start-30, 0);
+          end = Math.min(locations.end+30, root.textContent.length);
           log("adjusted start and end: ",start, end, root.textContent.length);
         }
       }
