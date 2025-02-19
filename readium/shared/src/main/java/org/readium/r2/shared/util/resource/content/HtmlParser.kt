@@ -10,8 +10,22 @@ import org.readium.r2.shared.extensions.cleanHtmlContent
  */
 public object HtmlParser {
     private val BLOCK_TAGS = setOf(
-        "p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6",
-        "article", "section", "nav", "aside", "header", "footer"
+        "p",
+        "div",
+        "br",
+        "li",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "article",
+        "section",
+        "nav",
+        "aside",
+        "header",
+        "footer"
     )
 
     private val IGNORED_TAGS = setOf("script", "style", "noscript", "head", "meta", "link")
