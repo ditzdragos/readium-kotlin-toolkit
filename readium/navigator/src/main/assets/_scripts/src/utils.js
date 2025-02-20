@@ -448,11 +448,14 @@ export function rangeFromLocator(locator) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
 //          const bounds = findContextBounds(root, locations, text);
-          start = locations.start;
-          end = locations.end;
+          start = Math.max(locations.start-5,0);
+          end = Math.min(locations.end+5,root.textContent.length);
           log("adjusted start and end:", start, end, root.textContent.length);
         }
       }
+
+       log("Text at adjusted highlight: ", text.highlight);
+       log("Text at adjusted range: ", root.textContent.slice(start, end));
 
       let anchor = new TextQuoteAnchor(root, text.highlight, {
         prefix: text.before,
