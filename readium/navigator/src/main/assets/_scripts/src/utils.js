@@ -447,9 +447,9 @@ export function rangeFromLocator(locator) {
       if (locations && root.textContent.length > 0) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
-          const bounds = findContextBounds(root, locations, text);
-          start = bounds.start;
-          end = bounds.end;
+//          const bounds = findContextBounds(root, locations, text);
+          start = locations.start;
+          end = locations.end;
           log("adjusted start and end:", start, end, root.textContent.length);
         }
       }
