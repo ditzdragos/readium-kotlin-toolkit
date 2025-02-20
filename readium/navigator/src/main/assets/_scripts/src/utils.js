@@ -361,6 +361,12 @@ function rangeFromCachedLocator(locator) {
   return subRange;
 }
 
+// Cache for storing context bounds
+const contextBoundsCache = new LRUCache(50);
+
+// Start with initial window of 100 chars, double it until we find context or reach bounds
+let windowSize = 100;
+
 export function rangeFromLocator(locator) {
   try {
     log("=========================")
@@ -387,15 +393,64 @@ export function rangeFromLocator(locator) {
       let start = null;
       let end = null;
 
-//      log("rangeFromLocator: text", text.highlight, text.before, text.after);
+      // Function to find the appropriate bounds that contain the context
+      function findContextBounds(root, locations, text) {
+        // Generate cache key from the relevant properties
+        const cacheKey = `${locations.start}-${locations.end}-${text.highlight}`;
+        const cachedBounds = contextBoundsCache.get(cacheKey);
+//        log("Finding context bounds for:", cacheKey);
+        if (cachedBounds) {
+//          log("Using cached context bounds");
+          return cachedBounds;
+        }
+
+        // Function to check if a text slice contains both before and after context
+        const hasContext = (slice, beforeText, afterText) => {
+          if (!beforeText && !afterText) return true;
+          const hasBefore = !beforeText || slice.includes(beforeText);
+          const hasAfter = !afterText || slice.includes(afterText);
+          return hasBefore || hasAfter;
+        };
+
+        if (!locations || !locations.start || !locations.end || root.textContent.length === 0) {
+          return { start: null, end: null };
+        }
+
+//        log("Finding context bounds for start/end:", locations.start, locations.end);
+
+        let maxWindowSize = root.textContent.length/2;
+        let currentStart = locations.start;
+        let currentEnd = locations.end;
+        let before = text.before ? text.before.replace(/\s+/g, ''):null;
+        let after = text.after ? text.after.replace(/\s+/g, ''):null;
+        while (windowSize <= maxWindowSize) {
+          currentStart = Math.max(locations.start - windowSize, 0);
+          currentEnd = Math.min(locations.end + windowSize, root.textContent.length);
+
+          const textSlice = root.textContent.slice(currentStart, currentEnd).replace(/\s+/g, '');
+          if (hasContext(textSlice, before, after)) {
+//            log("Found context with window size:", windowSize);
+            contextBoundsCache.set(cacheKey, {start:currentStart, end:currentEnd});
+            return {start:currentStart, end:currentEnd};
+          }
+
+          windowSize *= 2;
+//          log("Increasing search window to:", windowSize);
+        }
+
+        const finalBounds = { start: currentStart, end: currentEnd };
+//        log("Max window size reached. Using bounds:", currentStart, currentEnd);
+        contextBoundsCache.set(cacheKey, finalBounds);
+        return finalBounds;
+      }
 
       if (locations && root.textContent.length > 0) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
-          log("actual start and end:", locations.start, locations.end, root.textContent.length);
-          start = Math.max(locations.start-100, 0);
-          end = Math.min(locations.end+100, root.textContent.length);
-          log("adjusted start and end: ",start, end, root.textContent.length);
+          const bounds = findContextBounds(root, locations, text);
+          start = bounds.start;
+          end = bounds.end;
+          log("adjusted start and end:", start, end, root.textContent.length);
         }
       }
 
