@@ -3,7 +3,6 @@ package org.readium.r2.shared.util.resource.content
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import org.readium.r2.shared.extensions.cleanHtmlContent
-import timber.log.Timber
 
 
 /**
@@ -32,7 +31,6 @@ public object HtmlParser {
     private val IGNORED_TAGS = setOf("script", "style", "noscript", "head", "meta", "link")
 
     public fun getFullText(html: String): String {
-        Timber.d("getFullText: $html")
         val text = Jsoup.parse(html.cleanHtmlContent()).body().wholeText()
         return Parser.unescapeEntities(text, false)
     }
