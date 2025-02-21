@@ -234,6 +234,7 @@ export class TextQuoteAnchor {
   toPositionAnchor(options = {}, approximateStart = null, approximateEnd = null) {
     const text = /** @type {string} */ (this.root.textContent);
 //    log(`passing hint: ${options.hint}`)
+    Android.log("Approximate start: " + approximateStart + ", approximate end: " + approximateEnd);
     const match = matchQuote(text, this.exact, {
       ...this.context,
       hint: options.hint,
@@ -241,6 +242,7 @@ export class TextQuoteAnchor {
     if (!match) {
       throw new Error('Quote not found');
     }
+    Android.log(`match: ${JSON.stringify(match)}`)
     return new TextPositionAnchor(this.root, match.start, match.end);
   }
 }
