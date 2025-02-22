@@ -563,10 +563,6 @@ export function logError(message) {
 export function getRectFromLocator(locator) {
   let range = rangeFromLocator(locator);
   if (range) {
-    log("getRectFromLocator: found range", range);
-    log("getRectFromLocator: getBoundingClientRect", JSON.stringify(range.getBoundingClientRect()));
-    log("getRectFromLocator: toNativeRect", JSON.stringify(toNativeRect(range.getBoundingClientRect())));
-    log("getRectFromLocator =============================================")
     return toNativeRect(range.getBoundingClientRect());
   }
   return null;
