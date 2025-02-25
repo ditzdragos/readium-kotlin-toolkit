@@ -282,6 +282,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private var state: State = State.Initializing
+    public val isReady: Boolean get() = state == State.Ready
 
     // Configurable
 
@@ -823,9 +824,6 @@ public class EpubNavigatorFragment internal constructor(
             ) {
                 state = State.Ready
             }
-
-//            if (state == State.Ready) {
-//            }
 
             notifyCurrentLocation()
         }
