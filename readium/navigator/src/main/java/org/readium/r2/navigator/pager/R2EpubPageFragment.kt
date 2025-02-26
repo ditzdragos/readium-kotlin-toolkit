@@ -121,9 +121,12 @@ internal class R2EpubPageFragment : Fragment() {
             super.onReceivedError(view, request, error)
 
             val errorDescription = error.description.toString()
+            
+            // Include the link information when reporting the error
             webView?.listener?.onError(
                 errorDescription,
-                errorDescription == NET_ERROR
+                errorDescription == NET_ERROR,
+                link
             )
         }
 
@@ -299,9 +302,12 @@ internal class R2EpubPageFragment : Fragment() {
                 super.onReceivedError(view, request, error)
 
                 val errorDescription = error.description.toString()
+                
+                // Include the link information when reporting the error
                 webView.listener?.onError(
                     errorDescription,
-                    errorDescription == NET_ERROR
+                    errorDescription == NET_ERROR,
+                    link
                 )
             }
 
