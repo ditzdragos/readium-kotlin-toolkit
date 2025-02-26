@@ -9,7 +9,6 @@
 import "./index";
 
 window.readium.isReflowable = true;
-window.
 
 document.addEventListener("DOMContentLoaded", function () {
   // Setups the `viewport` meta tag to disable zooming.
