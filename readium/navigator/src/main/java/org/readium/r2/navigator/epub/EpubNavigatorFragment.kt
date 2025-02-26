@@ -133,14 +133,14 @@ public class EpubNavigatorFragment internal constructor(
 
     // Cache for hrefs that have displayed errors
     private val errorCache = mutableSetOf<String>()
-    
+
     // Function to clear the error cache
     private fun clearErrorCache() {
         errorCache.clear()
         Timber.d("Error cache cleared")
     }
 
-    init{
+    init {
         clearErrorCache()
     }
 
@@ -940,17 +940,17 @@ public class EpubNavigatorFragment internal constructor(
             link: Link?
         ) {
             super.onError(error, errorDisplayed, link)
-            
+
             val linkHref = link?.href?.toString()
             Timber.d("onError: displayed[${errorDisplayed}] -> [$linkHref] vs [${_currentLocator.value.href}]")
-            
+
             if (linkHref != null) {
                 if (errorDisplayed) {
                     // Add to error cache if the error is displayed
                     errorCache.add(linkHref)
                     Timber.d("Added to error cache: $linkHref")
                 }
-                
+
                 // Only notify the input listener if this is the current resource
                 if (linkHref == _currentLocator.value.href.toString()) {
                     inputListener.onError(errorDisplayed)
@@ -1202,14 +1202,14 @@ public class EpubNavigatorFragment internal constructor(
 
             val previousHref = _currentLocator.value.href.toString()
             val newHref = currentLocator.href.toString()
-            
+
             // Update the current locator
             _currentLocator.value = currentLocator
-            
+
             // Check if the new href is in the error cache
-            if (previousHref != newHref && errorCache.contains(newHref)) {
+            if (previousHref != newHref) {
                 Timber.d("Found error in cache for: $newHref")
-                inputListener.onError(true)
+                inputListener.onError(errorCache.contains(newHref))
             }
 
             // Deprecated notifications
