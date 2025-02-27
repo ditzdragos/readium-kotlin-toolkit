@@ -16,12 +16,14 @@ export function toNativeRect(rect) {
   // Get the WebView's viewport dimensions
   const viewportWidth = Android.getViewportWidth();
   const viewportHeight = window.innerHeight;
-  
+
+  const ratio = viewportWidth / window.innerWidth;
+
   // Convert coordinates to device pixels
-  const width = rect.width * pixelRatio;
-  const height = rect.height * pixelRatio;
-  const left = rect.left * pixelRatio;
-  const top = rect.top * pixelRatio;
+  const width = rect.width * ratio;
+  const height = rect.height * ratio;
+  const left = rect.left * ratio;
+  const top = rect.top * ratio;
   const right = left + width;
   const bottom = top + height;
 
