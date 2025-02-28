@@ -17,6 +17,7 @@ export function toNativeRect(rect) {
   const viewportWidth = Android.getViewportWidth();
   const viewportHeight = window.innerHeight;
 
+  // check if we need to process the height instead
   const ratio = viewportWidth / window.innerWidth;
 
   // Convert coordinates to device pixels
