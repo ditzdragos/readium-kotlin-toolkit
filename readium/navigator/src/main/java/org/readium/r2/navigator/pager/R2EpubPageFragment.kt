@@ -121,7 +121,7 @@ internal class R2EpubPageFragment : Fragment() {
             super.onReceivedError(view, request, error)
 
             val errorDescription = error.description.toString()
-            
+
             // Include the link information when reporting the error
             webView?.listener?.onError(
                 errorDescription,
@@ -302,7 +302,7 @@ internal class R2EpubPageFragment : Fragment() {
                 super.onReceivedError(view, request, error)
 
                 val errorDescription = error.description.toString()
-                
+
                 // Include the link information when reporting the error
                 webView.listener?.onError(
                     errorDescription,
@@ -529,6 +529,9 @@ internal class R2EpubPageFragment : Fragment() {
 
         var progression = locator.locations.progression ?: 0.0
 
+        Timber.d("Loading locator: $progression")
+        Timber.d("Loading locator mode: $webView.scrollMode")
+
         // We need to reverse the progression with RTL because the Web View
         // always scrolls from left to right, no matter the reading direction.
         progression =
@@ -562,6 +565,7 @@ internal class R2EpubPageFragment : Fragment() {
             cont.resume(result)
         }
     }
+
 
     fun setWebviewCenterInScreen(center: Boolean) {
         Timber.d("setWebviewCenterInScreen: $center $webView")

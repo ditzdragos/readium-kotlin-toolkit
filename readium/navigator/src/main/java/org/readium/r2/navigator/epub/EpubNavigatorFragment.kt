@@ -660,9 +660,13 @@ public class EpubNavigatorFragment internal constructor(
             if (resourcePager.currentItem != index) {
                 resourcePager.currentItem = index
             }
+
+            Timber.d("setCurrent: ${page} $locator")
+
             r2PagerAdapter?.loadLocatorAt(index, locator)
         }
 
+        Timber.d("viewModel.dualPageMode: ${viewModel.dualPageMode}")
         Timber.d("go: $locator")
         if (publication.metadata.presentation.layout != EpubLayout.FIXED) {
             setCurrent(resourcesSingle)
@@ -1235,11 +1239,14 @@ public class EpubNavigatorFragment internal constructor(
                     val right = jsonObject.optDouble("right", 0.0).toFloat()
                     val bottom = jsonObject.optDouble("bottom", 0.0).toFloat()
 
+//                    val density = Density(requireContext()).density
+
                     val rect = RectF(left, top, right, bottom)
 
                     continuation.resume(rect.adjustedToViewport()) { throwable ->
                         continuation.cancel(throwable)
                     }
+
                 } catch (e: Exception) {
                     // Handle any JSON parsing or other errors
                     Timber.e("Error parsing JSON to RectF $e")
