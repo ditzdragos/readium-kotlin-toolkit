@@ -106,6 +106,10 @@ internal class R2EpubPageFragment : Fragment() {
             Timber.d("Page finished: $url")
             onPageFinished()
 
+            binding.errorOverlay.post{
+                binding.errorOverlay.isVisible = errorCache[resourceUrl.toString()] == true
+            }
+
             link?.let {
                 webView?.listener?.onResourceLoaded(webView!!, it)
             }
@@ -219,6 +223,10 @@ internal class R2EpubPageFragment : Fragment() {
                     }
                 }
             }
+        }
+
+        binding.errorOverlay.setOnClickListener {
+            webView.listener?.onTap(PointF(0f, 0f))
         }
 
         webView.settings.javaScriptEnabled = true
