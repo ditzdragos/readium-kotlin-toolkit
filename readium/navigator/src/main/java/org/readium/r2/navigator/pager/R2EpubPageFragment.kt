@@ -120,9 +120,10 @@ internal class R2EpubPageFragment : Fragment() {
             super.onReceivedError(view, request, error)
             val errorDescription = error.description.toString()
             val webpageError = errorDescription == NET_ERROR
+            Timber.d("Webpage error: $errorDescription")
             // Show error overlay for network errors
             if(webpageError) {
-                val htmlData = "<html><body></body></html>"
+                val htmlData = "<html><head></head><body></body></html>"
                 view.loadUrl("about:blank")
                 view.loadDataWithBaseURL(null, htmlData, "text/html", "UTF-8", null)
                 view.invalidate()
