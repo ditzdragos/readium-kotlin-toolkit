@@ -27,7 +27,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.core.os.BundleCompat
 import androidx.core.view.ViewCompat
-import androidx.core.view.isVisible
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -62,8 +61,6 @@ import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
 import timber.log.Timber
-
-private val errorCache = mutableMapOf<String, Boolean>()
 
 @OptIn(ExperimentalReadiumApi::class)
 internal class R2EpubPageFragment : Fragment() {
@@ -103,12 +100,7 @@ internal class R2EpubPageFragment : Fragment() {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
-            Timber.d("Page finished: $url")
             onPageFinished()
-
-            binding.errorOverlay.post{
-                binding.errorOverlay.isVisible = errorCache[resourceUrl.toString()] == true
-            }
 
             link?.let {
                 webView?.listener?.onResourceLoaded(webView!!, it)
@@ -128,12 +120,12 @@ internal class R2EpubPageFragment : Fragment() {
             super.onReceivedError(view, request, error)
             val errorDescription = error.description.toString()
             val webpageError = errorDescription == NET_ERROR
-            Timber.d("Error: $errorDescription -> $webpageError")
-            Timber.d("Error overlay available: ${resourceUrl}")
-            errorCache[resourceUrl.toString()] = webpageError
             // Show error overlay for network errors
-            binding.errorOverlay.post {
-                binding.errorOverlay.isVisible = webpageError
+            if(webpageError) {
+                val htmlData = "<html><body></body></html>"
+                view.loadUrl("about:blank")
+                view.loadDataWithBaseURL(null, htmlData, "text/html", "UTF-8", null)
+                view.invalidate()
             }
         }
 
@@ -223,10 +215,6 @@ internal class R2EpubPageFragment : Fragment() {
                     }
                 }
             }
-        }
-
-        binding.errorOverlay.setOnClickListener {
-            webView.listener?.onTap(PointF(0f, 0f))
         }
 
         webView.settings.javaScriptEnabled = true
