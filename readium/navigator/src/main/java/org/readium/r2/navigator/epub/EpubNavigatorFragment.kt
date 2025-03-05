@@ -937,30 +937,6 @@ public class EpubNavigatorFragment internal constructor(
         override fun resourceAtUrl(url: Url): Resource? =
             viewModel.internalLinkFromUrl(url)
                 ?.let { publication.get(it) }
-
-        override fun onError(
-            error: String,
-            errorDisplayed: Boolean,
-            link: Link?
-        ) {
-            super.onError(error, errorDisplayed, link)
-
-            val linkHref = link?.href?.toString()
-            Timber.d("onError: displayed[${errorDisplayed}] -> [$linkHref] vs [${_currentLocator.value.href}]")
-
-            if (linkHref != null) {
-                if (errorDisplayed) {
-                    // Add to error cache if the error is displayed
-                    errorCache.add(linkHref)
-                    Timber.d("Added to error cache: $linkHref")
-                }
-
-                // Only notify the input listener if this is the current resource
-                if (linkHref == _currentLocator.value.href.toString()) {
-                    inputListener.onError(errorDisplayed)
-                }
-            }
-        }
     }
 
     override fun goForward(animated: Boolean): Boolean {
@@ -1204,17 +1180,8 @@ public class EpubNavigatorFragment internal constructor(
                 text = positionLocator?.text ?: Locator.Text()
             )
 
-            val previousHref = _currentLocator.value.href.toString()
-            val newHref = currentLocator.href.toString()
-
             // Update the current locator
             _currentLocator.value = currentLocator
-
-            // Check if the new href is in the error cache
-            if (previousHref != newHref) {
-                Timber.d("Found error in cache for: $newHref")
-                inputListener.onError(errorCache.contains(newHref))
-            }
 
             // Deprecated notifications
             reflowableWebView?.let {

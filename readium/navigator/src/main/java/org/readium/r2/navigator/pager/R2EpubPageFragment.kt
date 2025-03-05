@@ -27,6 +27,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.core.os.BundleCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.isVisible
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -61,6 +62,8 @@ import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
 import timber.log.Timber
+
+private val errorCache = mutableMapOf<String, Boolean>()
 
 @OptIn(ExperimentalReadiumApi::class)
 internal class R2EpubPageFragment : Fragment() {
@@ -100,7 +103,7 @@ internal class R2EpubPageFragment : Fragment() {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
-
+            Timber.d("Page finished: $url")
             onPageFinished()
 
             link?.let {
@@ -119,15 +122,15 @@ internal class R2EpubPageFragment : Fragment() {
             error: WebResourceErrorCompat
         ) {
             super.onReceivedError(view, request, error)
-
             val errorDescription = error.description.toString()
-
-            // Include the link information when reporting the error
-            webView?.listener?.onError(
-                errorDescription,
-                errorDescription == NET_ERROR,
-                link
-            )
+            val webpageError = errorDescription == NET_ERROR
+            Timber.d("Error: $errorDescription -> $webpageError")
+            Timber.d("Error overlay available: ${resourceUrl}")
+            errorCache[resourceUrl.toString()] = webpageError
+            // Show error overlay for network errors
+            binding.errorOverlay.post {
+                binding.errorOverlay.isVisible = webpageError
+            }
         }
 
         override fun shouldInterceptRequest(
@@ -176,7 +179,7 @@ internal class R2EpubPageFragment : Fragment() {
 
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
-
+        Timber.d("onViewStateRestored: $resourceUrl")
         savedInstanceState
             ?.getInt(textZoomBundleKey)
             ?.takeIf { it > 0 }
@@ -266,58 +269,6 @@ internal class R2EpubPageFragment : Fragment() {
             }
         })
 
-        webView.webViewClient = object : WebViewClientCompat() {
-
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest
-            ): Boolean =
-                (webView as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
-
-            override fun shouldOverrideKeyEvent(view: WebView, event: KeyEvent): Boolean {
-                // Do something with the event here
-                return false
-            }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-
-                onPageFinished()
-
-                link?.let {
-                    webView.listener?.onResourceLoaded(webView, it)
-                }
-
-                webView.onContentReady {
-                    onLoadPage()
-                }
-            }
-
-            @SuppressLint("RequiresFeature")
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: WebResourceErrorCompat
-            ) {
-                super.onReceivedError(view, request, error)
-
-                val errorDescription = error.description.toString()
-
-                // Include the link information when reporting the error
-                webView.listener?.onError(
-                    errorDescription,
-                    errorDescription == NET_ERROR,
-                    link
-                )
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest
-            ): WebResourceResponse? =
-                (webView as? R2BasicWebView)?.shouldInterceptRequest(view, request)
-        }
-
         webView.isHapticFeedbackEnabled = false
         webView.isLongClickable = true
 
@@ -362,6 +313,7 @@ internal class R2EpubPageFragment : Fragment() {
      * Will run the given [action] when the content of the [WebView] is fully laid out.
      */
     private fun WebView.onContentReady(action: () -> Unit) {
+        Timber.d("onContentReady $resourceUrl")
         if (WebViewFeature.isFeatureSupported(WebViewFeature.VISUAL_STATE_CALLBACK)) {
             WebViewCompat.postVisualStateCallback(this, 0) {
                 action()
@@ -568,7 +520,7 @@ internal class R2EpubPageFragment : Fragment() {
 
 
     fun setWebviewCenterInScreen(center: Boolean) {
-        Timber.d("setWebviewCenterInScreen: $center $webView")
+        Timber.d("setWebviewCenterInScreen: $center $resourceUrl")
 //        whenPageFinished {
 //            val layoutParams = webView?.layoutParams
 //            if (center) {

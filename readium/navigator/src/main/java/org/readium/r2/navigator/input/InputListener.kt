@@ -48,8 +48,4 @@ internal class CompositeInputListener : InputListener {
 
     override fun onLongTap(event: TapEvent): Boolean =
         listeners.any { it.onLongTap(event) }
-
-    override fun onError(isErrorDisplayed: Boolean) {
-        listeners.forEach { it.onError(isErrorDisplayed) }
-    }
 }
