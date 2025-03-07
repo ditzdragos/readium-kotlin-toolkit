@@ -279,6 +279,7 @@ public class EpubNavigatorFragment internal constructor(
     public interface PaginationListener {
         public fun onPageChanged(pageIndex: Int, totalPages: Int, locator: Locator) {}
         public fun onPageLoaded() {}
+        public fun onPageLoaded(isReady: Boolean) {}
     }
 
     public interface Listener : OverflowableNavigator.Listener, HyperlinkNavigator.Listener
@@ -844,6 +845,10 @@ public class EpubNavigatorFragment internal constructor(
                 ) == true
             ) {
                 state = State.Ready
+            }
+
+            if(state == State.Ready) {
+                paginationListener?.onPageLoaded(true)
             }
 
             notifyCurrentLocation()
