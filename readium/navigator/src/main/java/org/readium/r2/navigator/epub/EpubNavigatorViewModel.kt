@@ -336,6 +336,14 @@ internal class EpubNavigatorViewModel(
         )
     }
 
+    fun clearEnhancedDecorations(group: String): RunScriptCommand {
+        this.decorations.remove(group)
+        return RunScriptCommand(
+            script = "readium.getDecorations('$group').clearAllEnhanced();",
+            scope = RunScriptCommand.Scope.LoadedResources
+        )
+    }
+
     /** Decoration group listeners, indexed by the group name. */
     private val decorationListeners: MutableMap<String, List<DecorableNavigator.Listener>> =
         mutableMapOf()

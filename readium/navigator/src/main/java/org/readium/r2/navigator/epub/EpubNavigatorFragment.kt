@@ -808,6 +808,10 @@ public class EpubNavigatorFragment internal constructor(
         run(viewModel.applyDecorations(decorations, group))
     }
 
+    public fun clearEnhancedDecorations(group: String) {
+        run(viewModel.clearEnhancedDecorations(group))
+    }
+
     public override fun addDecoration(group: String, decoration: Decoration) {
         run(viewModel.addDecoration(group, decoration))
     }
