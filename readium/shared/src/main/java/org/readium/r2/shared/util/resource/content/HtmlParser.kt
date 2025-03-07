@@ -1,8 +1,6 @@
 package org.readium.r2.shared.util.resource.content
 
 import org.jsoup.Jsoup
-import org.jsoup.parser.Parser
-import org.readium.r2.shared.extensions.cleanHtmlContent
 
 
 /**
@@ -10,8 +8,9 @@ import org.readium.r2.shared.extensions.cleanHtmlContent
  */
 public object HtmlParser {
     public fun getFullText(html: String): String {
-        val text = Jsoup.parse(html.cleanHtmlContent()).body().wholeText()
-        return Parser.unescapeEntities(text, false)
+        val processedHtml = html.replace("</p>", "</p>\n")
+        val text = Jsoup.parse(processedHtml).body().wholeText()
+        return text
             .replace("\r", "")
     }
 }
