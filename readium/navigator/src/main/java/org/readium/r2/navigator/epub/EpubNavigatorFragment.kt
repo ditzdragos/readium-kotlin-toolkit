@@ -847,11 +847,11 @@ public class EpubNavigatorFragment internal constructor(
                 state = State.Ready
             }
 
-            if(state == State.Ready) {
+            notifyCurrentLocation()
+
+            if (state == State.Ready) {
                 paginationListener?.onPageLoaded(true)
             }
-
-            notifyCurrentLocation()
         }
 
         override fun javascriptInterfacesForResource(link: Link): Map<String, Any?> =
