@@ -311,6 +311,7 @@ public class EpubNavigatorFragment internal constructor(
      *
      * Note that this only work with reflowable resources.
      */
+    @OptIn(InternalReadiumApi::class)
     public suspend fun evaluateJavascript(script: String): String? {
         val page = currentReflowablePageFragment ?: return null
         page.awaitLoaded()
@@ -720,10 +721,6 @@ public class EpubNavigatorFragment internal constructor(
                 command.scope.webView.runJavaScript(command.script)
             }
         }
-    }
-
-    public fun setWebviewCenterInScreen(center: Boolean) {
-        r2PagerAdapter?.setWebviewCenterInScreen(center)
     }
 
     // VisualNavigator

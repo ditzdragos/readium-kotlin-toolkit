@@ -49,7 +49,6 @@ internal class R2PagerAdapter internal constructor(
     private var currentFragment: Fragment? = null
     private var previousFragment: Fragment? = null
     private var nextFragment: Fragment? = null
-    private var isWebviewCenter: Boolean = false
 
     fun getCurrentFragment(): Fragment? {
         return currentFragment
@@ -87,11 +86,13 @@ internal class R2PagerAdapter internal constructor(
                 )
             }
             is PageResource.EpubFxl -> {
+                //FXL layout does not support highlight
                 resource.leftUrl?.toUri()?.toAbsoluteUrl()?.let {
                     R2EpubPageFragment.newInstance(
                         it,
                         resource.leftLink,
                         initialLocator = locator,
+                        fixedLayout = true
                     )
                 } ?: R2FXLPageFragment.newInstance(
                     left = let(resource.leftLink, resource.leftUrl) { l, u -> Pair(l, u) },
@@ -111,7 +112,6 @@ internal class R2PagerAdapter internal constructor(
                     }
             }
         }
-        (fragment as? R2EpubPageFragment)?.setWebviewCenterInScreen(isWebviewCenter)
         listener?.onCreatePageFragment(fragment)
         return fragment
     }
@@ -127,10 +127,6 @@ internal class R2PagerAdapter internal constructor(
             (mFragments.get(i) as? R2EpubPageFragment)?.loadLocator(locator)
         }
         pendingLocators.clear()
-    }
-
-    fun setWebviewCenterInScreen(center: Boolean) {
-        isWebviewCenter = center
     }
 
     private val pendingLocators = LongSparseArray<Locator>()

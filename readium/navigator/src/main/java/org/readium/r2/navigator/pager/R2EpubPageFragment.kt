@@ -14,7 +14,6 @@ package org.readium.r2.navigator.pager
 import android.annotation.SuppressLint
 import android.graphics.PointF
 import android.os.Bundle
-import android.util.DisplayMetrics
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -62,6 +61,7 @@ import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
 import timber.log.Timber
 
+
 @OptIn(ExperimentalReadiumApi::class)
 internal class R2EpubPageFragment : Fragment() {
 
@@ -72,6 +72,7 @@ internal class R2EpubPageFragment : Fragment() {
         get() = BundleCompat.getParcelable(requireArguments(), "link", Link::class.java)
 
     private var pendingLocator: Locator? = null
+    private var fixedLayout: Boolean = false
 
     var webView: R2WebView? = null
         private set
@@ -109,6 +110,10 @@ internal class R2EpubPageFragment : Fragment() {
             webView?.onContentReady {
                 onLoadPage()
             }
+
+            if(fixedLayout && view != null){
+                injectCenteringJavaScript(view)
+            }
         }
 
         @SuppressLint("RequiresFeature")
@@ -122,7 +127,8 @@ internal class R2EpubPageFragment : Fragment() {
             val webpageError = errorDescription == NET_ERROR
             Timber.d("Webpage error: $errorDescription")
             // Show error overlay for network errors
-            if(webpageError) {
+            if (webpageError) {
+                Timber.d("Will override with blank page")
                 val htmlData = "<html><head></head><body></body></html>"
                 view.loadUrl("about:blank")
                 view.loadDataWithBaseURL(null, htmlData, "text/html", "UTF-8", null)
@@ -138,12 +144,14 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     internal fun setFontSize(fontSize: Double) {
+        Timber.d("setFontSize: $fontSize")
         textZoom = (fontSize * 100).roundToInt()
     }
 
     private var textZoom: Int = 100
         set(value) {
             field = value
+            Timber.d("Text zoom: $value")
             webView?.settings?.textZoom = value
         }
 
@@ -190,6 +198,7 @@ internal class R2EpubPageFragment : Fragment() {
             "initialLocator",
             Locator::class.java
         )
+        fixedLayout = requireArguments().getBoolean("fixedLayout")
     }
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
@@ -198,6 +207,7 @@ internal class R2EpubPageFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        Timber.d("onCreateView: $resourceUrl")
         _binding = ReadiumNavigatorViewpagerFragmentEpubBinding.inflate(inflater, container, false)
         containerView = binding.root
 
@@ -229,43 +239,13 @@ internal class R2EpubPageFragment : Fragment() {
         webView.settings.textZoom = textZoom
         webView.resourceUrl = resourceUrl
         webView.setPadding(0, 0, 0, 0)
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         webView.webViewClient = webViewClient
         webView.addJavascriptInterface(webView, "Android")
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-
-        var endReached = false
-        webView.setOnOverScrolledCallback(object : R2BasicWebView.OnOverScrolledCallback {
-            override fun onOverScrolled(
-                scrollX: Int,
-                scrollY: Int,
-                clampedX: Boolean,
-                clampedY: Boolean
-            ) {
-                activity ?: return
-                val metrics = DisplayMetrics()
-
-                val topDecile = webView.contentHeight - 1.15 * metrics.heightPixels
-                val bottomDecile = (webView.contentHeight - metrics.heightPixels).toDouble()
-
-                when (scrollY.toDouble()) {
-                    in topDecile..bottomDecile -> {
-                        if (!endReached) {
-                            endReached = true
-                            webView.listener?.onPageEnded(endReached)
-                        }
-                    }
-
-                    else -> {
-                        if (endReached) {
-                            endReached = false
-                            webView.listener?.onPageEnded(endReached)
-                        }
-                    }
-                }
-            }
-        })
-
+        webView.zoomOut()
+        if (fixedLayout) {
+            webView.overScrollMode = View.OVER_SCROLL_NEVER
+        }
         webView.isHapticFeedbackEnabled = false
         webView.isLongClickable = true
 
@@ -515,19 +495,67 @@ internal class R2EpubPageFragment : Fragment() {
         }
     }
 
+    private fun injectCenteringJavaScript(webView: WebView) {
+        val javascript = """
+            javascript:(function() {
+                // Get document dimensions and viewport dimensions
+                var pageWidth = document.documentElement.scrollWidth;
+                var pageHeight = document.documentElement.scrollHeight;
+                var viewportWidth = window.innerWidth;
+                var viewportHeight = window.innerHeight;
+                
+                console.log('Original dimensions - Page: ' + pageWidth + 'x' + pageHeight + ', Viewport: ' + viewportWidth + 'x' + viewportHeight);
+                
+                // Calculate the scale ratio to fit the entire content
+                var widthRatio = viewportWidth / pageWidth;
+                var heightRatio = viewportHeight / pageHeight;
+                var scaleFactor = Math.min(widthRatio, heightRatio) * 0.98; // Apply a small margin
+                
+                console.log('Scale factor: ' + scaleFactor);
+                
+                // Create a wrapper div to keep everything together
+                var wrapper = document.createElement('div');
+                wrapper.id = 'contentWrapper';
+                wrapper.style.position = 'absolute';
+                wrapper.style.transformOrigin = 'top left';
+                wrapper.style.transform = 'scale(' + scaleFactor + ')';
+                
+                // Move all body's children to the wrapper
+                while (document.body.firstChild) {
+                    wrapper.appendChild(document.body.firstChild);
+                }
+                document.body.appendChild(wrapper);
+                
+                // Position the wrapper in the center
+                document.body.style.margin = '0';
+                document.body.style.padding = '0';
+                document.body.style.overflow = 'hidden';
+                document.body.style.position = 'relative';
+                document.body.style.width = '100vw';
+                document.body.style.height = '100vh';
+                document.body.style.display = 'flex';
+                document.body.style.alignItems = 'center';
+                document.body.style.justifyContent = 'center';
+                
+                var scaledWidth = pageWidth * scaleFactor;
+                var scaledHeight = pageHeight * scaleFactor;
+                
+                wrapper.style.width = pageWidth + 'px';
+                wrapper.style.height = pageHeight + 'px';
+                
+                // Calculate the correct position to center
+                var leftPos = Math.max(0, (viewportWidth - scaledWidth) / 2) / scaleFactor;
+                var topPos = Math.max(0, (viewportHeight - scaledHeight) / 2) / scaleFactor;
+                
+                wrapper.style.left = leftPos + 'px';
+                wrapper.style.top = topPos + 'px';
+                
+                console.log('Wrapper positioned at: ' + leftPos + ', ' + topPos);
+                console.log('Scaled dimensions: ' + scaledWidth + 'x' + scaledHeight);
+            })();
+        """.trimIndent()
 
-    fun setWebviewCenterInScreen(center: Boolean) {
-        Timber.d("setWebviewCenterInScreen: $center $resourceUrl")
-//        whenPageFinished {
-//            val layoutParams = webView?.layoutParams
-//            if (center) {
-//                layoutParams?.height = CoordinatorLayout.LayoutParams.WRAP_CONTENT
-//            } else {
-//                layoutParams?.height = CoordinatorLayout.LayoutParams.MATCH_PARENT
-//            }
-//            webView?.layoutParams = layoutParams
-//            webView?.requestLayout()
-//        }
+        webView.evaluateJavascript(javascript, null)
     }
 
     companion object {
@@ -538,7 +566,8 @@ internal class R2EpubPageFragment : Fragment() {
             url: AbsoluteUrl,
             link: Link? = null,
             initialLocator: Locator? = null,
-            positionCount: Int = 0
+            positionCount: Int = 0,
+            fixedLayout: Boolean = false
         ): R2EpubPageFragment =
             R2EpubPageFragment().apply {
                 arguments = Bundle().apply {
@@ -546,6 +575,7 @@ internal class R2EpubPageFragment : Fragment() {
                     putParcelable("link", link)
                     putParcelable("initialLocator", initialLocator)
                     putLong("positionCount", positionCount.toLong())
+                    putBoolean("fixedLayout", fixedLayout)
                 }
             }
     }
