@@ -44,9 +44,18 @@ export function registerTemplates(newStyles) {
       position: absolute;
       width: 100%;
       height: 100%;
+      top: 0px;
     }
   `;
   document.head.appendChild(containStyle);
+
+  let imgStyle = document.createElement("style");
+  imgStyle.innerHTML = `
+    img {
+        pointer-events: none;
+    }
+  `;
+  document.head.appendChild(imgStyle);
 }
 
 /**
@@ -535,7 +544,8 @@ export function DecorationGroup(groupId, groupName) {
         visibleArea.setAttribute("id", visibleAreaId);
         visibleArea.style.position = "absolute";
         visibleArea.style.left = `${visibleAreaLeft}px`;
-        visibleArea.style.top = `${yOffset}px`;
+        visibleArea.style.top = `0px !important`; //`${yOffset}px`;
+        visibleArea.style.marginTop = `0px`;
         visibleArea.style.width = `${viewportWidth}px`;
         visibleArea.style.height = `${window.innerHeight}px`;
         visibleArea.style.pointerEvents = "none"; // Allow interactions to pass through
@@ -543,15 +553,6 @@ export function DecorationGroup(groupId, groupName) {
 
         newArea = true;
       }
-    }
-
-    if (
-      visibleArea.style.top != 0 &&
-      yOffset != 0 &&
-      visibleArea.style.top != yOffset
-    ) {
-      log(`window top offset: ${yOffset}`);
-      visibleArea.style.top = `${yOffset}px`;
     }
 
     return { visibleArea: visibleArea, new: newArea };

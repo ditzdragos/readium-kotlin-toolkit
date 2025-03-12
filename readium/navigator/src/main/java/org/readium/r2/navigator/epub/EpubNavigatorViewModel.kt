@@ -167,9 +167,15 @@ internal class EpubNavigatorViewModel(
         var script = "readium.registerDecorationTemplates($templates);\n"
 
         for ((group, decorations) in decorations) {
-            val changes = decorations.filter { it.locator.href == link.url() }
-                .map { DecorationChange.Added(it) }
-
+            val changes = decorations.filter {
+                it.locator.href == link.url() }
+                .map {
+                    if (group.contains("correct")) {
+                        DecorationChange.AddedEnhanced(it)
+                    } else {
+                        DecorationChange.Added(it)
+                    }
+                }
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
             script += "$groupScript\n"
         }
