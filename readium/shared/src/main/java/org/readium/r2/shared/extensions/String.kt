@@ -86,6 +86,6 @@ internal fun String.isPrintableAscii(): Boolean =
  * - XML comments
  */
 public fun String.cleanHtmlContent(): String = this
-    .replaceFirst(Regex("^\\uFEFF"), "") // Remove BOM
+    .replace(Regex("\\uFEFF"), "")
     .replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "") // Remove XML declaration
     .replace(Regex("<!--\\?xml[^>]*\\?-->"), "") // Remove XML comments
