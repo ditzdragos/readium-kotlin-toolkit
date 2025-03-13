@@ -497,63 +497,90 @@ internal class R2EpubPageFragment : Fragment() {
 
     private fun injectCenteringJavaScript(webView: WebView) {
         val javascript = """
-            javascript:(function() {
-                // Get document dimensions and viewport dimensions
-                var pageWidth = document.documentElement.scrollWidth;
-                var pageHeight = document.documentElement.scrollHeight;
-                var viewportWidth = window.innerWidth;
-                var viewportHeight = window.innerHeight;
-                
-                console.log('Original dimensions - Page: ' + pageWidth + 'x' + pageHeight + ', Viewport: ' + viewportWidth + 'x' + viewportHeight);
-                
-                // Calculate the scale ratio to fit the entire content
-                var widthRatio = viewportWidth / pageWidth;
-                var heightRatio = viewportHeight / pageHeight;
-                var scaleFactor = Math.min(widthRatio, heightRatio) * 0.98; // Apply a small margin
-                
-                console.log('Scale factor: ' + scaleFactor);
-                
-                // Create a wrapper div to keep everything together
-                var wrapper = document.createElement('div');
-                wrapper.id = 'contentWrapper';
-                wrapper.style.position = 'absolute';
-                wrapper.style.transformOrigin = 'top left';
-                wrapper.style.transform = 'scale(' + scaleFactor + ')';
-                
-                // Move all body's children to the wrapper
+        javascript:(function() {
+            // Disable scrolling immediately
+            document.documentElement.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden';
+
+            // Get dimensions
+            var contentWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
+            var contentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+            var viewportWidth = window.innerWidth;
+            var viewportHeight = window.innerHeight;
+
+            console.log('Content dimensions: ' + contentWidth + 'x' + contentHeight);
+            console.log('Viewport dimensions: ' + viewportWidth + 'x' + viewportHeight);
+
+            // Calculate uniform scale factor (same for width and height to maintain aspect ratio)
+            var scaleX = viewportWidth / contentWidth;
+            var scaleY = viewportHeight / contentHeight;
+            var scale = Math.min(scaleX, scaleY) * 0.97;
+
+            console.log('Scale factors - X: ' + scaleX + ', Y: ' + scaleY + ', Using uniform scale: ' + scale);
+
+            // Reset HTML document styles
+            document.documentElement.style = "";
+            document.documentElement.style.margin = '0';
+            document.documentElement.style.padding = '0';
+            document.documentElement.style.width = '100vw';
+            document.documentElement.style.height = '100vh';
+            document.documentElement.style.overflow = 'hidden';
+            document.documentElement.style.position = 'fixed';
+
+            // Create wrapper div if it doesn't exist
+            var wrapper = document.getElementById('r2FixedLayoutWrapper');
+            if (!wrapper) {
+                wrapper = document.createElement('div');
+                wrapper.id = 'r2FixedLayoutWrapper';
+
+                // Move all body content to the wrapper
                 while (document.body.firstChild) {
                     wrapper.appendChild(document.body.firstChild);
                 }
+
+                // Append wrapper to body
                 document.body.appendChild(wrapper);
-                
-                // Position the wrapper in the center
-                document.body.style.margin = '0';
-                document.body.style.padding = '0';
-                document.body.style.overflow = 'hidden';
-                document.body.style.position = 'relative';
-                document.body.style.width = '100vw';
-                document.body.style.height = '100vh';
-                document.body.style.display = 'flex';
-                document.body.style.alignItems = 'center';
-                document.body.style.justifyContent = 'center';
-                
-                var scaledWidth = pageWidth * scaleFactor;
-                var scaledHeight = pageHeight * scaleFactor;
-                
-                wrapper.style.width = pageWidth + 'px';
-                wrapper.style.height = pageHeight + 'px';
-                
-                // Calculate the correct position to center
-                var leftPos = Math.max(0, (viewportWidth - scaledWidth) / 2) / scaleFactor;
-                var topPos = Math.max(0, (viewportHeight - scaledHeight) / 2) / scaleFactor;
-                
-                wrapper.style.left = leftPos + 'px';
-                wrapper.style.top = topPos + 'px';
-                
-                console.log('Wrapper positioned at: ' + leftPos + ', ' + topPos);
-                console.log('Scaled dimensions: ' + scaledWidth + 'x' + scaledHeight);
-            })();
-        """.trimIndent()
+            }
+
+            // Style the wrapper to match original content dimensions
+            wrapper.style.width = contentWidth + 'px';
+            wrapper.style.height = contentHeight + 'px';
+            wrapper.style.position = 'relative';
+            wrapper.style.transformOrigin = 'center center';
+            wrapper.style.transform = 'scale(' + scale + ')';
+
+            // Calculate the scaled dimensions
+            var scaledWidth = contentWidth * scale;
+            var scaledHeight = contentHeight * scale;
+            
+            // Reset body styling to act as a centering container
+            document.body.style = "";
+            document.body.style.margin = '0';
+            document.body.style.padding = '0';
+            document.body.style.overflow = 'hidden';
+            document.body.style.position = 'fixed';
+            document.body.style.width = '100%';
+            document.body.style.height = '100%';
+            document.body.style.left = '0';
+            document.body.style.top = '0';
+            document.body.style.display = 'flex';
+            document.body.style.justifyContent = 'center';
+            document.body.style.alignItems = 'center';
+            
+            // Handle positioned elements to preserve text-image alignment
+            var positioned = wrapper.querySelectorAll('*[style*="position: absolute"], *[style*="position:absolute"]');
+            for (var i = 0; i < positioned.length; i++) {
+                positioned[i].style.transformOrigin = 'top left';
+            }
+
+            // Final check to ensure no scrolling
+            document.documentElement.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden';
+            
+            console.log('Content wrapped and scaled uniformly by: ' + scale);
+            console.log('Scaled dimensions: ' + scaledWidth + 'x' + scaledHeight);
+        })();
+    """.trimIndent()
 
         webView.evaluateJavascript(javascript, null)
     }

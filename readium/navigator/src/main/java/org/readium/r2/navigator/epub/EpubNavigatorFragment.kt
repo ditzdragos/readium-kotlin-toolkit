@@ -502,16 +502,7 @@ public class EpubNavigatorFragment internal constructor(
             }
 
             EpubLayout.FIXED -> {
-                when (viewModel.dualPageMode) {
-                    // FIXME: Properly implement DualPage.AUTO depending on the device orientation.
-                    DualPage.OFF, DualPage.AUTO -> {
-                        R2PagerAdapter(childFragmentManager, resourcesSingle)
-                    }
-
-                    DualPage.ON -> {
-                        R2PagerAdapter(childFragmentManager, resourcesDouble)
-                    }
-                }
+                R2PagerAdapter(childFragmentManager, resourcesSingle)
             }
         }
         adapter.listener = PagerAdapterListener()
