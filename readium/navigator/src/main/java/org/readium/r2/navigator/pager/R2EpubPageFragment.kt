@@ -511,12 +511,34 @@ internal class R2EpubPageFragment : Fragment() {
             console.log('Content dimensions: ' + contentWidth + 'x' + contentHeight);
             console.log('Viewport dimensions: ' + viewportWidth + 'x' + viewportHeight);
 
-            // Calculate uniform scale factor (same for width and height to maintain aspect ratio)
+            // Check if viewport dimensions in metadata
+            var metaViewport = document.querySelector('meta[name="viewport"]');
+            var metaWidth = contentWidth;
+            var metaHeight = contentHeight;
+
+            if (metaViewport) {
+                var content = metaViewport.getAttribute('content');
+                var widthMatch = content.match(/width=([0-9]+)/);
+                var heightMatch = content.match(/height=([0-9]+)/);
+                if (widthMatch && heightMatch) {
+                    metaWidth = parseInt(widthMatch[1]);
+                    metaHeight = parseInt(heightMatch[1]);
+                    console.log('Meta viewport dimensions: ' + metaWidth + 'x' + metaHeight);
+                }
+            }
+
+            // Use meta viewport dimensions if available
+            if (metaWidth && metaHeight) {
+                contentWidth = metaWidth;
+                contentHeight = metaHeight;
+            }
+
+            // Calculate scale factors
             var scaleX = viewportWidth / contentWidth;
             var scaleY = viewportHeight / contentHeight;
             var scale = Math.min(scaleX, scaleY) * 0.97;
 
-            console.log('Scale factors - X: ' + scaleX + ', Y: ' + scaleY + ', Using uniform scale: ' + scale);
+            console.log('Scale factors - X: ' + scaleX + ', Y: ' + scaleY + ', Using: ' + scale);
 
             // Reset HTML document styles
             document.documentElement.style = "";
@@ -525,60 +547,112 @@ internal class R2EpubPageFragment : Fragment() {
             document.documentElement.style.width = '100vw';
             document.documentElement.style.height = '100vh';
             document.documentElement.style.overflow = 'hidden';
-            document.documentElement.style.position = 'fixed';
 
-            // Create wrapper div if it doesn't exist
-            var wrapper = document.getElementById('r2FixedLayoutWrapper');
-            if (!wrapper) {
-                wrapper = document.createElement('div');
-                wrapper.id = 'r2FixedLayoutWrapper';
+            // Create a container for centering
+            var centeringContainer = document.createElement('div');
+            centeringContainer.id = 'r2CenteringContainer';
+            centeringContainer.style.position = 'fixed';
+            centeringContainer.style.width = '100%';
+            centeringContainer.style.height = '100%';
+            centeringContainer.style.display = 'flex';
+            centeringContainer.style.justifyContent = 'center';
+            centeringContainer.style.alignItems = 'center';
+            centeringContainer.style.overflow = 'hidden';
 
-                // Move all body content to the wrapper
-                while (document.body.firstChild) {
-                    wrapper.appendChild(document.body.firstChild);
-                }
+            // Create a scaling container
+            var scalingContainer = document.createElement('div');
+            scalingContainer.id = 'r2ScalingContainer';
+            scalingContainer.style.width = contentWidth + 'px';
+            scalingContainer.style.height = contentHeight + 'px';
+            scalingContainer.style.position = 'relative';
+            scalingContainer.style.transform = 'scale(' + scale + ')';
+            scalingContainer.style.transformOrigin = 'center center';
 
-                // Append wrapper to body
-                document.body.appendChild(wrapper);
-            }
-
-            // Style the wrapper to match original content dimensions
-            wrapper.style.width = contentWidth + 'px';
-            wrapper.style.height = contentHeight + 'px';
-            wrapper.style.position = 'relative';
-            wrapper.style.transformOrigin = 'center center';
-            wrapper.style.transform = 'scale(' + scale + ')';
-
-            // Calculate the scaled dimensions
-            var scaledWidth = contentWidth * scale;
-            var scaledHeight = contentHeight * scale;
-            
-            // Reset body styling to act as a centering container
-            document.body.style = "";
+            // Preserve the original body content and styles
             document.body.style.margin = '0';
             document.body.style.padding = '0';
-            document.body.style.overflow = 'hidden';
-            document.body.style.position = 'fixed';
-            document.body.style.width = '100%';
-            document.body.style.height = '100%';
-            document.body.style.left = '0';
-            document.body.style.top = '0';
-            document.body.style.display = 'flex';
-            document.body.style.justifyContent = 'center';
-            document.body.style.alignItems = 'center';
-            
-            // Handle positioned elements to preserve text-image alignment
-            var positioned = wrapper.querySelectorAll('*[style*="position: absolute"], *[style*="position:absolute"]');
-            for (var i = 0; i < positioned.length; i++) {
-                positioned[i].style.transformOrigin = 'top left';
+            document.body.style.width = contentWidth + 'px';
+            document.body.style.height = contentHeight + 'px';
+            document.body.style.position = 'relative';
+            document.body.style.overflow = 'visible';
+
+            // Handle specific case of this layout - detach nodes to avoid DOM issues
+            var bodyContent = [];
+            while (document.body.firstChild) {
+                bodyContent.push(document.body.removeChild(document.body.firstChild));
             }
 
-            // Final check to ensure no scrolling
-            document.documentElement.style.overflow = 'hidden';
-            document.body.style.overflow = 'hidden';
-            
+            // Restructure DOM for proper centering and scaling
+            document.body.appendChild(centeringContainer);
+            centeringContainer.appendChild(scalingContainer);
+
+            // Re-add the original content to the scaling container
+            bodyContent.forEach(function(node) {
+                scalingContainer.appendChild(node);
+            });
+
+            // Find all images in the document
+            var allImages = document.querySelectorAll('img');
+            for (var i = 0; i < allImages.length; i++) {
+                var img = allImages[i];
+
+                // Skip images inside our wrapper elements
+                if (img.closest('#r2CenteringContainer') === centeringContainer ||
+                    img.closest('#r2ScalingContainer') === scalingContainer) {
+                    continue;
+                }
+
+                // Check if this looks like a background image
+                var parent = img.parentElement;
+                if (parent &&
+                    (parent.className.indexOf('image') !== -1 ||
+                     parent.className.indexOf('background') !== -1 ||
+                     parent.className.indexOf('container') !== -1)) {
+                    // Apply background image styling
+                    img.style.width = '100%';
+                    img.style.height = 'auto';
+                    img.style.position = 'absolute';
+                    img.style.top = '0';
+                    img.style.left = '0';
+                    console.log('Applied background styling to image in container');
+                }
+
+                // Or check if image seems to be a full-page background image
+                var rect = img.getBoundingClientRect();
+                if (rect.width > contentWidth * 0.8 && rect.height > contentHeight * 0.8) {
+                    img.style.width = '100%';
+                    img.style.height = 'auto';
+                    img.style.position = 'absolute';
+                    img.style.top = '0';
+                    img.style.left = '0';
+                    console.log('Applied background styling to full-page image');
+                }
+            }
+
+            // Handle text elements that need to be positioned over images
+            var allDivs = document.querySelectorAll('div');
+            for (var i = 0; i < allDivs.length; i++) {
+                var div = allDivs[i];
+
+                // Skip our wrapper divs
+                if (div.id === 'r2CenteringContainer' || div.id === 'r2ScalingContainer') {
+                    continue;
+                }
+
+                // Handle any div that has text content
+                if (div.textContent && div.textContent.trim()) {
+                    // Check if it has styling that suggests text overlay
+                    var style = window.getComputedStyle(div);
+                    if (style.position === 'absolute' ||
+                        div.className.indexOf('text') !== -1) {
+                        div.style.position = 'absolute';
+                        div.style.transformOrigin = 'top left';
+                        console.log('Applied text positioning to', div.className);
+                    }
+                }
+            }
+
             console.log('Content wrapped and scaled uniformly by: ' + scale);
-            console.log('Scaled dimensions: ' + scaledWidth + 'x' + scaledHeight);
         })();
     """.trimIndent()
 
