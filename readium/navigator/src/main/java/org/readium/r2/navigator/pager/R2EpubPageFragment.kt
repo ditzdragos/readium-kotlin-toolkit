@@ -54,6 +54,7 @@ import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubNavigatorViewModel
 import org.readium.r2.navigator.extensions.htmlId
 import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.util.isChromeBook
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Link
@@ -111,7 +112,7 @@ internal class R2EpubPageFragment : Fragment() {
                 onLoadPage()
             }
 
-            if(fixedLayout && view != null){
+            if (fixedLayout && view != null) {
                 injectCenteringJavaScript(view)
             }
         }
@@ -231,12 +232,11 @@ internal class R2EpubPageFragment : Fragment() {
         webView.settings.javaScriptEnabled = true
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
-        webView.settings.useWideViewPort = true
+        webView.settings.useWideViewPort = !isChromeBook()
         webView.settings.loadWithOverviewMode = true
         webView.settings.setSupportZoom(false)
         webView.settings.builtInZoomControls = false
         webView.settings.displayZoomControls = false
-        webView.settings.textZoom = textZoom
         webView.resourceUrl = resourceUrl
         webView.setPadding(0, 0, 0, 0)
         webView.webViewClient = webViewClient
@@ -245,6 +245,8 @@ internal class R2EpubPageFragment : Fragment() {
         webView.zoomOut()
         if (fixedLayout) {
             webView.overScrollMode = View.OVER_SCROLL_NEVER
+        } else {
+            webView.settings.textZoom = textZoom
         }
         webView.isHapticFeedbackEnabled = false
         webView.isLongClickable = true
