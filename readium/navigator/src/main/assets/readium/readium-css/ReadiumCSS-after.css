@@ -159,6 +159,13 @@ body {
   box-sizing: border-box;
 }
 
+/* Handle especially long spans without spaces */
+.font30, .font24, .font23 {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
 /* We’ll now redefine margins and columns depending on the minimum width available
    The goal is having the simplest model possible and avoid targeting devices */
 
