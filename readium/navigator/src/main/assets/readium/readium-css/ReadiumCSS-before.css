@@ -87,7 +87,7 @@
   --RS__lineHeightCompensation: 1;
 
   /* Dynamic leading based on typeface metrics + font-size setting */
-  --RS__baseLineHeight: 1.6;
+  --RS__baseLineHeight: calc((1em + (2ex - 1ch) - ((1rem - 16px) * 0.1667)) * var(--RS__lineHeightCompensation));
 }
 
 /* Set default font for the html doc, so that it can be overridden by the authors’s stylesheet */
