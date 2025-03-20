@@ -100,6 +100,9 @@ internal class R2EpubPageFragment : Fragment() {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
+            if (fixedLayout && view != null) {
+                injectCenteringJavaScript(view)
+            }
             onPageFinished()
 
             link?.let {
@@ -108,10 +111,6 @@ internal class R2EpubPageFragment : Fragment() {
 
             webView?.onContentReady {
                 onLoadPage()
-            }
-
-            if (fixedLayout && view != null) {
-                injectCenteringJavaScript(view)
             }
         }
 
@@ -171,9 +170,6 @@ internal class R2EpubPageFragment : Fragment() {
 
     private val navigator: EpubNavigatorFragment?
         get() = parentFragment as? EpubNavigatorFragment
-
-    private val shouldApplyInsetsPadding: Boolean
-        get() = navigator?.config?.shouldApplyInsetsPadding != false
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt(textZoomBundleKey, textZoom)
@@ -577,13 +573,6 @@ internal class R2EpubPageFragment : Fragment() {
                     scaleContainer.appendChild(node);
                 }
             });
-            
-            // STEP 8: Ensure all text elements are visible
-            var textElements = document.querySelectorAll('span, div[id*="Text"], p, h1, h2, h3, h4, h5, h6');
-            for (var i = 0; i < textElements.length; i++) {
-                textElements[i].style.visibility = 'visible';
-                textElements[i].style.opacity = '1';
-            }
             
             console.log('Universal scaling applied successfully');
         })();

@@ -168,7 +168,8 @@ internal class EpubNavigatorViewModel(
 
         for ((group, decorations) in decorations) {
             val changes = decorations.filter {
-                it.locator.href == link.url() }
+                it.locator.href == link.url()
+            }
                 .map {
                     if (group.contains("correct")) {
                         DecorationChange.AddedEnhanced(it)
@@ -303,7 +304,7 @@ internal class EpubNavigatorViewModel(
                     // The updates command are using `requestAnimationFrame()`, so we need it for
                     // `clear()` as well otherwise we might recreate a highlight after it has been
                     // cleared.
-                    "requestAnimationFrame(function () { readium.getDecorations('$group').clear(); });",
+                    "requestAnimationFrame(function () { readium.getDecorations('$group').clear();});",
                     scope = RunScriptCommand.Scope.LoadedResources
                 )
             )
@@ -337,15 +338,15 @@ internal class EpubNavigatorViewModel(
         val decorations = this.decorations[group] ?: emptyList()
         this.decorations[group] = decorations.filter { it.id != id }
         return RunScriptCommand(
-            script = "readium.getDecorations('$group').clearEnhanced('$id');",
-            scope = RunScriptCommand.Scope.CurrentResource
+            script = "requestAnimationFrame(function () { readium.getDecorations('$group').clearEnhanced('$id');});",
+            scope = RunScriptCommand.Scope.LoadedResources
         )
     }
 
     fun clearEnhancedDecorations(group: String): RunScriptCommand {
         this.decorations.remove(group)
         return RunScriptCommand(
-            script = "readium.getDecorations('$group').clearAllEnhanced();",
+            script = "requestAnimationFrame(function () { readium.getDecorations('$group').clearAllEnhanced();});",
             scope = RunScriptCommand.Scope.LoadedResources
         )
     }
