@@ -19,13 +19,11 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.core.os.BundleCompat
-import androidx.core.view.ViewCompat
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -46,7 +44,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import org.readium.r2.navigator.R
 import org.readium.r2.navigator.R2BasicWebView
 import org.readium.r2.navigator.R2WebView
 import org.readium.r2.navigator.databinding.ReadiumNavigatorViewpagerFragmentEpubBinding
@@ -242,8 +239,9 @@ internal class R2EpubPageFragment : Fragment() {
         webView.webViewClient = webViewClient
         webView.addJavascriptInterface(webView, "Android")
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-        webView.zoomOut()
         if (fixedLayout) {
+            webView.settings.textZoom = 90
+            webView.setInitialScale(1)
             webView.overScrollMode = View.OVER_SCROLL_NEVER
         } else {
             webView.settings.textZoom = textZoom
@@ -256,8 +254,6 @@ internal class R2EpubPageFragment : Fragment() {
             _isLoaded.value = false
             webView.loadUrl(it.toString())
         }
-
-        setupPadding()
 
         // Forward a tap event when the web view is not ready to propagate the taps. This allows
         // to toggle a navigation UI while a page is loading, for example.
@@ -334,62 +330,6 @@ internal class R2EpubPageFragment : Fragment() {
             (wv.parent as? ViewGroup)?.removeView(wv)
             wv.removeAllViews()
             wv.destroy()
-        }
-    }
-
-    private fun setupPadding() {
-        updatePadding()
-
-        // Update padding when the scroll mode changes
-        viewLifecycleOwner.lifecycleScope.launch {
-            webView?.scrollModeFlow?.collectLatest {
-                updatePadding()
-            }
-        }
-
-        if (shouldApplyInsetsPadding) {
-            // Update padding when the window insets change, for example when the navigation and status
-            // bars are toggled.
-            ViewCompat.setOnApplyWindowInsetsListener(containerView) { _, insets ->
-                updatePadding()
-                insets
-            }
-        }
-    }
-
-    private fun updatePadding() {
-        if (view == null) return
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                val window = activity?.window ?: return@repeatOnLifecycle
-                var top = 0
-                var bottom = 0
-
-                // Add additional padding to take into account the display cutout, if needed.
-                if (
-                    shouldApplyInsetsPadding &&
-                    android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P &&
-                    window.attributes.layoutInDisplayCutoutMode != WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
-                ) {
-                    // Request the display cutout insets from the decor view because the ones given by
-                    // setOnApplyWindowInsetsListener are not always correct for preloaded views.
-                    window.decorView.rootWindowInsets?.displayCutout?.let { displayCutoutInsets ->
-                        top += displayCutoutInsets.safeInsetTop
-                        bottom += displayCutoutInsets.safeInsetBottom
-                    }
-                }
-
-                if (!viewModel.isScrollEnabled.value) {
-                    val margin =
-                        resources.getDimension(R.dimen.readium_navigator_epub_vertical_padding)
-                            .toInt()
-                    top += margin
-                    bottom += margin
-                }
-
-                containerView.setPadding(0, top, 0, bottom)
-            }
         }
     }
 
