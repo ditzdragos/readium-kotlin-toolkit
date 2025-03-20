@@ -12,6 +12,7 @@
 package org.readium.r2.navigator.pager
 
 import android.annotation.SuppressLint
+import android.graphics.Color
 import android.graphics.PointF
 import android.os.Bundle
 import android.view.KeyEvent
@@ -240,6 +241,7 @@ internal class R2EpubPageFragment : Fragment() {
         webView.addJavascriptInterface(webView, "Android")
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
         if (fixedLayout) {
+            webView.setBackgroundColor(Color.WHITE)
             webView.settings.textZoom = 90
             webView.setInitialScale(1)
             webView.overScrollMode = View.OVER_SCROLL_NEVER
@@ -440,161 +442,150 @@ internal class R2EpubPageFragment : Fragment() {
     private fun injectCenteringJavaScript(webView: WebView) {
         val javascript = """
         javascript:(function() {
-            // Disable scrolling immediately
+            console.log('Applying universal full-page scaling');
+            
+            // STEP 1: Fix background colors
+            document.documentElement.style.backgroundColor = '#FFFFFF';
+            document.body.style.backgroundColor = '#FFFFFF';
+            
+            // STEP 2: Prepare the document for scaling
+            document.documentElement.style.margin = '0';
+            document.documentElement.style.padding = '0';
             document.documentElement.style.overflow = 'hidden';
+            document.body.style.margin = '0';
+            document.body.style.padding = '0';
             document.body.style.overflow = 'hidden';
-
-            // Get dimensions
-            var contentWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
-            var contentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-            var viewportWidth = window.innerWidth;
-            var viewportHeight = window.innerHeight;
-
-            console.log('Content dimensions: ' + contentWidth + 'x' + contentHeight);
-            console.log('Viewport dimensions: ' + viewportWidth + 'x' + viewportHeight);
-
-            // Check if viewport dimensions in metadata
+            
+            // STEP 3: Reset any existing transformations
+            document.body.style.transform = '';
+            document.body.style.transformOrigin = '';
+            document.body.style.position = 'static';
+            document.body.style.left = '';
+            document.body.style.top = '';
+            
+            // STEP 4: Determine the content dimensions
+            // Try multiple approaches to get the actual content size
+            var contentWidth, contentHeight;
+            
+            // Method 1: Try viewport meta tag first (common in fixed-layout EPUBs)
             var metaViewport = document.querySelector('meta[name="viewport"]');
-            var metaWidth = contentWidth;
-            var metaHeight = contentHeight;
-
             if (metaViewport) {
                 var content = metaViewport.getAttribute('content');
                 var widthMatch = content.match(/width=([0-9]+)/);
                 var heightMatch = content.match(/height=([0-9]+)/);
+                
                 if (widthMatch && heightMatch) {
-                    metaWidth = parseInt(widthMatch[1]);
-                    metaHeight = parseInt(heightMatch[1]);
-                    console.log('Meta viewport dimensions: ' + metaWidth + 'x' + metaHeight);
+                    contentWidth = parseInt(widthMatch[1]);
+                    contentHeight = parseInt(heightMatch[1]);
+                    console.log('Using viewport meta dimensions: ' + contentWidth + 'x' + contentHeight);
                 }
             }
-
-            // Use meta viewport dimensions if available
-            if (metaWidth && metaHeight) {
-                contentWidth = metaWidth;
-                contentHeight = metaHeight;
-            }
-
-            // Calculate scale factors
-            var scaleX = viewportWidth / contentWidth;
-            var scaleY = viewportHeight / contentHeight;
-            var scale = Math.min(scaleX, scaleY) * 0.97;
-
-            console.log('Scale factors - X: ' + scaleX + ', Y: ' + scaleY + ', Using: ' + scale);
-
-            // Reset HTML document styles
-            document.documentElement.style = "";
-            document.documentElement.style.margin = '0';
-            document.documentElement.style.padding = '0';
-            document.documentElement.style.width = '100vw';
-            document.documentElement.style.height = '100vh';
-            document.documentElement.style.overflow = 'hidden';
-
-            // Create a container for centering
-            var centeringContainer = document.createElement('div');
-            centeringContainer.id = 'r2CenteringContainer';
-            centeringContainer.style.position = 'fixed';
-            centeringContainer.style.width = '100%';
-            centeringContainer.style.height = '100%';
-            centeringContainer.style.display = 'flex';
-            centeringContainer.style.justifyContent = 'center';
-            centeringContainer.style.alignItems = 'center';
-            centeringContainer.style.overflow = 'hidden';
-
-            // Create a scaling container
-            var scalingContainer = document.createElement('div');
-            scalingContainer.id = 'r2ScalingContainer';
-            scalingContainer.style.width = contentWidth + 'px';
-            scalingContainer.style.height = contentHeight + 'px';
-            scalingContainer.style.position = 'relative';
-            scalingContainer.style.transform = 'scale(' + scale + ')';
-            scalingContainer.style.transformOrigin = 'center center';
-
-            // Preserve the original body content and styles
-            document.body.style.margin = '0';
-            document.body.style.padding = '0';
-            document.body.style.width = contentWidth + 'px';
-            document.body.style.height = contentHeight + 'px';
-            document.body.style.position = 'relative';
-            document.body.style.overflow = 'visible';
-
-            // Handle specific case of this layout - detach nodes to avoid DOM issues
-            var bodyContent = [];
-            while (document.body.firstChild) {
-                bodyContent.push(document.body.removeChild(document.body.firstChild));
-            }
-
-            // Restructure DOM for proper centering and scaling
-            document.body.appendChild(centeringContainer);
-            centeringContainer.appendChild(scalingContainer);
-
-            // Re-add the original content to the scaling container
-            bodyContent.forEach(function(node) {
-                scalingContainer.appendChild(node);
-            });
-
-            // Find all images in the document
-            var allImages = document.querySelectorAll('img');
-            for (var i = 0; i < allImages.length; i++) {
-                var img = allImages[i];
-
-                // Skip images inside our wrapper elements
-                if (img.closest('#r2CenteringContainer') === centeringContainer ||
-                    img.closest('#r2ScalingContainer') === scalingContainer) {
-                    continue;
-                }
-
-                // Check if this looks like a background image
-                var parent = img.parentElement;
-                if (parent &&
-                    (parent.className.indexOf('image') !== -1 ||
-                     parent.className.indexOf('background') !== -1 ||
-                     parent.className.indexOf('container') !== -1)) {
-                    // Apply background image styling
-                    img.style.width = '100%';
-                    img.style.height = 'auto';
-                    img.style.position = 'absolute';
-                    img.style.top = '0';
-                    img.style.left = '0';
-                    console.log('Applied background styling to image in container');
-                }
-
-                // Or check if image seems to be a full-page background image
-                var rect = img.getBoundingClientRect();
-                if (rect.width > contentWidth * 0.8 && rect.height > contentHeight * 0.8) {
-                    img.style.width = '100%';
-                    img.style.height = 'auto';
-                    img.style.position = 'absolute';
-                    img.style.top = '0';
-                    img.style.left = '0';
-                    console.log('Applied background styling to full-page image');
-                }
-            }
-
-            // Handle text elements that need to be positioned over images
-            var allDivs = document.querySelectorAll('div');
-            for (var i = 0; i < allDivs.length; i++) {
-                var div = allDivs[i];
-
-                // Skip our wrapper divs
-                if (div.id === 'r2CenteringContainer' || div.id === 'r2ScalingContainer') {
-                    continue;
-                }
-
-                // Handle any div that has text content
-                if (div.textContent && div.textContent.trim()) {
-                    // Check if it has styling that suggests text overlay
-                    var style = window.getComputedStyle(div);
-                    if (style.position === 'absolute' ||
-                        div.className.indexOf('text') !== -1) {
-                        div.style.position = 'absolute';
-                        div.style.transformOrigin = 'top left';
-                        console.log('Applied text positioning to', div.className);
+            
+            // Method 2: Try to find content container
+            if (!contentWidth || !contentHeight) {
+                var containers = [
+                    document.querySelector('.PageContainer, #Page, [class*="page"], [id*="page"]'),
+                    document.querySelector('section, article, main'),
+                    document.querySelector('div[style*="position: absolute"]')
+                ];
+                
+                for (var i = 0; i < containers.length; i++) {
+                    var container = containers[i];
+                    if (container) {
+                        var rect = container.getBoundingClientRect();
+                        if (rect.width > 100 && rect.height > 100) {
+                            contentWidth = rect.width;
+                            contentHeight = rect.height;
+                            console.log('Using container dimensions: ' + contentWidth + 'x' + contentHeight);
+                            break;
+                        }
                     }
                 }
             }
-
-            console.log('Content wrapped and scaled uniformly by: ' + scale);
+            
+            // Method 3: Measure the document itself as fallback
+            if (!contentWidth || !contentHeight) {
+                contentWidth = Math.max(
+                    document.documentElement.scrollWidth,
+                    document.body.scrollWidth,
+                    document.documentElement.offsetWidth,
+                    document.body.offsetWidth
+                );
+                contentHeight = Math.max(
+                    document.documentElement.scrollHeight,
+                    document.body.scrollHeight,
+                    document.documentElement.offsetHeight,
+                    document.body.offsetHeight
+                );
+                console.log('Using document dimensions: ' + contentWidth + 'x' + contentHeight);
+            }
+            
+            // STEP 5: Get viewport dimensions and calculate scale
+            var viewportWidth = window.innerWidth;
+            var viewportHeight = window.innerHeight;
+            console.log('Viewport: ' + viewportWidth + 'x' + viewportHeight);
+            
+            // Use more conservative scale to ensure margin
+            var scaleX = viewportWidth / contentWidth;
+            var scaleY = viewportHeight / contentHeight;
+            var scale = Math.min(scaleX, scaleY) ; // 90% scale for some margin
+            console.log('Using scale: ' + scale);
+            
+            // STEP 6: Create a new wrapper structure
+            // This avoids manipulating the existing DOM structure
+            
+            // Create a wrapper that takes up the full viewport
+            var wrapper = document.createElement('div');
+            wrapper.id = 'r2-scale-wrapper';
+            wrapper.style.position = 'fixed';
+            wrapper.style.top = '0';
+            wrapper.style.left = '0';
+            wrapper.style.width = '100%';
+            wrapper.style.height = '100%';
+            wrapper.style.overflow = 'hidden';
+            wrapper.style.backgroundColor = 'transparent';
+            wrapper.style.display = 'flex';
+            wrapper.style.alignItems = 'center';     // Vertical centering
+            wrapper.style.justifyContent = 'center'; // Horizontal centering
+            
+            // Create an inner container that will be scaled
+            var scaleContainer = document.createElement('div');
+            scaleContainer.id = 'r2-scale-container';
+            scaleContainer.style.width = contentWidth + 'px';
+            scaleContainer.style.height = contentHeight + 'px';
+            scaleContainer.style.transformOrigin = 'center center';
+            scaleContainer.style.transform = 'scale(' + scale + ')';
+            scaleContainer.style.position = 'relative';
+            
+            // STEP 7: Rearrange the DOM
+            // We'll create a clean structure without modifying existing elements
+            wrapper.appendChild(scaleContainer);
+            
+            // Move the document
+            document.documentElement.style.height = '100%';
+            document.body.style.height = '100%';
+            
+            // Save all body children
+            var bodyContent = Array.from(document.body.children);
+            
+            // Insert the wrapper into the body
+            document.body.appendChild(wrapper);
+            
+            // Move body content into the scale container
+            bodyContent.forEach(function(node) {
+                if (node !== wrapper) {
+                    scaleContainer.appendChild(node);
+                }
+            });
+            
+            // STEP 8: Ensure all text elements are visible
+            var textElements = document.querySelectorAll('span, div[id*="Text"], p, h1, h2, h3, h4, h5, h6');
+            for (var i = 0; i < textElements.length; i++) {
+                textElements[i].style.visibility = 'visible';
+                textElements[i].style.opacity = '1';
+            }
+            
+            console.log('Universal scaling applied successfully');
         })();
     """.trimIndent()
 
