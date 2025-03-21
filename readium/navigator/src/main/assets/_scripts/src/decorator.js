@@ -199,13 +199,13 @@ export function DecorationGroup(groupId, groupName) {
   }
 
   function clearAllEnhanced() {
-    visibleContainers.forEach((container) => {
-      log(`clearing container: ${container.id}`);
-      container.remove();
-      container = null;
+  log("clearing all enhanced ",groupName, items);
+    items.forEach((item) => {
+      item.container.remove();
     });
 
-    visibleContainers.length = 0;
+    items = [];
+    clearContainer();
   }
 
   function clearEnhanced(decorationId) {
