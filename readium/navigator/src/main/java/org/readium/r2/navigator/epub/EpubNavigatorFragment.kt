@@ -1203,8 +1203,6 @@ public class EpubNavigatorFragment internal constructor(
                     val right = jsonObject.optDouble("right", 0.0).toFloat()
                     val bottom = jsonObject.optDouble("bottom", 0.0).toFloat()
 
-//                    val density = Density(requireContext()).density
-
                     val rect = RectF(left, top, right, bottom)
 
                     continuation.resume(rect.adjustedToViewport()) { throwable ->
