@@ -56,6 +56,7 @@ import org.readium.r2.shared.publication.epub.EpubLayout
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.RelativeUrl
 import org.readium.r2.shared.util.Url
+import timber.log.Timber
 
 internal enum class DualPage {
     AUTO, OFF, ON
@@ -168,16 +169,14 @@ internal class EpubNavigatorViewModel(
 
         for ((group, decorations) in decorations) {
             val changes = decorations.filter {
+                Timber.d("onResourceLoaded: ${it.locator.href} == ${link.url()}")
                 it.locator.href == link.url()
             }
                 .map {
-                    if (group.contains("correct")) {
-                        DecorationChange.AddedEnhanced(it)
-                    } else {
-                        DecorationChange.Added(it)
-                    }
+                    DecorationChange.Added(it)
                 }
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
+            Timber.d("onResourceLoaded: $groupScript")
             script += "$groupScript\n"
         }
 

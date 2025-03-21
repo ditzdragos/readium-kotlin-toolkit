@@ -145,6 +145,7 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
+    log("adding decoration",groupName, decoration);
     let item = { id, decoration, range };
     items.push(item);
     layout(item);
@@ -199,18 +200,19 @@ export function DecorationGroup(groupId, groupName) {
   }
 
   function clearAllEnhanced() {
-  log("clearing all enhanced ",groupName, items);
-    items.forEach((item) => {
-      item.container.remove();
-    });
+    log("clearing all enhanced ",groupName, items);
+      visibleContainers.forEach((container) => {
+         log(`clearing container: ${container.id}`);
+         container.remove();
+         container = null;
+       });
 
-    items = [];
-    clearContainer();
+       visibleContainers.length = 0;
   }
 
   function clearEnhanced(decorationId) {
     // Iterate over each item in the items array
-    log(`trying to clear decorsation: ${decorationId}`);
+    log("trying to clear decoration: ", decorationId);
     items.forEach((item) => {
       // Check if the item's decoration id matches the one we want to remove
       if (item.decoration.id === decorationId && item.container) {
@@ -241,7 +243,7 @@ export function DecorationGroup(groupId, groupName) {
 
     let style = styles.get(item.decoration.style);
     if (!style) {
-      logError(`Unknown decoration style: ${item.decoration.style}`);
+      logError("Unknown decoration style: ",item.decoration.style);
       return;
     }
 
@@ -298,7 +300,7 @@ export function DecorationGroup(groupId, groupName) {
       elementTemplate = template.content.firstElementChild;
     } catch (error) {
       logError(
-        `Invalid decoration element "${item.decoration.element}": ${error.message}`
+        "Invalid decoration element ",item.decoration.element,": ",error.message
       );
       return;
     }
@@ -356,7 +358,7 @@ export function DecorationGroup(groupId, groupName) {
       let style = styles.get(item.decoration.style);
       if (!style) {
         logError(
-              `Unknown decoration style "${item.decoration.style}"`
+              "Unknown decoration style ",item.decoration.style
             );
         return;
       }
