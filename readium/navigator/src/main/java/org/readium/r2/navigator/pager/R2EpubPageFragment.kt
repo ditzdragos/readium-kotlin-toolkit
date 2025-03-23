@@ -239,7 +239,7 @@ internal class R2EpubPageFragment : Fragment() {
         if (fixedLayout) {
             webView.zoomOut()
             webView.setBackgroundColor(Color.WHITE)
-            webView.settings.textZoom = 90
+            webView.settings.textZoom = 100
             webView.setInitialScale(1)
             webView.overScrollMode = View.OVER_SCROLL_NEVER
         } else {
