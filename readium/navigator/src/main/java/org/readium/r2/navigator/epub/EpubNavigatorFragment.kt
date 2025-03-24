@@ -885,11 +885,12 @@ public class EpubNavigatorFragment internal constructor(
                 point = point.adjustedToViewport()
             )
 
-        override fun onHighlightRect(id: DecorationId, group: String, rect: RectF): Boolean =
-            viewModel.onHighlightRect(
+        override fun onHighlightRect(id: DecorationId, group: String, rect: RectF): Boolean {
+            return viewModel.onHighlightRect(
                 group = group,
                 rect = rect.adjustedToViewport()
             )
+        }
 
         override fun onProgressionChanged() {
             notifyCurrentLocation()
@@ -1194,7 +1195,8 @@ public class EpubNavigatorFragment internal constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     public suspend fun getRectForLocator(locator: Locator): RectF? {
         return suspendCancellableCoroutine { continuation ->
-            currentReflowablePageFragment?.webView?.getRectFromLocator(locator) { result ->
+            val fragment = loadedFragmentForHref(locator.href) ?: currentReflowablePageFragment
+            fragment?.webView?.getRectFromLocator(locator) { result ->
                 try {
                     // Parse the JSON result to extract the rectangle properties
                     val jsonObject = JSONObject(result)
@@ -1212,10 +1214,12 @@ public class EpubNavigatorFragment internal constructor(
                 } catch (e: Exception) {
                     // Handle any JSON parsing or other errors
                     Timber.e("Error parsing JSON to RectF $e")
-                    continuation.resume(null) { throwable ->
+                    continuation.resume(DEFAULT_RECTF) { throwable ->
                         continuation.cancel(throwable)
                     }
                 }
+            }?:continuation.resume(DEFAULT_RECTF) { throwable ->
+                continuation.cancel(throwable)
             }
         }
     }
@@ -1282,6 +1286,8 @@ public class EpubNavigatorFragment internal constructor(
          */
         public fun assetUrl(path: String): Url? =
             WebViewServer.assetUrl(path)
+
+        private val DEFAULT_RECTF = RectF(-1f, -1f, -1f, -1f)
     }
 }
 
