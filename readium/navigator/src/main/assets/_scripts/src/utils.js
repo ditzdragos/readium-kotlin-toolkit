@@ -363,8 +363,8 @@ function rangeFromCachedLocator(locator) {
 
 export function rangeFromLocator(locator) {
   try {
-    log("=========================")
-    log("rangeFromLocator: locator", JSON.stringify(locator));
+//    log("=========================")
+//    log("rangeFromLocator: locator", JSON.stringify(locator));
     let locations = locator.locations;
     let text = locator.text;
     if (text && text.highlight) {
@@ -372,7 +372,7 @@ export function rangeFromLocator(locator) {
       if (locations && locations.cssSelector) {
         try {
           const range = rangeFromCachedLocator(locator);
-            log("rangeFromLocator: found range from cached locator", range);
+//            log("rangeFromLocator: found range from cached locator", range);
           return range;
         } catch {
           log("failed getting the range from css selector");
@@ -390,24 +390,24 @@ export function rangeFromLocator(locator) {
       if (locations && root.textContent.length > 0) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
-          log("actual start and end:", locations.start, locations.end, root.textContent.length);
+//          log("actual start and end:", locations.start, locations.end, root.textContent.length);
           start = Math.max(locations.start-5, 0);
           end = Math.min(locations.end+5, root.textContent.length);
-          log("adjusted start and end: ",start, end, root.textContent.length);
+//          log("adjusted start and end: ",start, end, root.textContent.length);
         }
       }
 
-       log("Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
-       log("Text at adjusted range: ", root.textContent.slice(start, end));
+//       log("Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
+//       log("Text at adjusted range: ", root.textContent.slice(start, end));
 
       let anchor = new TextQuoteAnchor(root, text.highlight, {
         prefix: text.before,
         suffix: text.after,
       });
 
-      log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
+//      log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
       let result = anchor.toRange({}, start, end);
-      log("rangeFromLocator: found range", result);
+//      log("rangeFromLocator: found range", result);
       return result;
     }
 
