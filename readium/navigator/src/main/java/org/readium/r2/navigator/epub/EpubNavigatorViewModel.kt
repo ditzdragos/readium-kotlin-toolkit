@@ -173,7 +173,7 @@ internal class EpubNavigatorViewModel(
                 it.locator.href == link.url()
             }
                 .map {
-                    DecorationChange.Added(it)
+                    DecorationChange.AddedEnhanced(it)
                 }
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
             Timber.d("onResourceLoaded: $groupScript")
@@ -298,6 +298,7 @@ internal class EpubNavigatorViewModel(
 
         val cmds = mutableListOf<RunScriptCommand>()
         if (target.isEmpty()) {
+            Timber.d("clearing all decorations ${group}")
             cmds.add(
                 RunScriptCommand(
                     // The updates command are using `requestAnimationFrame()`, so we need it for
@@ -346,6 +347,7 @@ internal class EpubNavigatorViewModel(
     }
 
     fun clearEnhancedDecorations(group: String): RunScriptCommand {
+        Timber.d("clearEnhancedDecorations: $group")
         this.decorations.remove(group)
         return RunScriptCommand(
             script = "requestAnimationFrame(function () { readium.getDecorations('$group').clearAllEnhanced();});",

@@ -232,7 +232,7 @@ export function DecorationGroup(groupId, groupName) {
   function requestLayout() {
     clearContainer();
     clearAllEnhanced();
-    items.forEach((item) => layout(item));
+    items.forEach((item) => layoutEnhanced(item));
   }
 
   /**
