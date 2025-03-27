@@ -77,6 +77,9 @@ internal data class ReadiumCss(
                     """.trimMargin()
                 )
 
+                // Fix for drop caps styles
+                add(DROP_CAPS_STYLE)
+
                 if (!hasStyles) {
                     add(stylesheetLink(defaultCss))
                 }
