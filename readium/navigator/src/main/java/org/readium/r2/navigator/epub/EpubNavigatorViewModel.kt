@@ -322,13 +322,7 @@ internal class EpubNavigatorViewModel(
             )
         } else {
             for ((href, changes) in source.changesByHref(target)) {
-                val script =
-                    """
-                          requestAnimationFrame(function () {
-                                let group = readium.getDecorations('$group');
-                                ${ changes.javascriptForGroup(group, decorationTemplates)}
-                            });
-                    """.trimIndent()
+                val script = changes.javascriptForGroup(group, decorationTemplates) ?: continue
                 cmds.add(RunScriptCommand(script, scope = RunScriptCommand.Scope.Resource(href)))
             }
         }
@@ -342,12 +336,10 @@ internal class EpubNavigatorViewModel(
         this.decorations[group] = decorations
         return RunScriptCommand(
             script = """
-        // Using requestAnimationFrame helps to make sure the page is fully laid out before adding the
-        // decorations.
-        requestAnimationFrame(function () {
-            let group = readium.getDecorations('$group');
-            ${DecorationChange.AddedEnhanced(decoration).javascript(decorationTemplates)}
-        });
+                requestAnimationFrame(function () {
+                    let group = readium.getDecorations('$group');
+                    ${DecorationChange.AddedEnhanced(decoration).javascript(decorationTemplates)}
+                });
         """, scope = RunScriptCommand.Scope.Resource(decoration.locator.href)
         )
     }

@@ -48,14 +48,6 @@ export function registerTemplates(newStyles) {
     }
   `;
   document.head.appendChild(containStyle);
-
-  let imgStyle = document.createElement("style");
-  imgStyle.innerHTML = `
-    img {
-        pointer-events: none;
-    }
-  `;
-  document.head.appendChild(imgStyle);
 }
 
 /**
@@ -145,7 +137,7 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    log("adding decoration",groupName, decoration);
+    log("adding decoration",groupName, JSON.stringify(decoration));
     let item = { id, decoration, range };
     items.push(item);
     layout(item);
@@ -233,7 +225,7 @@ export function DecorationGroup(groupId, groupName) {
     log("requesting layout ",groupName, items.length);
     clearContainer();
     clearAllEnhanced();
-    items.forEach((item) => layoutEnhanced(item));
+    items.forEach((item) => layout(item));
   }
 
   /**
