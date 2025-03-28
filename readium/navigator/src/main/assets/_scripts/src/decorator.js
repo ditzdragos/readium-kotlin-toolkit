@@ -230,6 +230,7 @@ export function DecorationGroup(groupId, groupName) {
    * To be called after reflowing the resource, for example.
    */
   function requestLayout() {
+    log("requesting layout ",groupName, items.length);
     clearContainer();
     clearAllEnhanced();
     items.forEach((item) => layoutEnhanced(item));
@@ -334,6 +335,8 @@ export function DecorationGroup(groupId, groupName) {
       positionElement(bounds, boundingRect, boundingRect);
 
       itemContainer.append(bounds);
+    }else{
+        log("style layout: ",groupName,style.layout);
     }
 
     groupContainer.append(itemContainer);
@@ -515,15 +518,6 @@ export function DecorationGroup(groupId, groupName) {
     let visibleAreaLeft = pageIndex * viewportWidth; // Each page is one viewport width in size
     let visibleAreaId = `visible-area-${pageIndex}`;
 
-    //const yOffset = 0; //window.innerHeight - document.documentElement.scrollHeight;
-    let yOffset = window.innerHeight - document.documentElement.scrollHeight;
-
-    log(`yoffset: ${yOffset}`);
-
-    if (yOffset < -300) {
-      yOffset = 0;
-    }
-
     let newArea = false;
     let visibleArea = null;
 
@@ -546,7 +540,7 @@ export function DecorationGroup(groupId, groupName) {
         visibleArea.setAttribute("id", visibleAreaId);
         visibleArea.style.position = "absolute";
         visibleArea.style.left = `${visibleAreaLeft}px`;
-        visibleArea.style.top = `0px !important`; //`${yOffset}px`;
+        visibleArea.style.top = `0px !important`;
         visibleArea.style.marginTop = `0px`;
         visibleArea.style.width = `${viewportWidth}px`;
         visibleArea.style.height = `${window.innerHeight}px`;

@@ -169,17 +169,26 @@ internal class EpubNavigatorViewModel(
 
         for ((group, decorations) in decorations) {
             val changes = decorations.filter {
-                Timber.d("onResourceLoaded: ${it.locator.href} == ${link.url()}")
                 it.locator.href == link.url()
             }
                 .map {
-                    DecorationChange.AddedEnhanced(it)
+                    Timber.d("onResourceLoaded: $group ${it.id}")
+                    if (group.startsWith("correct")) {
+                        DecorationChange.AddedEnhanced(it)
+                    } else {
+                        DecorationChange.Added(it)
+                    }
                 }
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
             Timber.d("onResourceLoaded: $groupScript")
             script += "$groupScript\n"
         }
+        script = """
+            requestAnimationFrame(function () {
+                $script
+            });
 
+        """.trimIndent()
         return RunScriptCommand(script, scope = RunScriptCommand.Scope.WebView(webView))
     }
 
@@ -313,7 +322,13 @@ internal class EpubNavigatorViewModel(
             )
         } else {
             for ((href, changes) in source.changesByHref(target)) {
-                val script = changes.javascriptForGroup(group, decorationTemplates) ?: continue
+                val script =
+                    """
+                          requestAnimationFrame(function () {
+                                let group = readium.getDecorations('$group');
+                                ${ changes.javascriptForGroup(group, decorationTemplates)}
+                            });
+                    """.trimIndent()
                 cmds.add(RunScriptCommand(script, scope = RunScriptCommand.Scope.Resource(href)))
             }
         }
