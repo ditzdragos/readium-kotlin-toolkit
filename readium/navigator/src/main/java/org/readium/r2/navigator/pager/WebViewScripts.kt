@@ -6,21 +6,32 @@
 
 package org.readium.r2.navigator.pager
 
-import org.readium.r2.shared.InternalReadiumApi
-
 /**
  * Collection of JavaScript functions to be injected into WebView.
  * Separating these scripts from the main fragment class reduces complexity.
  */
-@OptIn(InternalReadiumApi::class)
 internal object WebViewScripts {
-
 
     /**
      * Returns JavaScript to center fixed-layout content in the WebView.
+     * @param viewportWidth The actual width of the WebView from Android
+     * @param viewportHeight The actual height of the WebView from Android
      */
-    fun getCenteringScript(): String = """
+    fun getCenteringScript(viewportWidth: Int, viewportHeight: Int): String = """
         javascript:(function() {
+            // Prevent multiple executions in quick succession
+            if (window.r2ScalingInProgress) {
+                console.log('Scaling already in progress, skipping');
+                return;
+            }
+            
+            // Skip if already scaled with stable dimensions
+            if (window.r2ScalingApplied) {
+                console.log('Scaling already applied with stable dimensions');
+                return;
+            }
+            
+            window.r2ScalingInProgress = true;
             console.log('Applying universal full-page scaling');
             
             // STEP 1: Fix background colors
@@ -42,11 +53,11 @@ internal object WebViewScripts {
             document.body.style.left = '';
             document.body.style.top = '';
             
-            // STEP 4: Determine the content dimensions
-            // Try multiple approaches to get the actual content size
+            // STEP 4: Get content dimensions from meta viewport only
             var contentWidth, contentHeight;
+            var dimensionMethod = ''; // For debugging
             
-            // Method 1: Try viewport meta tag first (common in fixed-layout EPUBs)
+            // Only use the meta viewport tag for content dimensions - nothing else
             var metaViewport = document.querySelector('meta[name="viewport"]');
             if (metaViewport) {
                 var content = metaViewport.getAttribute('content');
@@ -56,62 +67,100 @@ internal object WebViewScripts {
                 if (widthMatch && heightMatch) {
                     contentWidth = parseInt(widthMatch[1]);
                     contentHeight = parseInt(heightMatch[1]);
+                    dimensionMethod = 'viewport meta tag';
                     console.log('Using viewport meta dimensions: ' + contentWidth + 'x' + contentHeight);
                 }
             }
             
-            // Method 2: Try to find content container
+            // Fallback to standard dimensions if no meta viewport tag found
             if (!contentWidth || !contentHeight) {
-                var containers = [
-                    document.querySelector('.PageContainer, #Page, [class*="page"], [id*="page"]'),
-                    document.querySelector('section, article, main'),
-                    document.querySelector('div[style*="position: absolute"]')
-                ];
-                
-                for (var i = 0; i < containers.length; i++) {
-                    var container = containers[i];
-                    if (container) {
-                        var rect = container.getBoundingClientRect();
-                        if (rect.width > 100 && rect.height > 100) {
-                            contentWidth = rect.width;
-                            contentHeight = rect.height;
-                            console.log('Using container dimensions: ' + contentWidth + 'x' + contentHeight);
-                            break;
-                        }
-                    }
+                console.log('No meta viewport dimensions found, using fallback');
+                contentWidth = 1024;  // Standard fallback width
+                contentHeight = 768;  // Standard fallback height
+                dimensionMethod = 'fallback values (no meta viewport)';
+            }
+            
+            // Record dimensions used
+            console.log('Final dimension detection method: ' + dimensionMethod);
+            
+            // Use the viewport dimensions passed from Android
+            var viewportWidth = $viewportWidth;
+            var viewportHeight = $viewportHeight;
+            console.log('Using exact viewport from Android: ' + viewportWidth + 'x' + viewportHeight);
+            
+            // Calculate scale based on the provided viewport dimensions
+            var scaleX = viewportWidth / contentWidth;
+            var scaleY = viewportHeight / contentHeight;
+            
+            // Apply a small safety margin
+            var marginFactor = 0.99; // Default to 1% margin
+            
+            var scale = Math.min(scaleX, scaleY) * marginFactor;
+            
+            // IMPORTANT: Only scale down, never scale up
+            // If content is smaller than viewport, set scale to 1.0 (no scaling)
+            // BUT - we need to account for aspect ratio differences
+            
+            // Calculate aspect ratios
+            var contentRatio = contentHeight / contentWidth;
+            var viewportRatio = viewportHeight / viewportWidth;
+            
+            if (contentWidth <= viewportWidth && contentHeight <= viewportHeight) {
+                // Content fits entirely - check aspect ratio
+                if (contentRatio > viewportRatio) {
+                    // Content is taller relative to width than the viewport
+                    // Use direct ratio between aspect ratios with a small safety margin
+                    scale = (viewportRatio / contentRatio) * 0.995;
+                    console.log('Content aspect ratio taller than viewport: ' + 
+                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
+                                ', scaling to: ' + scale.toFixed(3));
+                } else if (contentRatio < viewportRatio) {
+                    // Content is wider relative to height than the viewport
+                    // Per client request, don't scale down wider content
+                    console.log('Content aspect ratio wider than viewport: ' + 
+                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
+                                ', not scaling');
+                    scale = 1.0;
+                } else {
+                    // Aspect ratios match well, no special scaling needed
+                    console.log('Content is smaller than viewport with compatible aspect ratio, will center without scaling');
+                    scale = 1.0;
+                }
+            } else {
+                // Content is larger than viewport in at least one dimension
+                if (scaleX < scaleY) {
+                    // Width is the limiting factor (content is wider relative to the viewport)
+                    console.log('Content is wider than viewport, not scaling per client request');
+                    scale = 1.0;
+                } else {
+                    // Height is the limiting factor (content is taller relative to the viewport)
+                    // Scale down by height ratio with a small safety margin
+                    scale = scaleY * 0.995;
+                    console.log('Content is taller than viewport, scaling down by factor: ' + scale.toFixed(4));
                 }
             }
             
-            // Method 3: Measure the document itself as fallback
-            if (!contentWidth || !contentHeight) {
-                contentWidth = Math.max(
-                    document.documentElement.scrollWidth,
-                    document.body.scrollWidth,
-                    document.documentElement.offsetWidth,
-                    document.body.offsetWidth
-                );
-                contentHeight = Math.max(
-                    document.documentElement.scrollHeight,
-                    document.body.scrollHeight,
-                    document.documentElement.offsetHeight,
-                    document.body.offsetHeight
-                );
-                console.log('Using document dimensions: ' + contentWidth + 'x' + contentHeight);
+            // For content that barely fits (scale is close to 1.0), apply a small safety margin
+            if (scale >= 0.95 && scale < 1.0) {
+                console.log('Content barely fits, applying slight safety margin');
+                scale *= 0.99; // Small 1% reduction for safety
             }
             
-            // STEP 5: Get viewport dimensions and calculate scale
-            var viewportWidth = window.innerWidth;
-            var viewportHeight = window.innerHeight;
-            console.log('Viewport: ' + viewportWidth + 'x' + viewportHeight);
-            
-            // Use more conservative scale to ensure margin
-            var scaleX = viewportWidth / contentWidth;
-            var scaleY = viewportHeight / contentHeight;
-            var scale = Math.min(scaleX, scaleY);
             console.log('Using scale: ' + scale);
             
-            // STEP 6: Create a new wrapper structure
-            // This avoids manipulating the existing DOM structure
+            // STEP 6: Apply the scaling with a wrapper
+            // Remove any existing wrapper from previous attempts
+            var existingWrapper = document.getElementById('r2-scale-wrapper');
+            if (existingWrapper) {
+                // Move children back to body
+                var scaleContainer = document.getElementById('r2-scale-container');
+                if (scaleContainer) {
+                    while (scaleContainer.firstChild) {
+                        document.body.appendChild(scaleContainer.firstChild);
+                    }
+                }
+                document.body.removeChild(existingWrapper);
+            }
             
             // Create a wrapper that takes up the full viewport
             var wrapper = document.createElement('div');
@@ -126,6 +175,7 @@ internal object WebViewScripts {
             wrapper.style.display = 'flex';
             wrapper.style.alignItems = 'center';     // Vertical centering
             wrapper.style.justifyContent = 'center'; // Horizontal centering
+            wrapper.style.boxSizing = 'border-box';
             
             // Create an inner container that will be scaled
             var scaleContainer = document.createElement('div');
@@ -152,7 +202,125 @@ internal object WebViewScripts {
                 }
             });
             
-            console.log('Universal scaling applied successfully');
+            // Mark scaling as completed
+            window.r2ScalingApplied = true;
+            window.r2ScalingInProgress = false;
+            
+            // Store dimension information for debugging
+            window.r2ContentDimensions = {
+                width: contentWidth,
+                height: contentHeight,
+                method: dimensionMethod
+            };
+            
+            console.log('Universal scaling applied successfully with dimensions ' + contentWidth + 'x' + contentHeight + ' (' + dimensionMethod + ')');
+            
+            // Store the viewport dimensions from Android for reference
+            window.r2AndroidViewportWidth = viewportWidth;
+            window.r2AndroidViewportHeight = viewportHeight;
+        })();
+    """.trimIndent()
+
+    /**
+     * Returns JavaScript to update scaling when viewport dimensions change.
+     * Call this when the WebView size changes (e.g., orientation change).
+     * @param viewportWidth The new width of the WebView
+     * @param viewportHeight The new height of the WebView
+     */
+    fun getUpdateViewportScript(viewportWidth: Int, viewportHeight: Int): String = """
+        javascript:(function() {
+            console.log('Updating viewport dimensions: ' + $viewportWidth + 'x' + $viewportHeight);
+            
+            // Compare with previous dimensions
+            var previousWidth = window.r2AndroidViewportWidth || 0;
+            var previousHeight = window.r2AndroidViewportHeight || 0;
+            
+            // Skip if dimensions are the same or very close
+            if (Math.abs(previousWidth - $viewportWidth) < 5 && Math.abs(previousHeight - $viewportHeight) < 5) {
+                console.log('Viewport dimensions unchanged, skipping update');
+                return;
+            }
+            
+            // Find content dimensions (from existing scale container)
+            var scaleContainer = document.getElementById('r2-scale-container');
+            if (!scaleContainer) {
+                console.log('Scale container not found, cannot update scaling');
+                return;
+            }
+            
+            var contentWidth = parseInt(scaleContainer.style.width);
+            var contentHeight = parseInt(scaleContainer.style.height);
+            
+            // If we have stored dimension info, use it for logging
+            var dimensionMethod = window.r2ContentDimensions ? window.r2ContentDimensions.method : 'unknown';
+            console.log('Content dimensions: ' + contentWidth + 'x' + contentHeight + ' (' + dimensionMethod + ')');
+            
+            // Calculate new scale
+            var viewportWidth = $viewportWidth;
+            var viewportHeight = $viewportHeight;
+            var scaleX = viewportWidth / contentWidth;
+            var scaleY = viewportHeight / contentHeight;
+            
+            // Apply a small safety margin
+            var marginFactor = 0.99; // Default to 1% margin
+            
+            var scale = Math.min(scaleX, scaleY) * marginFactor;
+            
+            // IMPORTANT: Only scale down, never scale up
+            // If content is smaller than viewport, set scale to 1.0 (no scaling)
+            // BUT - we need to account for aspect ratio differences
+            
+            // Calculate aspect ratios
+            var contentRatio = contentHeight / contentWidth;
+            var viewportRatio = viewportHeight / viewportWidth;
+            
+            if (contentWidth <= viewportWidth && contentHeight <= viewportHeight) {
+                // Content fits entirely - check aspect ratio
+                if (contentRatio > viewportRatio) {
+                    // Content is taller relative to width than the viewport
+                    // Use direct ratio between aspect ratios with a small safety margin
+                    scale = (viewportRatio / contentRatio) * 0.995;
+                    console.log('Content aspect ratio taller than viewport: ' + 
+                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
+                                ', scaling to: ' + scale.toFixed(3));
+                } else if (contentRatio < viewportRatio) {
+                    // Content is wider relative to height than the viewport
+                    // Per client request, don't scale down wider content
+                    console.log('Content aspect ratio wider than viewport: ' + 
+                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
+                                ', not scaling');
+                    scale = 1.0;
+                } else {
+                    // Aspect ratios match well, no special scaling needed
+                    console.log('Content is smaller than viewport with compatible aspect ratio, will center without scaling');
+                    scale = 1.0;
+                }
+            } else {
+                // Content is larger than viewport in at least one dimension
+                if (scaleX < scaleY) {
+                    // Width is the limiting factor (content is wider relative to the viewport)
+                    console.log('Content is wider than viewport, not scaling per client request');
+                    scale = 1.0;
+                } else {
+                    // Height is the limiting factor (content is taller relative to the viewport)
+                    // Scale down by height ratio with a small safety margin
+                    scale = scaleY * 0.995;
+                    console.log('Content is taller than viewport, scaling down by factor: ' + scale.toFixed(4));
+                }
+            }
+            
+            // For content that barely fits (scale is close to 1.0), apply a small safety margin
+            if (scale >= 0.95 && scale < 1.0) {
+                console.log('Content barely fits, applying slight safety margin');
+                scale *= 0.99; // Small 1% reduction for safety
+            }
+            
+            console.log('Updating scale to: ' + scale);
+            scaleContainer.style.transform = 'scale(' + scale + ')';
+            
+            // Update stored dimensions
+            window.r2AndroidViewportWidth = viewportWidth;
+            window.r2AndroidViewportHeight = viewportHeight;
         })();
     """.trimIndent()
 } 

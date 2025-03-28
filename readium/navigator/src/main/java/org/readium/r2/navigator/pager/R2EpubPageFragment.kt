@@ -235,13 +235,13 @@ internal class R2EpubPageFragment : Fragment() {
         webView.setPadding(0, 0, 0, 0)
         webView.webViewClient = webViewClient
         webView.addJavascriptInterface(webView, "Android")
-        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+        webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
         if (fixedLayout) {
-            webView.zoomOut()
             webView.setBackgroundColor(Color.WHITE)
             webView.settings.textZoom = 100
             webView.setInitialScale(1)
             webView.overScrollMode = View.OVER_SCROLL_NEVER
+            webView.zoomOut()
         } else {
             webView.settings.textZoom = textZoom
         }
@@ -437,7 +437,72 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     private fun injectCenteringJavaScript(webView: WebView) {
-        webView.evaluateJavascript(WebViewScripts.getCenteringScript(), null)
+        // Get the actual dimensions of the WebView
+        val viewportWidth = webView.width
+        val viewportHeight = webView.height
+        
+        // If dimensions are not yet available (i.e., during initial loading), 
+        // wait for layout to complete
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            webView.post {
+                // After layout, the dimensions should be available
+                val actualWidth = webView.width
+                val actualHeight = webView.height
+                
+                // Only inject if we have valid dimensions
+                if (actualWidth > 0 && actualHeight > 0) {
+                    webView.evaluateJavascript(
+                        WebViewScripts.getCenteringScript(actualWidth, actualHeight), 
+                        null
+                    )
+                } else {
+                    // If still no dimensions, try once more with a longer delay
+                    webView.postDelayed({
+                        val finalWidth = webView.width
+                        val finalHeight = webView.height
+                        webView.evaluateJavascript(
+                            WebViewScripts.getCenteringScript(
+                                finalWidth.coerceAtLeast(1), 
+                                finalHeight.coerceAtLeast(1)
+                            ), 
+                            null
+                        )
+                    }, 300)
+                }
+            }
+        } else {
+            // If dimensions are immediately available, use them directly
+            webView.evaluateJavascript(
+                WebViewScripts.getCenteringScript(viewportWidth, viewportHeight), 
+                null
+            )
+        }
+        
+        // Add layout change listener to handle viewport size changes
+        webView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val newWidth = right - left
+            val newHeight = bottom - top
+            val oldWidth = oldRight - oldLeft
+            val oldHeight = oldBottom - oldTop
+            
+            // If dimensions have changed significantly, update the scaling
+            if (Math.abs(newWidth - oldWidth) > 5 || Math.abs(newHeight - oldHeight) > 5) {
+                updateViewportScaling(webView, newWidth, newHeight)
+            }
+        }
+    }
+    
+    /**
+     * Updates the scaling when viewport dimensions change (e.g., orientation change).
+     */
+    private fun updateViewportScaling(webView: WebView, width: Int, height: Int) {
+        // Ensure dimensions are valid
+        if (width <= 0 || height <= 0) return
+        
+        webView.evaluateJavascript(
+            WebViewScripts.getUpdateViewportScript(width, height),
+            null
+        )
     }
 
     companion object {
