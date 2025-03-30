@@ -48,6 +48,28 @@ export function registerTemplates(newStyles) {
     }
   `;
   document.head.appendChild(containStyle);
+
+    document.body.innerHTML = document.body.innerHTML.replace(
+    /\/div><div/g,
+    "/div>\n<div"
+  );
+  document.body.innerHTML = document.body.innerHTML.replace(
+    /\/p><p/g,
+    "/p>\n<p"
+  );
+
+  // Replace <br/> and <br /> with the same tags plus a newline character
+  // This preserves the line break in rendering while adding a newline for better text extraction
+  document.body.innerHTML = document.body.innerHTML.replace(
+    /<br\/>/g,
+    "<br/>\n"
+  );
+  document.body.innerHTML = document.body.innerHTML.replace(
+    /<br \/>/g,
+    "<br />\n"
+  );
+
+  log("New document body: ",document.body.innerHTML);
 }
 
 /**

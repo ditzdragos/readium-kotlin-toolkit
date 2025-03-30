@@ -173,22 +173,13 @@ internal class EpubNavigatorViewModel(
             }
                 .map {
                     Timber.d("onResourceLoaded: $group ${it.id}")
-                    if (group.startsWith("correct")) {
-                        DecorationChange.AddedEnhanced(it)
-                    } else {
-                        DecorationChange.Added(it)
-                    }
+                    DecorationChange.Added(it)
                 }
+            Timber.d("onResourceLoaded: changes for $link : $changes")
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
-            Timber.d("onResourceLoaded: $groupScript")
             script += "$groupScript\n"
         }
-        script = """
-            requestAnimationFrame(function () {
-                $script
-            });
-
-        """.trimIndent()
+        Timber.d("onResourceLoaded: script for $link : $script")
         return RunScriptCommand(script, scope = RunScriptCommand.Scope.WebView(webView))
     }
 

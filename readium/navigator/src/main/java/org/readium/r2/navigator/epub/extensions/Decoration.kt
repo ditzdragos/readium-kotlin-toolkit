@@ -49,7 +49,7 @@ public fun DecorationChange.javascript(templates: HtmlDecorationTemplates): Stri
 
     return when (this) {
         is DecorationChange.Added ->
-            toJSON(decoration)?.let { "group.add($it);" }
+            toJSON(decoration)?.let { "group.addEnhanced($it);" }
 
         is DecorationChange.AddedEnhanced ->
             toJSON(decoration)?.let { "group.addEnhanced($it);" }
@@ -58,7 +58,7 @@ public fun DecorationChange.javascript(templates: HtmlDecorationTemplates): Stri
             null // Not supported for now
 
         is DecorationChange.Removed ->
-            "group.remove('$id');"
+            "group.clearEnhanced('$id');"
 
         is DecorationChange.Updated ->
             toJSON(decoration)?.let { "group.update($it);" }
