@@ -405,9 +405,9 @@ export function rangeFromLocator(locator) {
         suffix: text.after,
       });
 
-//      log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
+      log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
       let result = anchor.toRange({}, start, end);
-//      log("rangeFromLocator: found range", result);
+      log("rangeFromLocator: found range", result);
       return result;
     }
 

@@ -49,10 +49,10 @@ export function registerTemplates(newStyles) {
   `;
   document.head.appendChild(containStyle);
 
-    document.body.innerHTML = document.body.innerHTML.replace(
-    /\/div><div/g,
-    "/div>\n<div"
-  );
+//    document.body.innerHTML = document.body.innerHTML.replace(
+//    /\/div><div/g,
+//    "/div>\n<div"
+//  );
   document.body.innerHTML = document.body.innerHTML.replace(
     /\/p><p/g,
     "/p>\n<p"
