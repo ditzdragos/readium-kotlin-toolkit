@@ -565,3 +565,7 @@ export function getRectFromLocator(locator) {
   }
   return null;
 }
+
+export function getHtmlBodyTextContent() {
+  return document.body.textContent;
+}

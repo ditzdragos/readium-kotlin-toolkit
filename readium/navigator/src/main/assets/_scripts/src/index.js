@@ -19,7 +19,8 @@ import {
   scrollToLocator,
   setProperty,
   setCSSProperties,
-  getRectFromLocator
+  getRectFromLocator,
+  getHtmlBodyTextContent
 } from "./utils";
 import { findFirstVisibleLocator } from "./dom";
 import { getCurrentSelection } from "./selection";
@@ -49,4 +50,5 @@ window.readium = {
 
   // DOM
   findFirstVisibleLocator: findFirstVisibleLocator,
+  getHtmlBodyTextContent: getHtmlBodyTextContent,
 };

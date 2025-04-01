@@ -569,6 +569,10 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         runJavaScript("readium.getRectFromLocator($json);", callback)
     }
 
+    fun getHtmlBodyTextContent(callback: (String) -> Unit) {
+        runJavaScript("readium.getHtmlBodyTextContent();", callback)
+    }
+
     internal suspend fun findFirstVisibleLocator(): Locator? =
         runJavaScriptSuspend("readium.findFirstVisibleLocator();")
             .let { tryOrNull { JSONObject(it) } }

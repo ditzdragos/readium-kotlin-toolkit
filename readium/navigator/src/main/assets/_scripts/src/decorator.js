@@ -49,13 +49,17 @@ export function registerTemplates(newStyles) {
   `;
   document.head.appendChild(containStyle);
 
-//    document.body.innerHTML = document.body.innerHTML.replace(
-//    /\/div><div/g,
-//    "/div>\n<div"
-//  );
+   document.body.innerHTML = document.body.innerHTML.replace(
+    /\/div>/g,
+    "/div>\n"
+  );
+   document.body.innerHTML = document.body.innerHTML.replace(
+      /\/span>/g,
+      "/span>\n"
+    );
   document.body.innerHTML = document.body.innerHTML.replace(
-    /\/p><p/g,
-    "/p>\n<p"
+    /\/p>/g,
+    "/p>\n"
   );
 
   // Replace <br/> and <br /> with the same tags plus a newline character

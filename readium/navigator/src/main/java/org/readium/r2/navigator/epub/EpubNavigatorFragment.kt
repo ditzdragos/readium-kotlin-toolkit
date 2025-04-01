@@ -1218,7 +1218,22 @@ public class EpubNavigatorFragment internal constructor(
                         continuation.cancel(throwable)
                     }
                 }
-            }?:continuation.resume(DEFAULT_RECTF) { throwable ->
+            } ?: continuation.resume(DEFAULT_RECTF) { throwable ->
+                continuation.cancel(throwable)
+            }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    public suspend fun getHtmlBodyTextContent(href: Url): String {
+        return suspendCancellableCoroutine { continuation ->
+            val fragment = loadedFragmentForHref(href)
+            Timber.d("getHtmlBodyTextContent: $href -> $fragment")
+            fragment?.webView?.getHtmlBodyTextContent { result ->
+                continuation.resume(result) { throwable ->
+                    continuation.cancel(throwable)
+                }
+            } ?: continuation.resume("") { throwable ->
                 continuation.cancel(throwable)
             }
         }
