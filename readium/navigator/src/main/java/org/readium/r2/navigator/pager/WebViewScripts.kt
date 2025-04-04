@@ -93,7 +93,7 @@ internal object WebViewScripts {
             var scaleY = viewportHeight / contentHeight;
             
             // Apply a small safety margin
-            var marginFactor = 0.99; // Default to 1% margin
+            var marginFactor = 1.0; // Default to 1% margin
             
             var scale = Math.min(scaleX, scaleY) * marginFactor;
             
@@ -110,7 +110,7 @@ internal object WebViewScripts {
                 if (contentRatio > viewportRatio) {
                     // Content is taller relative to width than the viewport
                     // Use direct ratio between aspect ratios with a small safety margin
-                    scale = (viewportRatio / contentRatio) * 0.995;
+                    scale = (viewportRatio / contentRatio) * 1.0;
                     console.log('Content aspect ratio taller than viewport: ' + 
                                 contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
                                 ', scaling to: ' + scale.toFixed(3));
@@ -135,7 +135,7 @@ internal object WebViewScripts {
                 } else {
                     // Height is the limiting factor (content is taller relative to the viewport)
                     // Scale down by height ratio with a small safety margin
-                    scale = scaleY * 0.995;
+                    scale = scaleY * 1.0;
                     console.log('Content is taller than viewport, scaling down by factor: ' + scale.toFixed(4));
                 }
             }
@@ -143,7 +143,7 @@ internal object WebViewScripts {
             // For content that barely fits (scale is close to 1.0), apply a small safety margin
             if (scale >= 0.95 && scale < 1.0) {
                 console.log('Content barely fits, applying slight safety margin');
-                scale *= 0.99; // Small 1% reduction for safety
+                scale *= 1.0; // Small 1% reduction for safety
             }
             
             console.log('Using scale: ' + scale);

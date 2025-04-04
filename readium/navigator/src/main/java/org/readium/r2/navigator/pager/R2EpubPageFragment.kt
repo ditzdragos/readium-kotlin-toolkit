@@ -45,30 +45,37 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.readium.r2.navigator.R
 import org.readium.r2.navigator.R2BasicWebView
 import org.readium.r2.navigator.R2WebView
-import org.readium.r2.navigator.databinding.ReadiumNavigatorViewpagerFragmentEpubBinding
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubNavigatorViewModel
 import org.readium.r2.navigator.extensions.htmlId
 import org.readium.r2.navigator.preferences.ReadingProgression
-import org.readium.r2.navigator.util.isChromeBook
+import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
+import org.readium.r2.shared.util.Url
 import timber.log.Timber
 
 
-@OptIn(ExperimentalReadiumApi::class)
+@OptIn(ExperimentalReadiumApi::class, DelicateReadiumApi::class)
 internal class R2EpubPageFragment : Fragment() {
 
     private val resourceUrl: AbsoluteUrl?
         get() = BundleCompat.getParcelable(requireArguments(), "url", AbsoluteUrl::class.java)
 
+    private val rightResourceUrl: AbsoluteUrl?
+        get() = BundleCompat.getParcelable(requireArguments(), "rightUrl", AbsoluteUrl::class.java)
+
     internal val link: Link?
         get() = BundleCompat.getParcelable(requireArguments(), "link", Link::class.java)
+
+    internal val rightLink: Link?
+        get() = BundleCompat.getParcelable(requireArguments(), "rightLink", Link::class.java)
 
     private var pendingLocator: Locator? = null
     private var fixedLayout: Boolean = false
@@ -76,22 +83,24 @@ internal class R2EpubPageFragment : Fragment() {
     var webView: R2WebView? = null
         private set
 
+    var webViewRight: R2WebView? = null
+        private set
+
     private lateinit var containerView: View
     private val viewModel: EpubNavigatorViewModel by viewModels(
         ownerProducer = { requireParentFragment() }
     )
 
-    private var _binding: ReadiumNavigatorViewpagerFragmentEpubBinding? = null
-    private val binding get() = _binding!!
-
     private var isLoading: Boolean = false
+    private var isLoadingRight: Boolean = false
     private val _isLoaded = MutableStateFlow(false)
+
     private var webViewClient = object : WebViewClientCompat() {
         override fun shouldOverrideUrlLoading(
             view: WebView,
             request: WebResourceRequest
         ): Boolean =
-            (webView as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
+            (view as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
 
         override fun shouldOverrideKeyEvent(view: WebView, event: KeyEvent): Boolean {
             // Do something with the event here
@@ -100,17 +109,52 @@ internal class R2EpubPageFragment : Fragment() {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
-            if (fixedLayout && view != null) {
-                injectCenteringJavaScript(view)
-            }
-            onPageFinished()
+            if (view == null) return
+            // Handle loading state based on which web view finished loading
+            when (view) {
+                webView -> {
+                    isLoading = false
+                    if (fixedLayout) {
+                        view.let { injectCenteringJavaScript(it) }
+                    }
+                    onPageFinished()
+                    link?.let {
+                        webView?.listener?.onResourceLoaded(webView!!, it)
+                    }
+                    webView?.onContentReady {
+                        // Make left web view visible when loaded
+                        view.visibility = View.VISIBLE
+                        Timber.d("Left page finished loading and made visible")
 
-            link?.let {
-                webView?.listener?.onResourceLoaded(webView!!, it)
-            }
+                        // Call onPageLoaded for left page
+                        link?.let {
+                            webView?.listener?.onPageLoaded(webView!!, it)
+                        }
 
-            webView?.onContentReady {
-                onLoadPage()
+                        onLoadPage()
+                    }
+                }
+
+                webViewRight -> {
+                    isLoadingRight = false
+                    if (fixedLayout) {
+                        view.let { injectCenteringJavaScript(it) }
+                    }
+                    rightLink?.let {
+                        webViewRight?.listener?.onResourceLoaded(webViewRight!!, it)
+                    }
+                    webViewRight?.onContentReady {
+                        // Make right web view visible when loaded
+                        view.visibility = View.VISIBLE
+                        Timber.d("Right page finished loading and made visible")
+
+                        // Call onPageLoaded for right page
+                        rightLink?.let {
+                            webViewRight?.listener?.onPageLoaded(webViewRight!!, it)
+                        }
+                        onLoadPage()
+                    }
+                }
             }
         }
 
@@ -138,7 +182,7 @@ internal class R2EpubPageFragment : Fragment() {
             view: WebView,
             request: WebResourceRequest
         ): WebResourceResponse? =
-            (webView as? R2BasicWebView)?.shouldInterceptRequest(view, request)
+            (view as? R2BasicWebView)?.shouldInterceptRequest(view, request)
     }
 
     internal fun setFontSize(fontSize: Double) {
@@ -151,6 +195,7 @@ internal class R2EpubPageFragment : Fragment() {
             field = value
             Timber.d("Text zoom: $value")
             webView?.settings?.textZoom = value
+            webViewRight?.settings?.textZoom = value
         }
 
     /**
@@ -203,61 +248,105 @@ internal class R2EpubPageFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         Timber.d("onCreateView: $resourceUrl")
-        _binding = ReadiumNavigatorViewpagerFragmentEpubBinding.inflate(inflater, container, false)
-        containerView = binding.root
 
-        val webView = binding.webView
-        this.webView = webView
+        // Choose layout based on whether we have a right resource
+        val layoutRes = if (fixedLayout && rightResourceUrl != null) {
+            R.layout.readium_navigator_viewpager_fragment_epub_double
+        } else {
+            R.layout.readium_navigator_viewpager_fragment_epub
+        }
 
-        webView.visibility = View.INVISIBLE
+        containerView = inflater.inflate(layoutRes, container, false)
+
+        this.webView = containerView.findViewById(R.id.webView)
+
+        // Only initialize right web view if we're using the double layout
+        webViewRight = if (fixedLayout && rightResourceUrl != null) {
+            containerView.findViewById(R.id.webViewRight)
+        } else {
+            null
+        }
+
+        // Note: Visibility is now handled in onPageFinished
+        Timber.d("Web views initialized: left=${webView != null}, right=${webViewRight != null}")
+
         navigator?.webViewListener?.let { listener ->
-            webView.listener = listener
+            webView?.listener = listener
+            webViewRight?.listener = listener
 
             link?.let { link ->
                 // Setup custom Javascript interfaces.
                 for ((name, obj) in listener.javascriptInterfacesForResource(link)) {
                     if (obj != null) {
-                        webView.addJavascriptInterface(obj, name)
+                        webView?.addJavascriptInterface(obj, name)
+                    }
+                }
+            }
+
+            rightLink?.let { link ->
+                // Setup custom Javascript interfaces for right page
+                for ((name, obj) in listener.javascriptInterfacesForResource(link)) {
+                    if (obj != null) {
+                        webViewRight?.addJavascriptInterface(obj, name)
                     }
                 }
             }
         }
 
-        webView.settings.javaScriptEnabled = true
-        webView.isVerticalScrollBarEnabled = false
-        webView.isHorizontalScrollBarEnabled = false
-        webView.settings.useWideViewPort = !isChromeBook()
-        webView.settings.loadWithOverviewMode = true
-        webView.settings.setSupportZoom(false)
-        webView.settings.builtInZoomControls = false
-        webView.settings.displayZoomControls = false
-        webView.resourceUrl = resourceUrl
-        webView.setPadding(0, 0, 0, 0)
-        webView.webViewClient = webViewClient
-        webView.addJavascriptInterface(webView, "Android")
-        webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
-        if (fixedLayout) {
-            webView.setBackgroundColor(Color.WHITE)
-            webView.settings.textZoom = 100
-            webView.setInitialScale(1)
-            webView.overScrollMode = View.OVER_SCROLL_NEVER
-            webView.zoomOut()
-        } else {
-            webView.settings.textZoom = textZoom
+        fun setupWebView(webView: R2WebView, resourceUrl: AbsoluteUrl?) {
+            webView.settings.javaScriptEnabled = true
+            webView.isVerticalScrollBarEnabled = false
+            webView.isHorizontalScrollBarEnabled = false
+            webView.settings.useWideViewPort = true
+            webView.settings.loadWithOverviewMode = true
+            webView.settings.setSupportZoom(false)
+            webView.settings.builtInZoomControls = false
+            webView.settings.displayZoomControls = false
+            webView.resourceUrl = resourceUrl
+            webView.setPadding(0, 0, 0, 0)
+            webView.webViewClient = webViewClient
+            webView.addJavascriptInterface(webView, "Android")
+            webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
+            if (fixedLayout) {
+                webView.setBackgroundColor(Color.WHITE)
+                webView.settings.textZoom = 100
+                webView.setInitialScale(1)
+                webView.overScrollMode = View.OVER_SCROLL_NEVER
+                webView.zoomOut()
+            } else {
+                webView.settings.textZoom = textZoom
+            }
+            webView.isHapticFeedbackEnabled = false
+            webView.isLongClickable = true
         }
-        webView.isHapticFeedbackEnabled = false
-        webView.isLongClickable = true
 
-        resourceUrl?.let {
-            isLoading = true
-            _isLoaded.value = false
-            webView.loadUrl(it.toString())
+        // Load left page first
+        webView?.let {
+            setupWebView(it, resourceUrl)
+            resourceUrl?.let { url ->
+                isLoading = true
+                _isLoaded.value = false
+                Timber.d("Loading left page: $url")
+                it.loadUrl(url.toString())
+            }
+        }
+
+        // Load right page after a short delay to ensure left page starts loading first
+        webViewRight?.let {
+            setupWebView(it, rightResourceUrl)
+            rightResourceUrl?.let { url ->
+                isLoadingRight = true
+                Timber.d("Loading right page: $url")
+                it.postDelayed({
+                                   it.loadUrl(url.toString())
+                               }, 100)
+            }
         }
 
         // Forward a tap event when the web view is not ready to propagate the taps. This allows
         // to toggle a navigation UI while a page is loading, for example.
-        binding.root.setOnClickListenerWithPoint { _, point ->
-            webView.listener?.onTap(point)
+        containerView.setOnClickListenerWithPoint { _, point ->
+            webView?.listener?.onTap(point)
         }
 
         return containerView
@@ -309,13 +398,16 @@ internal class R2EpubPageFragment : Fragment() {
         lifecycleOwner.lifecycleScope.launch {
             viewModel.isScrollEnabled
                 .flowWithLifecycle(lifecycleOwner.lifecycle)
-                .collectLatest { webView?.scrollModeFlow?.value = it }
+                .collectLatest { enabled ->
+                    webView?.scrollModeFlow?.value = enabled
+                    webViewRight?.scrollModeFlow?.value = enabled
+                }
         }
     }
 
     override fun onDestroyView() {
         webView?.listener = null
-        _binding = null
+        webViewRight?.listener = null
 
         super.onDestroyView()
     }
@@ -330,23 +422,30 @@ internal class R2EpubPageFragment : Fragment() {
             wv.removeAllViews()
             wv.destroy()
         }
+        webViewRight?.let { wv ->
+            (wv.parent as? ViewGroup)?.removeView(wv)
+            wv.removeAllViews()
+            wv.destroy()
+        }
     }
 
     internal val paddingTop: Int get() = containerView.paddingTop
     internal val paddingBottom: Int get() = containerView.paddingBottom
 
-
     private fun onLoadPage() {
-        if (!isLoading) return
-        isLoading = false
+        Timber.d("onLoadPage: $resourceUrl $isLoading")
+//        if (!isLoading) return
         _isLoaded.value = true
-
         if (view == null) return
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
                 val webView = requireNotNull(webView)
-                webView.visibility = View.VISIBLE
+
+                // Only set _isLoaded to true when both pages are loaded (if right page exists)
+                if (webViewRight == null || !isLoadingRight) {
+                    _isLoaded.value = true
+                }
 
                 pendingLocator
                     ?.let { locator ->
@@ -357,10 +456,6 @@ internal class R2EpubPageFragment : Fragment() {
                         )
                     }
                     .also { pendingLocator = null }
-
-                link?.let {
-                    webView.listener?.onPageLoaded(webView, it)
-                }
             }
         }
     }
@@ -373,7 +468,8 @@ internal class R2EpubPageFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                val webView = requireNotNull(webView)
+                val webView = getWebView(locator.href)
+                    ?: requireNotNull(this@R2EpubPageFragment.webView)
                 val epubNavigator = requireNotNull(navigator)
                 loadLocator(webView, epubNavigator.overflow.value.readingProgression, locator)
                 webView.listener?.onProgressionChanged()
@@ -427,12 +523,15 @@ internal class R2EpubPageFragment : Fragment() {
     fun runJavaScript(script: String, callback: ((String) -> Unit)? = null) {
         whenPageFinished {
             requireNotNull(webView).runJavaScript(script, callback)
+            webViewRight?.runJavaScript(script, callback)
         }
     }
 
     suspend fun runJavaScriptSuspend(javascript: String): String = suspendCoroutine { cont ->
         runJavaScript(javascript) { result ->
-            cont.resume(result)
+            if(result != "null") {
+                cont.resume(result)
+            }
         }
     }
 
@@ -440,7 +539,7 @@ internal class R2EpubPageFragment : Fragment() {
         // Get the actual dimensions of the WebView
         val viewportWidth = webView.width
         val viewportHeight = webView.height
-        
+
         // If dimensions are not yet available (i.e., during initial loading), 
         // wait for layout to complete
         if (viewportWidth <= 0 || viewportHeight <= 0) {
@@ -448,73 +547,106 @@ internal class R2EpubPageFragment : Fragment() {
                 // After layout, the dimensions should be available
                 val actualWidth = webView.width
                 val actualHeight = webView.height
-                
+
                 // Only inject if we have valid dimensions
                 if (actualWidth > 0 && actualHeight > 0) {
                     webView.evaluateJavascript(
-                        WebViewScripts.getCenteringScript(actualWidth, actualHeight), 
+                        WebViewScripts.getCenteringScript(actualWidth, actualHeight),
                         null
                     )
                 } else {
                     // If still no dimensions, try once more with a longer delay
                     webView.postDelayed({
-                        val finalWidth = webView.width
-                        val finalHeight = webView.height
-                        webView.evaluateJavascript(
-                            WebViewScripts.getCenteringScript(
-                                finalWidth.coerceAtLeast(1), 
-                                finalHeight.coerceAtLeast(1)
-                            ), 
-                            null
-                        )
-                    }, 300)
+                                            val finalWidth = webView.width
+                                            val finalHeight = webView.height
+                                            webView.evaluateJavascript(
+                                                WebViewScripts.getCenteringScript(
+                                                    finalWidth.coerceAtLeast(1),
+                                                    finalHeight.coerceAtLeast(1)
+                                                ),
+                                                null
+                                            )
+                                        }, 300)
                 }
             }
         } else {
             // If dimensions are immediately available, use them directly
             webView.evaluateJavascript(
-                WebViewScripts.getCenteringScript(viewportWidth, viewportHeight), 
+                WebViewScripts.getCenteringScript(viewportWidth, viewportHeight),
                 null
             )
         }
-        
+
         // Add layout change listener to handle viewport size changes
         webView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             val newWidth = right - left
             val newHeight = bottom - top
             val oldWidth = oldRight - oldLeft
             val oldHeight = oldBottom - oldTop
-            
+
             // If dimensions have changed significantly, update the scaling
             if (Math.abs(newWidth - oldWidth) > 5 || Math.abs(newHeight - oldHeight) > 5) {
                 updateViewportScaling(webView, newWidth, newHeight)
             }
         }
     }
-    
+
     /**
      * Updates the scaling when viewport dimensions change (e.g., orientation change).
      */
     private fun updateViewportScaling(webView: WebView, width: Int, height: Int) {
         // Ensure dimensions are valid
         if (width <= 0 || height <= 0) return
-        
+
         webView.evaluateJavascript(
             WebViewScripts.getUpdateViewportScript(width, height),
             null
         )
     }
 
+    internal fun setCurrentItem(item: Int, smoothScroll: Boolean = false) {
+        webView?.setCurrentItem(item, smoothScroll)
+        webViewRight?.setCurrentItem(item, smoothScroll)
+    }
+
+    internal fun setInitialItem(readingProgression: ReadingProgression) {
+        webView?.let { webView ->
+            if (readingProgression == ReadingProgression.RTL) {
+                webView.setCurrentItem(0, false)
+            } else {
+                webView.setCurrentItem(webView.numPages - 1, false)
+            }
+        }
+        webViewRight?.let { webView ->
+            if (readingProgression == ReadingProgression.RTL) {
+                webView.setCurrentItem(0, false)
+            } else {
+                webView.setCurrentItem(webView.numPages - 1, false)
+            }
+        }
+    }
+
+    internal fun getWebView(href: Url?): R2WebView? {
+        Timber.d("getWebView: $href vs ${rightLink?.url()}")
+        return if (href == rightLink?.url()) {
+            webViewRight
+        } else {
+            webView
+        }
+    }
+
     companion object {
         private const val NET_ERROR = "net::ERR_FAILED"
-        private const val textZoomBundleKey = "org.readium.textZoom"
+        private const val textZoomBundleKey = "textZoom"
 
         fun newInstance(
             url: AbsoluteUrl,
             link: Link? = null,
             initialLocator: Locator? = null,
+            fixedLayout: Boolean = false,
+            rightUrl: AbsoluteUrl? = null,
+            rightLink: Link? = null,
             positionCount: Int = 0,
-            fixedLayout: Boolean = false
         ): R2EpubPageFragment =
             R2EpubPageFragment().apply {
                 arguments = Bundle().apply {
@@ -523,6 +655,8 @@ internal class R2EpubPageFragment : Fragment() {
                     putParcelable("initialLocator", initialLocator)
                     putLong("positionCount", positionCount.toLong())
                     putBoolean("fixedLayout", fixedLayout)
+                    putParcelable("rightUrl", rightUrl)
+                    putParcelable("rightLink", rightLink)
                 }
             }
     }

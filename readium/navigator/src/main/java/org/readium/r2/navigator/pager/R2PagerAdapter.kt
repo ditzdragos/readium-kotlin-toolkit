@@ -23,6 +23,7 @@ import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.toAbsoluteUrl
 import org.readium.r2.shared.util.toUri
+import timber.log.Timber
 
 internal class R2PagerAdapter internal constructor(
     val fm: FragmentManager,
@@ -87,17 +88,29 @@ internal class R2PagerAdapter internal constructor(
             }
             is PageResource.EpubFxl -> {
                 //FXL layout does not support highlight
-                resource.leftUrl?.toUri()?.toAbsoluteUrl()?.let {
+                Timber.d("Creating FXL page with:")
+                Timber.d("Left URL: ${resource.leftUrl}")
+                Timber.d("Right URL: ${resource.rightUrl}")
+                Timber.d("Left Link: ${resource.leftLink}")
+                Timber.d("Right Link: ${resource.rightLink}")
+                
+                resource.leftUrl?.toUri()?.toAbsoluteUrl()?.let { leftUrl ->
+                    Timber.d("Creating R2EpubPageFragment with left URL: $leftUrl")
                     R2EpubPageFragment.newInstance(
-                        it,
+                        leftUrl,
                         resource.leftLink,
                         initialLocator = locator,
-                        fixedLayout = true
+                        fixedLayout = true,
+                        rightUrl = resource.rightUrl?.toUri()?.toAbsoluteUrl(),
+                        rightLink = resource.rightLink
                     )
-                } ?: R2FXLPageFragment.newInstance(
-                    left = let(resource.leftLink, resource.leftUrl) { l, u -> Pair(l, u) },
-                    right = let(resource.rightLink, resource.rightUrl) { l, u -> Pair(l, u) }
-                )
+                } ?: run {
+                    Timber.d("Left URL is null, creating R2FXLPageFragment")
+                    R2FXLPageFragment.newInstance(
+                        left = let(resource.leftLink, resource.leftUrl) { l, u -> Pair(l, u) },
+                        right = let(resource.rightLink, resource.rightUrl) { l, u -> Pair(l, u) }
+                    )
+                }
             }
             is PageResource.Cbz -> {
                 fm.fragmentFactory

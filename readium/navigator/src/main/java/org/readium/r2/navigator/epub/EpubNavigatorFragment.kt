@@ -41,6 +41,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -83,6 +84,7 @@ import org.readium.r2.navigator.preferences.Configurable
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.navigator.util.createFragmentFactory
+import org.readium.r2.navigator.util.isChromeBook
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
@@ -502,7 +504,8 @@ public class EpubNavigatorFragment internal constructor(
             }
 
             EpubLayout.FIXED -> {
-                R2PagerAdapter(childFragmentManager, resourcesSingle)
+                val resources = if(viewModel.dualPageMode == DualPage.ON) resourcesDouble else resourcesSingle
+                R2PagerAdapter(childFragmentManager, resources)
             }
         }
         adapter.listener = PagerAdapterListener()
@@ -704,7 +707,7 @@ public class EpubNavigatorFragment internal constructor(
             }
 
             is RunScriptCommand.Scope.Resource -> {
-                loadedFragmentForHref(command.scope.href)
+                loadedFragmentForHref(command.scope.href)?.getWebView(command.scope.href)
                     ?.runJavaScript(command.script)
             }
 
@@ -837,6 +840,7 @@ public class EpubNavigatorFragment internal constructor(
 
             notifyCurrentLocation()
 
+            Timber.d("onPageLoaded: ${link.href} ${state}")
             if (state == State.Ready) {
                 paginationListener?.onPageLoaded(true)
             }
@@ -1015,6 +1019,10 @@ public class EpubNavigatorFragment internal constructor(
 
         resourcePager.setCurrentItem(resourcePager.currentItem - 1, animated)
 
+        if (viewModel.layout == EpubLayout.FIXED) {
+            return true
+        }
+
         currentReflowablePageFragment?.webView?.let { webView ->
             if (settings.value.readingProgression == ReadingProgression.RTL) {
                 webView.setCurrentItem(0, false)
@@ -1063,7 +1071,7 @@ public class EpubNavigatorFragment internal constructor(
         adapter.mFragments.forEach { _, fragment ->
             val pageFragment = fragment as? R2EpubPageFragment ?: return@forEach
             val link = pageFragment.link ?: return@forEach
-            if (link.url() == href) {
+            if (link.url() == href || pageFragment.rightLink?.url() == href) {
                 return pageFragment
             }
         }
@@ -1075,6 +1083,11 @@ public class EpubNavigatorFragment internal constructor(
         initialLocator
             ?: requireNotNull(publication.locatorFromLink(this.readingOrder.first()))
     )
+
+    // Add support for dual locators
+    private val _currentLocators = MutableStateFlow<Pair<Locator?, Locator?>>(Pair(null, null))
+    public val currentLocators: StateFlow<Pair<Locator?, Locator?>> = _currentLocators.asStateFlow()
+
 
     /**
      * Returns the [Locator] to the first HTML *block* element that is visible on the screen, even
@@ -1093,6 +1106,26 @@ public class EpubNavigatorFragment internal constructor(
                 currentReflowablePageFragment?.webView?.findFirstVisibleLocator()
                     ?.copy(
                         href = resource.url(),
+                        mediaType = resource.mediaType ?: MediaType.XHTML
+                    )
+            }
+        }
+    }
+
+    @ExperimentalReadiumApi
+    public suspend fun firstVisibleElementLocator(href: Url?): Locator? {
+        if (!::resourcePager.isInitialized) return null
+        return when {
+            viewModel.layout == EpubLayout.FIXED && !isChromeBook() ->
+                currentLocator.value
+
+            else -> {
+                val resource = readingOrder[resourcePager.currentItem]
+                val resourceUrl = href ?: resource.url()
+                loadedFragmentForHref(href ?: resourceUrl)?.getWebView(href)
+                    ?.findFirstVisibleLocator()
+                    ?.copy(
+                        href = resourceUrl,
                         mediaType = resource.mediaType ?: MediaType.XHTML
                     )
             }
@@ -1131,6 +1164,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private fun notifyCurrentLocation() {
+        Timber.d("notifyCurrentLocation: ${view != null}")
         // Make sure viewLifecycleOwner is accessible.
         view ?: return
 
@@ -1138,65 +1172,77 @@ public class EpubNavigatorFragment internal constructor(
         debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(100L)
 
+            Timber.d("notifyCurrentLocation: ${currentReflowablePageFragment?.isLoaded?.value} $state")
             // We don't want to notify the current location if the navigator is still loading a
             // locator, to avoid notifying intermediate locations.
             if (currentReflowablePageFragment?.isLoaded?.value == false || state != State.Ready) {
                 return@launch
             }
 
-            val reflowableWebView = currentReflowablePageFragment?.webView
-            val progression = reflowableWebView?.run {
-                // The transition has stabilized, so we can ask the web view to refresh its current
-                // item to reflect the current scroll position.
-                updateCurrentItem()
-                progression.coerceIn(0.0, 1.0)
-            } ?: 0.0
+            when (val pageResource = adapter.getResource(resourcePager.currentItem)) {
+                is PageResource.EpubFxl -> {
+                    // Handle dual-page layout
+                    val leftLocator = pageResource.leftLink?.let { link ->
+                        createLocatorForLink(link, 0.0)
+                    }
+                    val rightLocator = pageResource.rightLink?.let { link ->
+                        createLocatorForLink(link, 0.0)
+                    }
 
-            val link = when (val pageResource = adapter.getResource(resourcePager.currentItem)) {
-                is PageResource.EpubFxl -> checkNotNull(
-                    pageResource.leftLink ?: pageResource.rightLink
-                )
+                    _currentLocators.value = Pair(leftLocator, rightLocator)
+                    // For backward compatibility, use the left locator as the primary one
+                    _currentLocator.value = leftLocator ?: rightLocator ?: _currentLocator.value
+                }
 
-                is PageResource.EpubReflowable -> pageResource.link
-                else -> throw IllegalStateException(
-                    "Expected EpubFxl or EpubReflowable page resources"
-                )
+                is PageResource.EpubReflowable -> {
+                    // Handle single-page layout
+                    val reflowableWebView = currentReflowablePageFragment?.webView
+                    val progression = reflowableWebView?.run {
+                        updateCurrentItem()
+                        progression.coerceIn(0.0, 1.0)
+                    } ?: 0.0
+
+                    val locator = createLocatorForLink(pageResource.link, progression)
+                    _currentLocators.value = Pair(locator, null)
+                    _currentLocator.value = locator
+                }
+
+                else -> throw IllegalStateException("Expected EpubFxl or EpubReflowable page resources")
             }
-            val positionLocator = publication.positionsByResource[link.url()]?.let { positions ->
-                val index = ceil(progression * (positions.size - 1)).toInt()
-                positions.getOrNull(index)
-            }
 
-            val currentLocator = Locator(
-                href = link.url(),
-                mediaType = link.mediaType ?: MediaType.XHTML,
-                title = tableOfContentsTitleByHref[link.href] ?: positionLocator?.title
-                ?: link.title,
-                locations = (positionLocator?.locations ?: Locator.Locations()).copy(
-                    progression = progression
-                ),
-                text = positionLocator?.text ?: Locator.Text()
-            )
-
-            // Update the current locator
-            _currentLocator.value = currentLocator
-
-            // Deprecated notifications
-            reflowableWebView?.let {
+            // Notify pagination listeners
+            currentReflowablePageFragment?.webView?.let {
                 paginationListener?.onPageChanged(
                     pageIndex = it.mCurItem,
                     totalPages = it.numPages,
-                    locator = currentLocator
+                    locator = _currentLocator.value
                 )
             }
         }
+    }
+
+    private fun createLocatorForLink(link: Link, progression: Double): Locator {
+        val positionLocator = publication.positionsByResource[link.url()]?.let { positions ->
+            val index = ceil(progression * (positions.size - 1)).toInt()
+            positions.getOrNull(index)
+        }
+
+        return Locator(
+            href = link.url(),
+            mediaType = link.mediaType ?: MediaType.XHTML,
+            title = tableOfContentsTitleByHref[link.href] ?: positionLocator?.title ?: link.title,
+            locations = (positionLocator?.locations ?: Locator.Locations()).copy(
+                progression = progression
+            ),
+            text = positionLocator?.text ?: Locator.Text()
+        )
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     public suspend fun getRectForLocator(locator: Locator): RectF? {
         return suspendCancellableCoroutine { continuation ->
             val fragment = loadedFragmentForHref(locator.href) ?: currentReflowablePageFragment
-            fragment?.webView?.getRectFromLocator(locator) { result ->
+            fragment?.getWebView(locator.href)?.getRectFromLocator(locator) { result ->
                 try {
                     // Parse the JSON result to extract the rectangle properties
                     val jsonObject = JSONObject(result)
@@ -1229,7 +1275,7 @@ public class EpubNavigatorFragment internal constructor(
         return suspendCancellableCoroutine { continuation ->
             val fragment = loadedFragmentForHref(href)
             Timber.d("getHtmlBodyTextContent: $href -> $fragment")
-            fragment?.webView?.getHtmlBodyTextContent { result ->
+            fragment?.getWebView(href)?.getHtmlBodyTextContent { result ->
                 continuation.resume(result) { throwable ->
                     continuation.cancel(throwable)
                 }
@@ -1237,6 +1283,11 @@ public class EpubNavigatorFragment internal constructor(
                 continuation.cancel(throwable)
             }
         }
+    }
+
+    public fun isHrefVisible(href: Url): Boolean {
+        val locatorPair = currentLocators.value
+        return locatorPair.first?.href == href || locatorPair.second?.href == href
     }
 
     public companion object {

@@ -49,3 +49,14 @@ public fun Publication.normalizeLocator(locator: Locator): Locator {
         }
     }
 }
+
+
+public fun Publication.getNextChapterUrl(locator: Locator): Url? {
+    return runCatching {
+        val currentChapterIndex = readingOrder.indexOfFirst {
+            it.href.toString() == locator.href.toString()
+        }
+
+        readingOrder[currentChapterIndex + 1].url()
+    }.getOrNull()
+}

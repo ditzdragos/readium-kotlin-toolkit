@@ -364,7 +364,7 @@ function rangeFromCachedLocator(locator) {
 export function rangeFromLocator(locator) {
   try {
 //    log("=========================")
-//    log("rangeFromLocator: locator", JSON.stringify(locator));
+    log("rangeFromLocator: locator", JSON.stringify(locator));
     let locations = locator.locations;
     let text = locator.text;
     if (text && text.highlight) {
@@ -391,14 +391,14 @@ export function rangeFromLocator(locator) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
 //          log("actual start and end:", locations.start, locations.end, root.textContent.length);
-          start = Math.max(locations.start-5, 0);
-          end = Math.min(locations.end+5, root.textContent.length);
+          start = Math.max(locations.start-10, 0);
+          end = Math.min(locations.end+10, root.textContent.length);
 //          log("adjusted start and end: ",start, end, root.textContent.length);
         }
       }
 
-//       log("Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
-//       log("Text at adjusted range: ", root.textContent.slice(start, end));
+       log("rangeFromLocator: Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
+       log("rangeFromLocator: Text at adjusted range: ", root.textContent.slice(start, end));
 
       let anchor = new TextQuoteAnchor(root, text.highlight, {
         prefix: text.before,

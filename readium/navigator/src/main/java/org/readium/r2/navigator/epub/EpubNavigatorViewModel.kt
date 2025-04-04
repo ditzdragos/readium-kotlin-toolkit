@@ -253,17 +253,20 @@ internal class EpubNavigatorViewModel(
      * Indicates whether the dual page mode is enabled.
      */
     val dualPageMode: DualPage
-        get() = when (layout) {
-            EpubLayout.FIXED -> when (settings.value.spread) {
-                Spread.AUTO -> DualPage.AUTO
-                Spread.ALWAYS -> DualPage.ON
-                Spread.NEVER -> DualPage.OFF
-            }
+        get() {
+            Timber.d("dualPageMode: ${layout} ${settings.value.spread} ${settings.value.columnCount}")
+            return when (layout) {
+                EpubLayout.FIXED -> when (settings.value.spread) {
+                    Spread.AUTO -> DualPage.AUTO
+                    Spread.ALWAYS -> DualPage.ON
+                    Spread.NEVER -> DualPage.OFF
+                }
 
-            EpubLayout.REFLOWABLE -> when (settings.value.columnCount) {
-                ColumnCount.ONE -> DualPage.OFF
-                ColumnCount.TWO -> DualPage.ON
-                ColumnCount.AUTO -> DualPage.AUTO
+                EpubLayout.REFLOWABLE -> when (settings.value.columnCount) {
+                    ColumnCount.ONE -> DualPage.OFF
+                    ColumnCount.TWO -> DualPage.ON
+                    ColumnCount.AUTO -> DualPage.AUTO
+                }
             }
         }
 
@@ -396,6 +399,7 @@ internal class EpubNavigatorViewModel(
 
     companion object {
 
+        @OptIn(InternalReadiumApi::class)
         fun createFactory(
             application: Application,
             publication: Publication,
