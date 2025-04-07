@@ -550,8 +550,13 @@ internal class R2EpubPageFragment : Fragment() {
 
                 // Only inject if we have valid dimensions
                 if (actualWidth > 0 && actualHeight > 0) {
+                    // Account for device pixel ratio
+                    val density = resources.displayMetrics.density
+                    val scaledWidth = (actualWidth / density).toInt()
+                    val scaledHeight = (actualHeight / density).toInt()
+                    
                     webView.evaluateJavascript(
-                        WebViewScripts.getCenteringScript(actualWidth, actualHeight),
+                        WebViewScripts.getCenteringScript(scaledWidth, scaledHeight),
                         null
                     )
                 } else {
@@ -559,20 +564,28 @@ internal class R2EpubPageFragment : Fragment() {
                     webView.postDelayed({
                                             val finalWidth = webView.width
                                             val finalHeight = webView.height
-                                            webView.evaluateJavascript(
-                                                WebViewScripts.getCenteringScript(
-                                                    finalWidth.coerceAtLeast(1),
-                                                    finalHeight.coerceAtLeast(1)
-                                                ),
-                                                null
-                                            )
+                                            if (finalWidth > 0 && finalHeight > 0) {
+                                                val density = resources.displayMetrics.density
+                                                val scaledWidth = (finalWidth / density).toInt()
+                                                val scaledHeight = (finalHeight / density).toInt()
+                                                webView.evaluateJavascript(
+                                                    WebViewScripts.getCenteringScript(
+                                                        scaledWidth.coerceAtLeast(1),
+                                                        scaledHeight.coerceAtLeast(1)
+                                                    ),
+                                                    null
+                                                )
+                                            }
                                         }, 300)
                 }
             }
         } else {
             // If dimensions are immediately available, use them directly
+            val density = resources.displayMetrics.density
+            val scaledWidth = (viewportWidth / density).toInt()
+            val scaledHeight = (viewportHeight / density).toInt()
             webView.evaluateJavascript(
-                WebViewScripts.getCenteringScript(viewportWidth, viewportHeight),
+                WebViewScripts.getCenteringScript(scaledWidth, scaledHeight),
                 null
             )
         }
@@ -586,7 +599,10 @@ internal class R2EpubPageFragment : Fragment() {
 
             // If dimensions have changed significantly, update the scaling
             if (Math.abs(newWidth - oldWidth) > 5 || Math.abs(newHeight - oldHeight) > 5) {
-                updateViewportScaling(webView, newWidth, newHeight)
+                val density = resources.displayMetrics.density
+                val scaledWidth = (newWidth / density).toInt()
+                val scaledHeight = (newHeight / density).toInt()
+                updateViewportScaling(webView, scaledWidth, scaledHeight)
             }
         }
     }

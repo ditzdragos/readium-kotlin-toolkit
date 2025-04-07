@@ -88,62 +88,31 @@ internal object WebViewScripts {
             var viewportHeight = $viewportHeight;
             console.log('Using exact viewport from Android: ' + viewportWidth + 'x' + viewportHeight);
             
-            // Calculate scale based on the provided viewport dimensions
-            var scaleX = viewportWidth / contentWidth;
-            var scaleY = viewportHeight / contentHeight;
-            
-            // Apply a small safety margin
-            var marginFactor = 1.0; // Default to 1% margin
-            
-            var scale = Math.min(scaleX, scaleY) * marginFactor;
-            
-            // IMPORTANT: Only scale down, never scale up
-            // If content is smaller than viewport, set scale to 1.0 (no scaling)
-            // BUT - we need to account for aspect ratio differences
-            
             // Calculate aspect ratios
             var contentRatio = contentHeight / contentWidth;
             var viewportRatio = viewportHeight / viewportWidth;
             
-            if (contentWidth <= viewportWidth && contentHeight <= viewportHeight) {
-                // Content fits entirely - check aspect ratio
-                if (contentRatio > viewportRatio) {
-                    // Content is taller relative to width than the viewport
-                    // Use direct ratio between aspect ratios with a small safety margin
-                    scale = (viewportRatio / contentRatio) * 1.0;
-                    console.log('Content aspect ratio taller than viewport: ' + 
-                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
-                                ', scaling to: ' + scale.toFixed(3));
-                } else if (contentRatio < viewportRatio) {
-                    // Content is wider relative to height than the viewport
-                    // Per client request, don't scale down wider content
-                    console.log('Content aspect ratio wider than viewport: ' + 
-                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
-                                ', not scaling');
-                    scale = 1.0;
-                } else {
-                    // Aspect ratios match well, no special scaling needed
-                    console.log('Content is smaller than viewport with compatible aspect ratio, will center without scaling');
-                    scale = 1.0;
-                }
+            // Simple ratio comparison for scaling
+            var scale = 1.0;
+            
+            if (viewportRatio < contentRatio) {
+                // Viewport is wider relative to height than content
+                // Scale down to match the viewport's aspect ratio
+                scale = (viewportRatio / contentRatio) * 0.99;
+                console.log('Viewport ratio (' + viewportRatio.toFixed(2) + ') is smaller than content ratio (' + 
+                            contentRatio.toFixed(2) + '), scaling to: ' + scale.toFixed(3));
             } else {
-                // Content is larger than viewport in at least one dimension
-                if (scaleX < scaleY) {
-                    // Width is the limiting factor (content is wider relative to the viewport)
-                    console.log('Content is wider than viewport, not scaling per client request');
-                    scale = 1.0;
-                } else {
-                    // Height is the limiting factor (content is taller relative to the viewport)
-                    // Scale down by height ratio with a small safety margin
-                    scale = scaleY * 1.0;
-                    console.log('Content is taller than viewport, scaling down by factor: ' + scale.toFixed(4));
-                }
+                // Viewport is taller relative to width than content
+                // No scaling needed
+                console.log('Viewport ratio (' + viewportRatio.toFixed(2) + ') is larger than content ratio (' + 
+                            contentRatio.toFixed(2) + '), no scaling needed');
+                scale = 1.0;
             }
             
             // For content that barely fits (scale is close to 1.0), apply a small safety margin
             if (scale >= 0.95 && scale < 1.0) {
                 console.log('Content barely fits, applying slight safety margin');
-                scale *= 1.0; // Small 1% reduction for safety
+                scale *= 0.99; // Small 1% reduction for safety
             }
             
             console.log('Using scale: ' + scale);
@@ -176,6 +145,8 @@ internal object WebViewScripts {
             wrapper.style.alignItems = 'center';     // Vertical centering
             wrapper.style.justifyContent = 'center'; // Horizontal centering
             wrapper.style.boxSizing = 'border-box';
+            wrapper.style.padding = '0';
+            wrapper.style.margin = '0';
             
             // Create an inner container that will be scaled
             var scaleContainer = document.createElement('div');
@@ -274,39 +245,18 @@ internal object WebViewScripts {
             var contentRatio = contentHeight / contentWidth;
             var viewportRatio = viewportHeight / viewportWidth;
             
-            if (contentWidth <= viewportWidth && contentHeight <= viewportHeight) {
-                // Content fits entirely - check aspect ratio
-                if (contentRatio > viewportRatio) {
-                    // Content is taller relative to width than the viewport
-                    // Use direct ratio between aspect ratios with a small safety margin
-                    scale = (viewportRatio / contentRatio) * 0.995;
-                    console.log('Content aspect ratio taller than viewport: ' + 
-                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
-                                ', scaling to: ' + scale.toFixed(3));
-                } else if (contentRatio < viewportRatio) {
-                    // Content is wider relative to height than the viewport
-                    // Per client request, don't scale down wider content
-                    console.log('Content aspect ratio wider than viewport: ' + 
-                                contentRatio.toFixed(2) + ' vs ' + viewportRatio.toFixed(2) + 
-                                ', not scaling');
-                    scale = 1.0;
-                } else {
-                    // Aspect ratios match well, no special scaling needed
-                    console.log('Content is smaller than viewport with compatible aspect ratio, will center without scaling');
-                    scale = 1.0;
-                }
+            if (viewportRatio < contentRatio) {
+                // Viewport is wider relative to height than content
+                // Scale down to match the viewport's aspect ratio
+                scale = (viewportRatio / contentRatio) * 0.99;
+                console.log('Viewport ratio (' + viewportRatio.toFixed(2) + ') is smaller than content ratio (' + 
+                            contentRatio.toFixed(2) + '), scaling to: ' + scale.toFixed(3));
             } else {
-                // Content is larger than viewport in at least one dimension
-                if (scaleX < scaleY) {
-                    // Width is the limiting factor (content is wider relative to the viewport)
-                    console.log('Content is wider than viewport, not scaling per client request');
-                    scale = 1.0;
-                } else {
-                    // Height is the limiting factor (content is taller relative to the viewport)
-                    // Scale down by height ratio with a small safety margin
-                    scale = scaleY * 0.995;
-                    console.log('Content is taller than viewport, scaling down by factor: ' + scale.toFixed(4));
-                }
+                // Viewport is taller relative to width than content
+                // No scaling needed
+                console.log('Viewport ratio (' + viewportRatio.toFixed(2) + ') is larger than content ratio (' + 
+                            contentRatio.toFixed(2) + '), no scaling needed');
+                scale = 1.0;
             }
             
             // For content that barely fits (scale is close to 1.0), apply a small safety margin
