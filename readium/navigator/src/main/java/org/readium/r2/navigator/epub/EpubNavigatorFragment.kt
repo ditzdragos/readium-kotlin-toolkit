@@ -281,7 +281,7 @@ public class EpubNavigatorFragment internal constructor(
     public interface PaginationListener {
         public fun onPageChanged(pageIndex: Int, totalPages: Int, locator: Locator) {}
         public fun onPageLoaded() {}
-        public fun onPageLoaded(isReady: Boolean) {}
+        public fun onPageLoaded(href: Url, isReady: Boolean) {}
     }
 
     public interface Listener : OverflowableNavigator.Listener, HyperlinkNavigator.Listener
@@ -504,7 +504,8 @@ public class EpubNavigatorFragment internal constructor(
             }
 
             EpubLayout.FIXED -> {
-                val resources = if(viewModel.dualPageMode == DualPage.ON) resourcesDouble else resourcesSingle
+                val resources =
+                    if (viewModel.dualPageMode == DualPage.ON) resourcesDouble else resourcesSingle
                 R2PagerAdapter(childFragmentManager, resources)
             }
         }
@@ -842,7 +843,7 @@ public class EpubNavigatorFragment internal constructor(
 
             Timber.d("onPageLoaded: ${link.href} ${state}")
             if (state == State.Ready) {
-                paginationListener?.onPageLoaded(true)
+                paginationListener?.onPageLoaded(link.url(), true)
             }
         }
 
@@ -1088,6 +1089,15 @@ public class EpubNavigatorFragment internal constructor(
     private val _currentLocators = MutableStateFlow<Pair<Locator?, Locator?>>(Pair(null, null))
     public val currentLocators: StateFlow<Pair<Locator?, Locator?>> = _currentLocators.asStateFlow()
 
+    public fun getVisibleHrefs(): List<Url> {
+        val hrefs = mutableSetOf<Url>()
+        r2PagerAdapter?.mFragments?.forEach { _, fragment ->
+            val pageFragment = fragment as? R2EpubPageFragment ?: return@forEach
+            pageFragment.link?.url()?.let { hrefs.add(it) }
+            pageFragment.rightLink?.url()?.let { hrefs.add(it) }
+        }
+        return hrefs.toList()
+    }
 
     /**
      * Returns the [Locator] to the first HTML *block* element that is visible on the screen, even
