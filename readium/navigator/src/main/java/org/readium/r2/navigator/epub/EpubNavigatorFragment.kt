@@ -1248,33 +1248,85 @@ public class EpubNavigatorFragment internal constructor(
         )
     }
 
+    /**
+     * Parses a JSON string containing rectangle coordinates into a RectF object.
+     * Returns null if parsing fails or the required keys are missing.
+     */
+    private fun parseRectFFromJson(jsonString: String, locatorHref: Url): RectF? {
+        return try {
+            Timber.d("Parsing RectF for $locatorHref from JSON: $jsonString")
+            val jsonObject = JSONObject(jsonString)
+            // Check if the rect is valid (e.g., contains non-zero dimensions or specific properties)
+            val left = jsonObject.optDouble("left", 0.0).toFloat()
+            val top = jsonObject.optDouble("top", 0.0).toFloat()
+            val right = jsonObject.optDouble("right", 0.0).toFloat()
+            val bottom = jsonObject.optDouble("bottom", 0.0).toFloat()
+            val rect = RectF(left, top, right, bottom)
+            Timber.d("Parsed RectF for $locatorHref: $rect")
+            rect
+        } catch (e: Exception) {
+            Timber.e(e, "Error parsing JSON to RectF for $locatorHref")
+            null
+        }
+    }
+
+    /**
+     * Adjusts the given RectF based on viewport padding and applies horizontal offset
+     * if it's the right page in a fixed-layout dual-page view.
+     */
+    private fun adjustRectForLayout(rect: RectF, locatorHref: Url): RectF {
+        val adjustedRect = rect.adjustedToViewport()
+        Timber.d("RectF after adjustedToViewport for $locatorHref: $adjustedRect")
+
+        // Check if we are in fixed layout, dual page mode, and the locator is for the right page
+        if (viewModel.layout == EpubLayout.FIXED && viewModel.dualPageMode == DualPage.ON) {
+            val pageResource = adapter.getResource(resourcePager.currentItem)
+            if (pageResource is PageResource.EpubFxl && locatorHref == pageResource.rightLink?.url()) {
+                // Calculate the horizontal offset (width of the left page's view area)
+                val horizontalOffset = resourcePager.width / 2f
+                Timber.d("Applying RectF horizontal offset for right page $locatorHref: $horizontalOffset")
+                // Apply the offset
+                adjustedRect.offset(horizontalOffset, 0f)
+                Timber.d("RectF after horizontal offset for $locatorHref: $adjustedRect")
+            }
+        }
+        return adjustedRect
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     public suspend fun getRectForLocator(locator: Locator): RectF? {
         return suspendCancellableCoroutine { continuation ->
-            val fragment = loadedFragmentForHref(locator.href) ?: currentReflowablePageFragment
+            // Find the fragment containing the locator's href
+            val fragment = loadedFragmentForHref(locator.href)
+            Timber.d("getRectForLocator for href ${locator.href} found fragment: ${fragment != null}")
+
             fragment?.getWebView(locator.href)?.getRectFromLocator(locator) { result ->
-                try {
-                    // Parse the JSON result to extract the rectangle properties
-                    val jsonObject = JSONObject(result)
-                    val left = jsonObject.optDouble("left", 0.0).toFloat()
-                    val top = jsonObject.optDouble("top", 0.0).toFloat()
-                    val right = jsonObject.optDouble("right", 0.0).toFloat()
-                    val bottom = jsonObject.optDouble("bottom", 0.0).toFloat()
+                val parsedRect = parseRectFFromJson(result, locator.href)
 
-                    val rect = RectF(left, top, right, bottom)
-
-                    continuation.resume(rect.adjustedToViewport()) { throwable ->
+                if (parsedRect != null) {
+                    val adjustedRect = adjustRectForLayout(parsedRect, locator.href)
+                    continuation.resume(adjustedRect) { throwable ->
+                        Timber.e(
+                            throwable,
+                            "Error resuming continuation in getRectForLocator for ${locator.href}"
+                        )
                         continuation.cancel(throwable)
                     }
-
-                } catch (e: Exception) {
-                    // Handle any JSON parsing or other errors
-                    Timber.e("Error parsing JSON to RectF $e")
-                    continuation.resume(DEFAULT_RECTF) { throwable ->
+                } else {
+                    // Parsing failed or rect data was invalid
+                    continuation.resume(RectF(-1f, -1f, -1f, -1f)) { throwable ->
+                        Timber.e(
+                            throwable,
+                            "Error resuming continuation with defaultRect after parsing failure for ${locator.href}"
+                        )
                         continuation.cancel(throwable)
                     }
                 }
-            } ?: continuation.resume(DEFAULT_RECTF) { throwable ->
+            } ?: continuation.resume(RectF(-1f, -1f, -1f, -1f)) { throwable ->
+                Timber.e(
+                    throwable,
+                    "Error resuming continuation with defaultRect when WebView not found for ${locator.href}"
+                )
                 continuation.cancel(throwable)
             }
         }
