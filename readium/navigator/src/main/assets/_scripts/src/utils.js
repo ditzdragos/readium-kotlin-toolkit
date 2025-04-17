@@ -569,3 +569,264 @@ export function getRectFromLocator(locator) {
 export function getHtmlBodyTextContent() {
   return document.body.textContent;
 }
+
+
+export function calculateHorizontalPageRanges() {
+  const rangeData = {};
+  let node = document.body.firstChild;
+  let currentPage = 0;
+  let rangeIndex = 0;
+  let pageWidth = window.innerWidth;
+
+  // const pagesPerRange = 2;
+  let currentTextLength = 0;
+  const minCharactersPerRange = 1000;
+  let previousElementRect = new DOMRect(0, 0, 0, 0);
+
+  function processElement(element) {
+    log("node name " + element.nodeName);
+    log("<" + element.textContent + ">");
+
+    let rect;
+
+    let processText = false;
+    if (element.nodeType === Node.TEXT_NODE) {
+      if (/\S/.test(element.textContent)) {
+        processText = true;
+        let range = document.createRange();
+        range.selectNode(element);
+        rect = range.getBoundingClientRect();
+      } else {
+        log("node text does not have text");
+        addTextToRange(element.textContent, rangeIndex);
+      }
+    } else if (
+      element.nodeType === Node.ELEMENT_NODE &&
+      element.textContent.length > 0
+    ) {
+      processText = true;
+      rect = element.getBoundingClientRect();
+    } else if (element.nodeName === "br") {
+      log(`adding br as new line`);
+      addTextToRange("\n", rangeIndex);
+    }
+
+    if (processText) {
+      rect.x += window.scrollX;
+
+      log("rect x: " + rect.x);
+      log("rext width: " + rect.width);
+      log("current page: " + currentPage);
+      log("current text length: " + currentTextLength);
+      log("current page x: " + currentPage * pageWidth);
+      log("next page x: " + (currentPage + 1) * pageWidth);
+
+      if (rect.x > (currentPage + 1) * pageWidth) {
+        const additionalPages = Math.floor(rect.x / pageWidth - currentPage);
+        currentPage = currentPage + additionalPages;
+        log("increase current page: " + currentPage);
+
+        log("previous rect x: " + previousElementRect.x);
+        log("previous rect width: " + previousElementRect.width);
+
+        // if previousElementRect.x + previousElementRect.width is more than curent page x+width, then we compare with next next page max x
+
+        let maxX = previousElementRect.x + previousElementRect.width;
+        if (maxX > (currentPage + 1) * pageWidth) {
+          maxX = (currentPage + 1) * pageWidth + pageWidth;
+        }
+        if (currentTextLength >= minCharactersPerRange && maxX < rect.x) {
+          rangeIndex++;
+          // currentTextLength = 0;
+          log("increase range index: " + rangeIndex);
+          currentTextLength = element.textContent.length;
+          addTextToRange(element.textContent, rangeIndex);
+          previousElementRect = rect;
+          return;
+        }
+      }
+
+      if (
+        currentTextLength >= minCharactersPerRange &&
+        rect.x + rect.width > (currentPage + 1) * pageWidth
+      ) {
+        log("paragraph does not fit on current page");
+        processTextContent(element, element.textContent);
+      } else {
+        // if (
+        //   currentTextLength + element.textContent.length >
+        //   minCharactersPerRange
+        // ) {
+        //   log("paragraph is too big; analyze words");
+        //   processTextContent(element, element.textContent);
+        // } else {
+        log("add entire paragraph");
+        currentTextLength += element.textContent.length;
+        addTextToRange(element.textContent, rangeIndex);
+        // }
+      }
+
+      previousElementRect = rect;
+    }
+  }
+
+  function processTextContent(element, textContent) {
+    // Split the text by spaces or dashes, and keep the delimiters
+    let words = textContent.split(/(\s|[-–—―‒])/g).filter(Boolean); // Split on spaces or dashes, keeping them as separate tokens
+    let removedText = "";
+    let removedWord = "";
+    let firstPoppedElement = true;
+    let remainderDoesNotFitOnNextPage = false;
+
+    let wordBoundingRect = new DOMRect(
+      Number.MAX_VALUE, // we use the max possible value for 'x' to make sure it enters the 'while' iterator
+      0,
+      0,
+      0
+    );
+
+    // Reduce the element text until it fits the page height
+    while (
+      wordBoundingRect.x + wordBoundingRect.width >
+        (currentPage + 1) * pageWidth &&
+      words.length > 0
+    ) {
+      removedWord = words.pop(); // Remove the last word or delimiter
+
+      log("word: <" + removedWord + ">");
+
+      if (removedWord === " ") {
+        removedText = removedWord + removedText;
+      } else {
+        try {
+          let anchor = new TextQuoteAnchor(element, removedWord, {
+            prefix: words.join(""), // Join without adding any additional characters
+            suffix: removedText.length > 0 ? removedText : "",
+          });
+
+          // log("anchor prefix: " + anchor.context.prefix);
+          // log("anchor suffix: " + anchor.context.suffix);
+          // log("anchor highlight: " + anchor.exact);
+
+          wordBoundingRect = anchor.toRange().getBoundingClientRect();
+          wordBoundingRect.x += window.scrollX;
+          log("word rect x: " + wordBoundingRect.x);
+          log("word rect width: " + wordBoundingRect.width);
+          log("current page max x: " + (currentPage + 1) * pageWidth);
+
+          if (
+            wordBoundingRect.x + wordBoundingRect.width >
+            (currentPage + 1) * pageWidth
+          ) {
+            removedText = removedWord + removedText;
+          }
+
+          if (firstPoppedElement) {
+            if (wordBoundingRect.x > (currentPage + 2) * pageWidth) {
+              log("text does not fit on the next page");
+              remainderDoesNotFitOnNextPage = true;
+            }
+          }
+
+          firstPoppedElement = false;
+        } catch {
+          log("could not find range for word");
+          // if (removedWord === "") {
+          //     removedText = removedText;
+          // }
+        }
+      }
+    }
+
+    // If after removing all words it still doesn't fit, start on a new page
+    if (
+      words.length === 0 &&
+      wordBoundingRect.x > (currentPage + 1) * pageWidth
+    ) {
+      // This should never happen!!!
+      log("this should never happen");
+      rangeIndex += 1;
+      currentPage += 1; // Move to the next page
+      //TODO the element must go through the regular processing in this case
+      currentTextLength = textContent.length;
+      addTextToRange(textContent, rangeIndex);
+    } else {
+      words.push(removedWord);
+
+      addTextToRange(words.join(""), rangeIndex);
+      currentPage += 1;
+      rangeIndex += 1;
+
+      // TODO do we need to also check the current text length here????
+      if (remainderDoesNotFitOnNextPage) {
+        log("remainderDoesNotFitOnNextPage");
+        // processTextContent(element, removedText);
+      }
+      // else {
+      currentTextLength = removedText.length;
+      addTextToRange(removedText, rangeIndex);
+      // }
+    }
+  }
+
+  function addTextToRange(text, range) {
+    const existingText = rangeData[range.toString()];
+    if (existingText !== undefined) {
+      const newText = existingText + text;
+      rangeData[range.toString()] = newText;
+    } else {
+      rangeData[range.toString()] = text;
+    }
+
+    log("adding text: <" + text + ">");
+    log("to range index: " + range);
+  }
+
+  function processNode(node) {
+    log(`process node with name : ${node.nodeName} and type: ${node.nodeType}`);
+
+    // Disabling this until we find a way to integrate this in the app;
+
+    // if (node.nodeType === Node.ELEMENT_NODE && node.textContent.length > 0) {
+    //   // Check the opacity of the element
+    //   let computedStyle = window.getComputedStyle(node);
+    //   let opacity = computedStyle.opacity;
+
+    //   if (opacity === "0") {
+    //     log(`Element has opacity 0, skipping processing: ${node.textContent}`);
+    //     return;
+    //   }
+    // }
+
+    // log("process node <" + node.textContent + ">");
+
+    const keys = Object.keys(rangeData);
+
+    if (node.nodeName === "p" && keys.length > 0) {
+      const lastKey = keys[keys.length - 1];
+      const lastItem = rangeData[lastKey];
+      if (!/\s$/.test(lastItem)) {
+        log(`appending new line before paragraph`);
+        addTextToRange("\n", rangeIndex);
+      }
+    }
+
+    if (node.childNodes.length > 0) {
+      let child = node.firstChild;
+      while (child) {
+        // log("<         1         >");
+        processNode(child);
+        child = child.nextSibling;
+      }
+    } else {
+      processElement(node);
+    }
+  }
+
+  while (node) {
+    processNode(node);
+    node = node.nextSibling;
+  }
+
+  return rangeData;
+}

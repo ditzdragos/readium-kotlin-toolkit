@@ -20,7 +20,8 @@ import {
   setProperty,
   setCSSProperties,
   getRectFromLocator,
-  getHtmlBodyTextContent
+  getHtmlBodyTextContent,
+  calculateHorizontalPageRanges
 } from "./utils";
 import { findFirstVisibleLocator } from "./dom";
 import { getCurrentSelection } from "./selection";
@@ -51,4 +52,5 @@ window.readium = {
   // DOM
   findFirstVisibleLocator: findFirstVisibleLocator,
   getHtmlBodyTextContent: getHtmlBodyTextContent,
+  calculateHorizontalPageRanges: calculateHorizontalPageRanges
 };

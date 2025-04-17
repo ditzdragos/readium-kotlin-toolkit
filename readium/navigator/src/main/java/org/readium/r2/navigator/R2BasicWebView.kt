@@ -573,6 +573,10 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         runJavaScript("readium.getHtmlBodyTextContent();", callback)
     }
 
+    fun calculateHorizontalPageRanges(callback: (String) -> Unit) {
+        runJavaScript("readium.calculateHorizontalPageRanges();", callback)
+    }
+
     internal suspend fun findFirstVisibleLocator(): Locator? =
         runJavaScriptSuspend("readium.findFirstVisibleLocator();")
             .let { tryOrNull { JSONObject(it) } }

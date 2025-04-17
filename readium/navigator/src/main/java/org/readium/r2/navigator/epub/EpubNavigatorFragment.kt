@@ -34,6 +34,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.withStarted
 import androidx.viewpager.widget.ViewPager
+import kotlin.coroutines.resume
 import kotlin.math.ceil
 import kotlin.reflect.KClass
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -47,6 +48,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONException
 import org.json.JSONObject
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
@@ -88,6 +90,7 @@ import org.readium.r2.navigator.util.isChromeBook
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
+import org.readium.r2.shared.extensions.toMap
 import org.readium.r2.shared.extensions.tryOrLog
 import org.readium.r2.shared.publication.Href
 import org.readium.r2.shared.publication.Link
@@ -1343,6 +1346,31 @@ public class EpubNavigatorFragment internal constructor(
                 }
             } ?: continuation.resume("") { throwable ->
                 continuation.cancel(throwable)
+            }
+        }
+    }
+
+    public suspend fun calculateHorizontalPageRanges(href: Url): List<String> {
+        return suspendCancellableCoroutine { continuation ->
+            val fragment = loadedFragmentForHref(href)
+            Timber.d("calculateHorizontalPageRanges: $href -> $fragment")
+            fragment?.getWebView(href)?.calculateHorizontalPageRanges { result ->
+                Timber.d("calculateHorizontalPageRanges: $result")
+                try {
+                    val map = JSONObject(result).toMap()
+
+                    val pageRanges = map.entries
+                        .sortedBy { it.key }
+                        .map { it.value.toString() }
+
+                    continuation.resume(pageRanges)
+                } catch (e: JSONException) {
+                    Timber.e(e, "Error parsing page ranges JSON: $result")
+                    continuation.cancel(e)
+                } catch (e: Exception) {
+                    Timber.e(e, "Unexpected error processing page ranges result")
+                    continuation.cancel(e)
+                }
             }
         }
     }
