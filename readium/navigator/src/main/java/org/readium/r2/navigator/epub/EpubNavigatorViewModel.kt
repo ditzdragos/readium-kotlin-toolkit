@@ -172,14 +172,11 @@ internal class EpubNavigatorViewModel(
                 it.locator.href == link.url()
             }
                 .map {
-                    Timber.d("onResourceLoaded: $group ${it.id}")
                     DecorationChange.Added(it)
                 }
-            Timber.d("onResourceLoaded: changes for $link : $changes")
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
             script += "$groupScript\n"
         }
-        Timber.d("onResourceLoaded: script for $link : $script")
         return RunScriptCommand(script, scope = RunScriptCommand.Scope.WebView(webView))
     }
 
