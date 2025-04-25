@@ -78,20 +78,34 @@ export function applyInitialScaling() {
     var scale = 1.0;
     if (contentWidth > 0 && contentHeight > 0) {
         // New logic: Determine scale based on content aspect ratio, max 1.0
-        let ratioWidth = viewportWidth / contentWidth;
-        let ratioHeight = viewportHeight / contentHeight;
-        let targetRatio = 1.0;
+         // Calculate aspect ratios
+        var contentRatio = contentHeight / contentWidth;
+        var viewportRatio = viewportHeight / viewportWidth;
 
-        if (contentHeight > contentWidth) { // Page is taller than wide (portrait)
-            targetRatio = ratioHeight;
-            console.log('[R2Scale] Content is portrait, targeting height ratio: ' + targetRatio.toFixed(3));
-        } else { // Page is wider than tall (landscape) or square
-            targetRatio = ratioWidth;
-            console.log('[R2Scale] Content is landscape or square, targeting width ratio: ' + targetRatio.toFixed(3));
+        // Simple ratio comparison for scaling
+        var scale = 1.0;
+
+        if (viewportRatio < contentRatio) {
+            // Viewport is wider relative to height than content
+            // Scale down to match the viewport's aspect ratio
+            scale = (viewportRatio / contentRatio);
+            console.log('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is smaller than content ratio (' +
+                        contentRatio.toFixed(2) + '), scaling to: ' + scale.toFixed(3));
+        } else {
+            // Viewport is taller relative to width than content
+            // No scaling needed
+            console.log('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is larger than content ratio (' +
+                        contentRatio.toFixed(2) + '), no scaling needed');
+            scale = 1.0;
+        }
+
+        // For content that barely fits (scale is close to 1.0), apply a small safety margin
+        if (scale >= 0.95 && scale < 1.0) {
+            console.log('[R2Scale] Content barely fits, applying slight safety margin');
         }
 
         // Apply rule: No scaling up (max scale is 1.0)
-        scale = Math.min(1.0, targetRatio);
+        scale = Math.min(1.0, scale);
 
     } else {
         console.warn("[R2Scale] Content dimensions are zero or invalid, defaulting scale to 1.0");
@@ -99,9 +113,7 @@ export function applyInitialScaling() {
     }
 
     // Optional: Apply safety margin (e.g., 1%)
-    // scale *= 0.99;
-    // console.log('[R2Scale] Calculated scale (with safety margin): ' + scale.toFixed(3));
-    console.log('[R2Scale] Calculated final scale: ' + scale.toFixed(3));
+    console.log('[R2Scale] Calculated scale (with safety margin): ' + scale.toFixed(3));
 
     // Apply scaling via wrapper
     var existingWrapper = document.getElementById('r2-scale-wrapper');
@@ -241,9 +253,7 @@ export function updateScaling() {
     }
 
     // Optional: Apply safety margin
-    // scale *= 0.99;
-    // console.log('[R2Scale] Updating scale transform (with safety margin) to: ' + scale.toFixed(3));
-    console.log('[R2Scale] Updating scale transform to: ' + scale.toFixed(3));
+    console.log('[R2Scale] Updating scale transform (with safety margin) to: ' + scale.toFixed(3));
 
     scaleContainer.style.transform = 'scale(' + scale + ')';
     window.r2CurrentScale = scale; // Update stored scale
@@ -263,7 +273,7 @@ export function setupScalingListeners() {
         console.log(`[R2Scale] Viewport meta tag detected, setting up scaling listeners.`);
 
         // Debounced resize handler to avoid excessive updates
-        const debouncedUpdateScaling = debounce(updateScaling, 250); // 250ms delay seems reasonable
+//        const debouncedUpdateScaling = debounce(updateScaling, 250); // 250ms delay seems reasonable
 
         // Apply initial scaling
         // Try using the 'load' event instead of 'DOMContentLoaded' as it might occur after layout is more stable in a WebView
@@ -277,7 +287,7 @@ export function setupScalingListeners() {
         }
 
         // Add listener to update scaling on window resize
-        window.addEventListener('resize', debouncedUpdateScaling);
+//        window.addEventListener('resize', debouncedUpdateScaling);
 
     } else {
         console.log("[R2Scale] No viewport meta tag found. Assuming reflowable content, scaling setup skipped.");
