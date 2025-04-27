@@ -54,18 +54,7 @@ export function applyInitialScaling() {
     // Fallback if meta tag is missing or invalid - crucial for FXL without viewport
     if (!contentWidth || !contentHeight) {
         console.log('[R2Scale] No valid meta viewport dimensions found, using body scroll dimensions as fallback.');
-        // Use scrollWidth/Height for fallback, but prefer clientWidth/Height if available and non-zero
-        contentWidth = document.body.scrollWidth || document.documentElement.scrollWidth || document.body.clientWidth || document.documentElement.clientWidth;
-        contentHeight = document.body.scrollHeight || document.documentElement.scrollHeight || document.body.clientHeight || document.documentElement.clientHeight;
-        dimensionMethod = 'body/doc scroll/client dimensions';
-        // Further fallback if scroll dimensions are zero (rare case)
-        if (!contentWidth || !contentHeight) {
-            console.log('[R2Scale] Body/doc dimensions are zero, using default fallback 1024x768');
-            contentWidth = 1024; // Consider if this fallback is appropriate
-            contentHeight = 768;
-            dimensionMethod = 'default fallback';
-        }
-        console.log('[R2Scale] Using fallback dimensions: ' + contentWidth + 'x' + contentHeight);
+        return;
     }
 
     console.log('[R2Scale] Final dimension detection method: ' + dimensionMethod);
