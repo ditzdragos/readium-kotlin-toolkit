@@ -255,53 +255,12 @@ export function updateScaling() {
  * This should be called once the core Readium scripts are ready.
  */
 export function setupScalingListeners() {
-    // Check if this content *should* be scaled (e.g., has viewport meta tag)
     const hasViewportMeta = document.querySelector('meta[name="viewport"]');
 
     if (hasViewportMeta) {
-        console.log(`[R2Scale] Viewport meta tag detected, setting up scaling listeners.`);
-
-        // Debounced resize handler to avoid excessive updates
-//        const debouncedUpdateScaling = debounce(updateScaling, 250); // 250ms delay seems reasonable
-
-        // Apply initial scaling
-        // Try using the 'load' event instead of 'DOMContentLoaded' as it might occur after layout is more stable in a WebView
-        if (document.readyState === 'complete') { // 'complete' corresponds to the 'load' event state
-            console.log("[R2Scale] Document ready (complete state), applying initial scaling immediately.");
-            applyInitialScaling();
-        } else {
-            console.log("[R2Scale] Document not complete, applying initial scaling on 'load' event.");
-            // Using once: true ensures the listener is removed after first execution
-            window.addEventListener('load', applyInitialScaling, { once: true }); // Changed from 'DOMContentLoaded' to 'load'
-        }
-
-        // Add listener to update scaling on window resize
-//        window.addEventListener('resize', debouncedUpdateScaling);
-
+       console.log(`[R2Scale] Viewport meta tag detected, setting up scaling listeners.`);
+       applyInitialScaling();
     } else {
         console.log("[R2Scale] No viewport meta tag found. Assuming reflowable content, scaling setup skipped.");
-        // Ensure no previous scaling artifacts are present if switching content types
-        var existingWrapper = document.getElementById('r2-scale-wrapper');
-        if(existingWrapper && existingWrapper.parentNode) {
-            console.log("[R2Scale] Removing leftover scale wrapper found on non-FXL content.");
-             // Move children back from container to body before removing wrapper
-             var scaleContainer = document.getElementById('r2-scale-container');
-             if (scaleContainer) {
-                 while (scaleContainer.firstChild) {
-                      if(scaleContainer.firstChild !== existingWrapper){
-                         document.body.appendChild(scaleContainer.firstChild);
-                      } else {
-                         scaleContainer.removeChild(scaleContainer.firstChild);
-                      }
-                 }
-             }
-             existingWrapper.parentNode.removeChild(existingWrapper);
-        }
-        // Reset flags in case they were set by previous content
-        window.r2ScalingApplied = false;
-        window.r2ScalingInProgress = false;
-        window.r2ContentDimensions = null;
-        window.r2CurrentScale = null;
-        window.r2LastJSViewport = null;
     }
 }
