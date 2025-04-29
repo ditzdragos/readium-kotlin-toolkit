@@ -468,9 +468,7 @@ export function DecorationGroup(groupId, groupName) {
             );
         return;
       }
-
-
-     function postMessageWithInvalidRect() {
+        function postMessageWithInvalidRect() {
           logError('fallback to invalid rect');
           if (postMessage) {
             Android.onHighlightRect(
@@ -482,31 +480,22 @@ export function DecorationGroup(groupId, groupName) {
                     );
           }
         }
-      let boundingRect = item.range.getBoundingClientRect();
-          // Calculate which page (container) this decoration belongs to based on its left position
-      let viewportWidth = window.innerWidth;
-      let pageIndex = 0;
-      try{
-      // Get the bounding rect for the decoration
-        if (
-                boundingRect.left + boundingRect.width < 0 ||
-                boundingRect.top + boundingRect.height < 0
-              ) {
-                postMessageWithInvalidRect();
-                return;
-              }
 
-        // Calculate which page (container) this decoration belongs to based on its left position
-        let viewportWidth = window.innerWidth;
-        let pageIndex = Math.floor(
-          (boundingRect.left + window.scrollX) / viewportWidth
-        ); // Calculate the page index
-      
-      } catch (error) {
-        logErrorMessage(`Error calculating page index: ${error.message}`);
-        postMessageWithInvalidRect();
-        return;
-      }
+      // Get the bounding rect for the decoration
+      let boundingRect = item.range.getBoundingClientRect();
+
+      // Calculate which page (container) this decoration belongs to based on its left position
+      let viewportWidth = window.innerWidth;
+      let pageIndex = Math.floor(
+        (boundingRect.left + window.scrollX) / viewportWidth
+      ); // Calculate the page index
+
+         if (
+                        boundingRect.left + boundingRect.width < 0 ||
+                        boundingRect.top + boundingRect.height < 0
+                      ) {
+                        postMessageWithInvalidRect();
+                      }
 
       let visibleAreaResponse = applyContainmentToArea(pageIndex); // Get or create the container for this page
       let visibleArea = visibleAreaResponse.visibleArea;
