@@ -49,7 +49,7 @@ public fun DecorationChange.javascript(templates: HtmlDecorationTemplates): Stri
 
     return when (this) {
         is DecorationChange.Added ->
-            toJSON(decoration)?.let { "group.addEnhanced($it);" }
+            toJSON(decoration)?.let { "group.add($it);" }
 
         is DecorationChange.AddedEnhanced ->
             toJSON(decoration)?.let { "group.addEnhanced($it);" }

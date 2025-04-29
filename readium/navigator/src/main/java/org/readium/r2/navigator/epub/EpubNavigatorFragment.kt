@@ -845,9 +845,8 @@ public class EpubNavigatorFragment internal constructor(
             notifyCurrentLocation()
 
             Timber.d("onPageLoaded: ${link.href} ${state}")
-            if (state == State.Ready) {
-                paginationListener?.onPageLoaded(link.url(), true)
-            }
+            paginationListener?.onPageLoaded(link.url(), state == State.Ready)
+
         }
 
         override fun javascriptInterfacesForResource(link: Link): Map<String, Any?> =
