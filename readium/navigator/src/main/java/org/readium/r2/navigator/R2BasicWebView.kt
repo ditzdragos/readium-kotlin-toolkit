@@ -227,6 +227,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     open fun scrollRight(animated: Boolean = false) {
         uiScope.launch {
             val listener = listener ?: return@launch
+            val tolerance = 30.0 // Tolerance in pixels to consider "at the end"
 
             fun goRight(jump: Boolean) {
                 if (listener.readingProgression == ReadingProgression.RTL) {
@@ -238,24 +239,63 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
                 }
             }
 
-            when {
-                scrollMode -> {
-                    Timber.d("scrollRight: scrollMode")
-                    goRight(jump = true)
-                }
+            val currentScrollX = scrollX.toDouble()
+            val scrollRange = computeHorizontalScrollRange().toDouble()
+            val scrollExtent = computeHorizontalScrollExtent().toDouble()
+            val maxScrollX = scrollRange - scrollExtent
+            val canScrollWebView = canScrollHorizontally(1)
 
-                !this@R2BasicWebView.canScrollHorizontally(1) -> {
-                    Timber.d("scrollRight: canScrollHorizontally")
+            Timber.d(
+                """scrollRight called. scrollMode=$scrollMode, scrollX=%.1f,
+                    | range=%.1f, extent=%.1f, maxScrollX=%.1f,
+                    | canScrollWebView(1)=%s"""
+                    .trimMargin(),
+                currentScrollX, scrollRange, scrollExtent, maxScrollX, canScrollWebView
+            )
+
+            if (scrollMode) {
+                Timber.d("scrollRight: In scrollMode, navigating to next resource (jump=true).")
+                goRight(jump = true)
+                return@launch
+            }
+
+            // In paged mode: Try scrolling within the page using JS first.
+            runJavaScript("readium.scrollRight();") { success ->
+                Timber.d("scrollRight: readium.scrollRight() returned: $success")
+                val jsSucceeded = success.toBoolean()
+
+                if (!jsSucceeded) {
+                    // JS scroll failed, presumably at the end of the current resource.
+                    Timber.d("scrollRight: JS scroll failed, navigating to next resource (jump=false).")
                     goRight(jump = false)
-                }
+                } else {
+                    // JS scroll succeeded. Check if we are close enough to the end to trigger navigation anyway.
+                    val latestScrollX =
+                        scrollX.toDouble() // Get potentially updated scrollX after JS call
+                    val diff = maxScrollX - latestScrollX
+                    Timber.d(
+                        "scrollRight: JS scroll succeeded. latestScrollX=%.1f, maxScrollX=%.1f, diff=%.1f",
+                        latestScrollX,
+                        maxScrollX,
+                        diff
+                    )
 
-                else ->
-                    runJavaScript("readium.scrollRight();") { success ->
-                        Timber.d("scrollRight: readium.scrollRight() $success")
-                        if (!success.toBoolean()) {
-                            goRight(jump = false)
-                        }
+                    if (maxScrollX > 0 && diff < tolerance) {
+                        Timber.d(
+                            "scrollRight: JS scroll succeeded but diff (%.1f) < tolerance (%.1f). Navigating to next resource.",
+                            diff,
+                            tolerance
+                        )
+                        goRight(jump = false)
+                    } else {
+                        Timber.d(
+                            "scrollRight: JS scroll succeeded and diff (%.1f) >= tolerance (%.1f). Not navigating.",
+                            diff,
+                            tolerance
+                        )
+                        // JS scroll succeeded and we are not close enough to the end. Do nothing.
                     }
+                }
             }
         }
     }
