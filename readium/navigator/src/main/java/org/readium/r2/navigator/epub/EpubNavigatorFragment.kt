@@ -68,7 +68,6 @@ import org.readium.r2.navigator.epub.css.MutableFontFamilyDeclaration
 import org.readium.r2.navigator.epub.css.RsProperties
 import org.readium.r2.navigator.epub.css.buildFontFamilyDeclaration
 import org.readium.r2.navigator.extensions.normalizeLocator
-import org.readium.r2.navigator.extensions.optRectF
 import org.readium.r2.navigator.extensions.positionsByResource
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
 import org.readium.r2.navigator.input.CompositeInputListener
@@ -90,7 +89,6 @@ import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.toMap
-import org.readium.r2.shared.extensions.tryOrLog
 import org.readium.r2.shared.publication.Href
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
@@ -751,21 +749,7 @@ public class EpubNavigatorFragment internal constructor(
 
     override suspend fun currentSelection(): Selection? {
         val fragment = currentReflowablePageFragment ?: return null
-        val json =
-            fragment.runJavaScriptSuspend("readium.getCurrentSelection();")
-                .takeIf { it != "null" }
-                ?.let { tryOrLog { JSONObject(it) } }
-                ?: return null
-
-        val rect = json.optRectF("rect")
-            ?.run { adjustedToViewport() }
-
-        return Selection(
-            locator = currentLocator.value.copy(
-                text = Locator.Text.fromJSON(json.optJSONObject("text"))
-            ),
-            rect = rect
-        )
+        return fragment.currentSelection(currentLocators.value)
     }
 
     override fun clearSelection() {
@@ -1254,10 +1238,10 @@ public class EpubNavigatorFragment internal constructor(
      * Parses a JSON string containing rectangle coordinates into a RectF object.
      * Returns null if parsing fails or the required keys are missing.
      */
-    private fun parseRectFFromJson(jsonString: String, locatorHref: Url): RectF? {
+    private fun parseRectFFromJson(jsonString: String?, locatorHref: Url): RectF? {
         return try {
             Timber.d("Parsing RectF for $locatorHref from JSON: $jsonString")
-            val jsonObject = JSONObject(jsonString)
+            val jsonObject = jsonString?.let { JSONObject(it) } ?: return null
             // Check if the rect is valid (e.g., contains non-zero dimensions or specific properties)
             val left = jsonObject.optDouble("left", 0.0).toFloat()
             val top = jsonObject.optDouble("top", 0.0).toFloat()

@@ -14,6 +14,7 @@ package org.readium.r2.navigator.pager
 import android.annotation.SuppressLint
 import android.graphics.Color
 import android.graphics.PointF
+import android.graphics.RectF
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -45,22 +46,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import org.readium.r2.navigator.R
 import org.readium.r2.navigator.R2BasicWebView
 import org.readium.r2.navigator.R2WebView
+import org.readium.r2.navigator.Selection
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubNavigatorViewModel
 import org.readium.r2.navigator.extensions.htmlId
+import org.readium.r2.navigator.extensions.optRectF
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
+import org.readium.r2.shared.extensions.tryOrLog
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Url
 import timber.log.Timber
-
 
 @OptIn(ExperimentalReadiumApi::class, DelicateReadiumApi::class)
 internal class R2EpubPageFragment : Fragment() {
@@ -514,6 +518,88 @@ internal class R2EpubPageFragment : Fragment() {
         }
     }
 
+    internal fun getWebView(href: Url?): R2WebView? {
+        Timber.d("getWebView: $href vs ${rightLink?.url()}")
+        return if (href == rightLink?.url()) {
+            webViewRight
+        } else {
+            webView
+        }
+    }
+
+    /**
+     * Gets the current text selection.
+     */
+    internal suspend fun currentSelection(currentLocator: Pair<Locator?, Locator?>): Selection? {
+        // First try main webView
+        val mainSelection = webView?.let { webView ->
+            suspendCoroutine { continuation ->
+                webView.runJavaScript("readium.getCurrentSelection();") { result ->
+                    val json = result.takeIf { it != "null" }
+                        ?.let { tryOrLog { JSONObject(it) } }
+
+                    if (json == null) {
+                        continuation.resume(null)
+                        return@runJavaScript
+                    }
+
+                    val rect = json.optRectF("rect")
+                        ?.run {
+                            RectF(left, top + paddingTop, right, bottom + paddingTop)
+                        }
+
+                    Timber.d("currentSelection in main webView: $json")
+
+                    val selection = currentLocator.first?.copy(
+                        text = Locator.Text.fromJSON(json.optJSONObject("text"))
+                    )?.let {
+                        Selection(
+                            locator = it,
+                            rect = rect
+                        )
+                    }
+                    continuation.resume(selection)
+                }
+            }
+        }
+
+        if (mainSelection != null) {
+            return mainSelection
+        }
+
+        // Then try right webView if it exists
+        return webViewRight?.let { webView ->
+            suspendCoroutine { continuation ->
+                webView.runJavaScript("readium.getCurrentSelection();") { result ->
+                    val json = result.takeIf { it != "null" }
+                        ?.let { tryOrLog { JSONObject(it) } }
+
+                    if (json == null) {
+                        continuation.resume(null)
+                        return@runJavaScript
+                    }
+
+                    val rect = json.optRectF("rect")
+                        ?.run {
+                            RectF(left, top + paddingTop, right, bottom + paddingTop)
+                        }
+
+                    Timber.d("currentSelection in right webView: $json")
+
+                    val selection = currentLocator.second?.copy(
+                        text = Locator.Text.fromJSON(json.optJSONObject("text"))
+                    )?.let {
+                        Selection(
+                            locator = it,
+                            rect = rect
+                        )
+                    }
+                    continuation.resume(selection)
+                }
+            }
+        }
+    }
+
     fun runJavaScript(script: String, callback: ((String) -> Unit)? = null) {
         whenPageFinished {
             requireNotNull(webView).runJavaScript(script, callback)
@@ -548,15 +634,6 @@ internal class R2EpubPageFragment : Fragment() {
             } else {
                 webView.setCurrentItem(webView.numPages - 1, false)
             }
-        }
-    }
-
-    internal fun getWebView(href: Url?): R2WebView? {
-        Timber.d("getWebView: $href vs ${rightLink?.url()}")
-        return if (href == rightLink?.url()) {
-            webViewRight
-        } else {
-            webView
         }
     }
 

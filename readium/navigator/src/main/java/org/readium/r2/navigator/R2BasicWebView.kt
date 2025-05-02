@@ -604,7 +604,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         runJavaScript("getSelectionRect();", callback)
     }
 
-    fun getRectFromLocator(locator: Locator, callback: (String) -> Unit) {
+    fun getRectFromLocator(locator: Locator, callback: (String?) -> Unit) {
         val json = locator.toJSON().toString()
         runJavaScript("readium.getRectFromLocator($json);", callback)
     }
