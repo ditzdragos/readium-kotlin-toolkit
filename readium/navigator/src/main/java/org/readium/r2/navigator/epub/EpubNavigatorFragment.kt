@@ -38,7 +38,6 @@ import kotlin.math.ceil
 import kotlin.reflect.KClass
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -1166,12 +1165,10 @@ public class EpubNavigatorFragment internal constructor(
 
         debounceLocationNotificationJob?.cancel()
         debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(100L)
-
             Timber.d("notifyCurrentLocation: ${currentReflowablePageFragment?.isLoaded?.value} $state")
             // We don't want to notify the current location if the navigator is still loading a
             // locator, to avoid notifying intermediate locations.
-            if (currentReflowablePageFragment?.isLoaded?.value == false || state != State.Ready) {
+            if (state != State.Ready) {
                 return@launch
             }
 

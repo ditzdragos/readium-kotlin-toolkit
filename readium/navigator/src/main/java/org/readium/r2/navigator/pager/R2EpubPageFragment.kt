@@ -123,8 +123,6 @@ internal class R2EpubPageFragment : Fragment() {
                         webView?.listener?.onResourceLoaded(webView!!, it)
                     }
                     webView?.onContentReady {
-                        // Make left web view visible when loaded
-                        view.visibility = View.VISIBLE
                         Timber.d("Left page finished loading and made visible")
 
                         // Call onPageLoaded for left page
@@ -142,8 +140,6 @@ internal class R2EpubPageFragment : Fragment() {
                         webViewRight?.listener?.onResourceLoaded(webViewRight!!, it)
                     }
                     webViewRight?.onContentReady {
-                        // Make right web view visible when loaded
-                        view.visibility = View.VISIBLE
                         Timber.d("Right page finished loading and made visible")
 
                         // Call onPageLoaded for right page
@@ -439,11 +435,6 @@ internal class R2EpubPageFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
                 val webView = requireNotNull(webView)
-
-                // Only set _isLoaded to true when both pages are loaded (if right page exists)
-                if (webViewRight == null || !isLoadingRight) {
-                    _isLoaded.value = true
-                }
 
                 pendingLocator
                     ?.let { locator ->
