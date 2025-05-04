@@ -409,14 +409,37 @@ internal class R2EpubPageFragment : Fragment() {
     override fun onDetach() {
         super.onDetach()
 
-        // Prevent the web view from leaking when its parent is detached.
-        // See https://stackoverflow.com/a/19391512/1474476
+        // Clean up WebView resources
+        cleanWebViewResources(webView)
+        cleanWebViewResources(webViewRight)
+
+        // Clear references
+        webView = null
+        webViewRight = null
+
+        // Clear any pending actions
+        pendingPageFinished.clear()
+    }
+
+    /**
+     * Cleans up WebView resources to prevent memory leaks
+     */
+    private fun cleanWebViewResources(webView: R2WebView?) {
         webView?.let { wv ->
-            (wv.parent as? ViewGroup)?.removeView(wv)
-            wv.removeAllViews()
-            wv.destroy()
-        }
-        webViewRight?.let { wv ->
+            // Clear all listeners
+            wv.listener = null
+            wv.webViewClient = object : WebViewClientCompat() {}
+            wv.setOnLongClickListener(null)
+            wv.setOnTouchListener(null)
+
+            // Clear web content
+            wv.loadUrl("about:blank")
+            wv.clearHistory()
+            wv.clearCache(true)
+            wv.clearFormData()
+            wv.clearSslPreferences()
+
+            // Remove from parent and destroy
             (wv.parent as? ViewGroup)?.removeView(wv)
             wv.removeAllViews()
             wv.destroy()
