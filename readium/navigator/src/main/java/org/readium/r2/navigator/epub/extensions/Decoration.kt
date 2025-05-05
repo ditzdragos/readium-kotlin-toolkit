@@ -19,7 +19,8 @@ import timber.log.Timber
  */
 internal fun List<DecorationChange>.javascriptForGroup(
     group: String,
-    templates: HtmlDecorationTemplates
+    templates: HtmlDecorationTemplates,
+    enhanced: Boolean = false
 ): String? {
     if (isEmpty()) return null
 
@@ -28,7 +29,7 @@ internal fun List<DecorationChange>.javascriptForGroup(
         // decorations.
         requestAnimationFrame(function () {
             let group = readium.getDecorations('$group');
-            ${mapNotNull { it.javascript(templates) }.joinToString("\n")}
+            ${mapNotNull { it.javascript(templates, enhanced) }.joinToString("\n")}
         });
         """
 }
@@ -36,7 +37,10 @@ internal fun List<DecorationChange>.javascriptForGroup(
 /**
  * Generates the JavaScript used to apply the receiver [DecorationChange] in a web view.
  */
-public fun DecorationChange.javascript(templates: HtmlDecorationTemplates): String? {
+public fun DecorationChange.javascript(
+    templates: HtmlDecorationTemplates,
+    enhanced: Boolean = false
+): String? {
     fun toJSON(decoration: Decoration): JSONObject? {
         val template = templates[decoration.style::class] ?: run {
             Timber.e("Decoration style not registered: ${decoration.style::class}")
@@ -45,6 +49,10 @@ public fun DecorationChange.javascript(templates: HtmlDecorationTemplates): Stri
         return decoration.toJSON().apply {
             put("element", template.element(decoration))
         }
+    }
+
+    if (this is DecorationChange.Added && enhanced) {
+        return toJSON(decoration)?.let { "group.addEnhanced($it);" }
     }
 
     return when (this) {

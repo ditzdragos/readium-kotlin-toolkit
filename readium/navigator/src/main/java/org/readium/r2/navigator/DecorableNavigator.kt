@@ -38,7 +38,11 @@ public interface DecorableNavigator : Navigator {
      * Name each decoration group as you see fit. A good practice is to use the name of the feature
      * requiring decorations, e.g. annotation, search, tts, etc.
      */
-    public suspend fun applyDecorations(decorations: List<Decoration>, group: String)
+    public suspend fun applyDecorations(
+        decorations: List<Decoration>,
+        group: String,
+        enhanced: Boolean = false
+    )
 
     /**
      * Indicates whether the Navigator supports the given decoration [style] class.

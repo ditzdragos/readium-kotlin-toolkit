@@ -779,12 +779,16 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     @OptIn(DelicateReadiumApi::class)
-    override suspend fun applyDecorations(decorations: List<Decoration>, group: String) {
+    override suspend fun applyDecorations(
+        decorations: List<Decoration>,
+        group: String,
+        enhanced: Boolean
+    ) {
         @Suppress("NAME_SHADOWING")
         val decorations = decorations
             .map { it.copy(locator = publication.normalizeLocator(it.locator)) }
 
-        run(viewModel.applyDecorations(decorations, group))
+        run(viewModel.applyDecorations(decorations, group, enhanced))
     }
 
     public fun clearEnhancedDecorations(group: String) {
@@ -1358,6 +1362,10 @@ public class EpubNavigatorFragment internal constructor(
     public fun isHrefVisible(href: Url): Boolean {
         val locatorPair = currentLocators.value
         return locatorPair.first?.href == href || locatorPair.second?.href == href
+    }
+
+    public fun isFixedLayout(): Boolean {
+        return publication.metadata.presentation.layout == EpubLayout.FIXED
     }
 
     public companion object {

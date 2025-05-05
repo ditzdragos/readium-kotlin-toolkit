@@ -290,7 +290,7 @@ internal class EpubNavigatorViewModel(
         decorationTemplates.styles.containsKey(style)
 
     suspend fun applyDecorations(
-        decorations: List<Decoration>, group: String
+        decorations: List<Decoration>, group: String, enhanced: Boolean = false
     ): List<RunScriptCommand> {
         val source = this.decorations[group] ?: emptyList()
         val target = decorations.toList()
@@ -313,7 +313,8 @@ internal class EpubNavigatorViewModel(
             )
         } else {
             for ((href, changes) in source.changesByHref(target)) {
-                val script = changes.javascriptForGroup(group, decorationTemplates) ?: continue
+                val script =
+                    changes.javascriptForGroup(group, decorationTemplates, enhanced) ?: continue
                 cmds.add(RunScriptCommand(script, scope = RunScriptCommand.Scope.Resource(href)))
             }
         }
@@ -414,15 +415,16 @@ internal class EpubNavigatorViewModel(
                 layout,
                 listener,
                 defaults = defaults,
-                server = WebViewServer(application,
-                                       publication,
-                                       servedAssets = config.servedAssets,
-                                       disableSelectionWhenProtected = config.disableSelectionWhenProtected,
-                                       onResourceLoadFailed = { url, error ->
-                                           listener?.onResourceLoadFailed(
-                                               url, error
-                                           )
-                                       })
+                server = WebViewServer(
+                    application,
+                    publication,
+                    servedAssets = config.servedAssets,
+                    disableSelectionWhenProtected = config.disableSelectionWhenProtected,
+                    onResourceLoadFailed = { url, error ->
+                        listener?.onResourceLoadFailed(
+                            url, error
+                        )
+                    })
             )
         }
     }
