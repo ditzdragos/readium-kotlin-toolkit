@@ -55,14 +55,6 @@ internal class R2PagerAdapter internal constructor(
         return currentFragment
     }
 
-    fun getPreviousFragment(): Fragment? {
-        return previousFragment
-    }
-
-    fun getNextFragment(): Fragment? {
-        return nextFragment
-    }
-
     override fun setPrimaryItem(container: ViewGroup, position: Int, `object`: Any) {
         if (getCurrentFragment() !== `object`) {
             currentFragment = `object` as Fragment
@@ -161,4 +153,33 @@ internal class R2PagerAdapter internal constructor(
     private fun popPendingLocatorAt(id: Long): Locator? =
         pendingLocators.get(id)
             .also { pendingLocators.remove(id) }
+
+    /**
+     * Cleanup all fragments and resources held by this adapter.
+     * This should be called when the adapter is no longer needed to prevent memory leaks.
+     */
+    internal fun cleanup() {
+        Timber.d("R2PagerAdapter: cleaning up ${mFragments.size()} fragments")
+
+        // Clean up all WebViews in fragments
+        mFragments.forEach { _, fragment ->
+            try {
+                if (fragment is R2EpubPageFragment) {
+                    Timber.d("R2PagerAdapter: cleaning up WebView for fragment")
+                    fragment.webView?.removeAllViews()
+                    fragment.webView?.destroy()
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error cleaning up fragment WebView")
+            }
+        }
+
+        // Clear collections
+        pendingLocators.clear()
+        mFragments.clear()
+
+        currentFragment = null
+        previousFragment = null
+        nextFragment = null
+    }
 }

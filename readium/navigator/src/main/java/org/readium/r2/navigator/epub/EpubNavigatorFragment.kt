@@ -22,6 +22,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.collection.forEach
+import androidx.collection.valueIterator
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
@@ -479,7 +480,16 @@ public class EpubNavigatorFragment internal constructor(
             "The parent view of the EPUB `resourcePager` must be a ConstraintLayout"
         }
         // We need to null out the adapter explicitly, otherwise the page fragments will leak.
-        resourcePager.adapter = null
+        if (resourcePager.adapter != null) {
+            // Clean up existing fragments first
+            (resourcePager.adapter as? R2PagerAdapter)?.mFragments?.forEach { _, fragment ->
+                if (fragment is R2EpubPageFragment) {
+                    fragment.webView?.removeAllViews()
+                    fragment.webView?.destroy()
+                }
+            }
+            resourcePager.adapter = null
+        }
         parent.removeView(resourcePager)
 
         resourcePager = R2ViewPager(requireContext())
@@ -1058,10 +1068,15 @@ public class EpubNavigatorFragment internal constructor(
      */
     private fun loadedFragmentForHref(href: Url): R2EpubPageFragment? {
         val adapter = r2PagerAdapter ?: return null
-        adapter.mFragments.forEach { _, fragment ->
-            val pageFragment = fragment as? R2EpubPageFragment ?: return@forEach
-            val link = pageFragment.link ?: return@forEach
-            if (link.url() == href || pageFragment.rightLink?.url() == href) {
+        val iterator = adapter.mFragments.valueIterator()
+        while (iterator.hasNext()) {
+            val fragment = iterator.next()
+            if (!fragment.isAdded || fragment.isDetached) continue
+            val pageFragment = fragment as? R2EpubPageFragment ?: continue
+            val link = pageFragment.link ?: continue
+            if (link.url().isEquivalent(href) || pageFragment.rightLink?.url()
+                    ?.isEquivalent(href) == true
+            ) {
                 return pageFragment
             }
         }
@@ -1368,6 +1383,38 @@ public class EpubNavigatorFragment internal constructor(
         return publication.metadata.presentation.layout == EpubLayout.FIXED
     }
 
+    // Cleanup method to ensure proper destruction of adapter and fragment references
+    private fun cleanupResources() {
+        Timber.d("Cleaning up navigator resources")
+        try {
+            // Clean up fragments in adapter
+            r2PagerAdapter?.mFragments?.forEach { _, fragment ->
+                if (fragment is R2EpubPageFragment) {
+                    fragment.webView?.removeAllViews()
+                    fragment.webView?.destroy()
+                }
+            }
+
+            // Clear adapter references
+            if (::resourcePager.isInitialized) {
+                resourcePager.adapter = null
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error cleaning up navigator resources")
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        cleanupResources()
+        _binding = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cleanupResources()
+    }
+
     public companion object {
 
         /**
@@ -1430,8 +1477,6 @@ public class EpubNavigatorFragment internal constructor(
          */
         public fun assetUrl(path: String): Url? =
             WebViewServer.assetUrl(path)
-
-        private val DEFAULT_RECTF = RectF(-1f, -1f, -1f, -1f)
     }
 }
 
