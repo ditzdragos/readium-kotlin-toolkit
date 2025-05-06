@@ -8,6 +8,7 @@ package org.readium.r2.streamer.parser.epub
 
 import org.readium.r2.shared.publication.epub.EpubLayout
 import org.readium.r2.shared.publication.presentation.Presentation
+import timber.log.Timber
 
 internal class PresentationAdapter(
     private val epubVersion: Double,
@@ -40,7 +41,10 @@ internal class PresentationAdapter(
                 itemsHolder
                     .adapt { it.takeFirstWithProperty(Vocabularies.RENDITION + "layout") }
                     ?.value
+                    ?: itemsHolder.adapt { it.takeFirstWithProperty(Vocabularies.RENDITION_OTHER + "layout") }?.value
             }
+
+        Timber.d("Presentation - Layout: $layoutProp")
 
         val (overflow, continuous) = when (flowProp) {
             "paginated" -> Pair(Presentation.Overflow.PAGINATED, false)
@@ -66,6 +70,8 @@ internal class PresentationAdapter(
             "both", "portrait" -> Presentation.Spread.BOTH
             else -> Presentation.Spread.AUTO
         }
+
+        Timber.d("Presentation :${layout} from ${layoutProp}")
 
         val presentation = Presentation(
             overflow = overflow,

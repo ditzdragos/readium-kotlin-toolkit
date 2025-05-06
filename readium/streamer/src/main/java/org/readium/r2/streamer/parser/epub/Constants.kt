@@ -27,6 +27,7 @@ internal object Vocabularies {
 
     const val MEDIA = "http://www.idpf.org/epub/vocab/overlays/#"
     const val RENDITION = "http://www.idpf.org/vocab/rendition/#"
+    const val RENDITION_OTHER = "http://www.idpf.org/vocab/rendition/"
     const val TYPE = "http://idpf.org/epub/vocab/structure/#" // this is a guessed value
 
     const val DCTERMS = "http://purl.org/dc/terms/"
