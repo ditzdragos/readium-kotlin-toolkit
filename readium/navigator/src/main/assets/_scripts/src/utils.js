@@ -49,7 +49,9 @@ class LRUCache {
 window.addEventListener(
   "error",
   function (event) {
-    Android.logError(event.message, event.filename, event.lineno);
+    if (DEBUG_MODE) {
+      Android.logError(event.message, event.filename, event.lineno);
+    }
   },
   false
 );
@@ -530,6 +532,8 @@ export function removeProperty(key) {
 
 /// Toolkit
 
+export var DEBUG_MODE = false;
+
 function debounce(delay, func) {
   var timeout;
   return function () {
@@ -545,12 +549,16 @@ function debounce(delay, func) {
 }
 
 export function log() {
-  var message = Array.prototype.slice.call(arguments).join(" ");
-  Android.log(message);
+  if (DEBUG_MODE) {
+    var message = Array.prototype.slice.call(arguments).join(" ");
+    Android.log(message);
+  }
 }
 
 export function logError(message) {
-  Android.logError(message, "", 0);
+  if (DEBUG_MODE) {
+    Android.logError(message, "", 0);
+  }
 }
 
 /**
