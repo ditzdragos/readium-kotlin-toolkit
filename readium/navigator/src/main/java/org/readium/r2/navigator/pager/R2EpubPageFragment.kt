@@ -23,7 +23,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.core.os.BundleCompat
 import androidx.core.view.postDelayed
@@ -267,7 +266,6 @@ internal class R2EpubPageFragment : Fragment() {
             null
         }
 
-        // Note: Visibility is now handled in onPageFinished
         Timber.d("Web views initialized: left=${webView != null}, right=${webViewRight != null}")
 
         navigator?.webViewListener?.let { listener ->
@@ -306,7 +304,7 @@ internal class R2EpubPageFragment : Fragment() {
             webView.setPadding(0, 0, 0, 0)
             webView.webViewClient = webViewClient
             webView.addJavascriptInterface(webView, "Android")
-            webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
+            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
             if (fixedLayout) {
                 webView.setBackgroundColor(Color.WHITE)
                 webView.settings.textZoom = 100
@@ -723,23 +721,6 @@ internal class R2EpubPageFragment : Fragment() {
     internal fun setCurrentItem(item: Int, smoothScroll: Boolean = false) {
         webView?.setCurrentItem(item, smoothScroll)
         webViewRight?.setCurrentItem(item, smoothScroll)
-    }
-
-    internal fun setInitialItem(readingProgression: ReadingProgression) {
-        webView?.let { webView ->
-            if (readingProgression == ReadingProgression.RTL) {
-                webView.setCurrentItem(0, false)
-            } else {
-                webView.setCurrentItem(webView.numPages - 1, false)
-            }
-        }
-        webViewRight?.let { webView ->
-            if (readingProgression == ReadingProgression.RTL) {
-                webView.setCurrentItem(0, false)
-            } else {
-                webView.setCurrentItem(webView.numPages - 1, false)
-            }
-        }
     }
 
     companion object {
