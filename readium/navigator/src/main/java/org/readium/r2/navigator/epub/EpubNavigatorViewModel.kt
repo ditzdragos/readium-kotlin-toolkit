@@ -172,7 +172,11 @@ internal class EpubNavigatorViewModel(
                 it.locator.href == link.url()
             }
                 .map {
-                    DecorationChange.Added(it)
+                    if (layout == EpubLayout.REFLOWABLE) {
+                        DecorationChange.Added(it)
+                    } else {
+                        DecorationChange.AddedEnhanced(it)
+                    }
                 }
             val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
             script += "$groupScript\n"
@@ -293,7 +297,7 @@ internal class EpubNavigatorViewModel(
         decorations: List<Decoration>, group: String, enhanced: Boolean = false
     ): List<RunScriptCommand> {
         val source = this.decorations[group] ?: emptyList()
-        val target = decorations.toList()
+        val target = decorations.toMutableList()
         this.decorations[group] = target
 
         val cmds = mutableListOf<RunScriptCommand>()
@@ -323,7 +327,7 @@ internal class EpubNavigatorViewModel(
     }
 
     fun addDecoration(group: String, decoration: Decoration): RunScriptCommand {
-        val decorations = this.decorations[group]?.toMutableList() ?: mutableListOf()
+        val decorations = (this.decorations[group] as? MutableList<Decoration>) ?: mutableListOf()
         decorations.add(decoration)
         this.decorations[group] = decorations
         return RunScriptCommand(

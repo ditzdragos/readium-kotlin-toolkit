@@ -333,7 +333,7 @@ export function DecorationGroup(groupId, groupName) {
     log("requesting layout ",groupName, items.length);
     clearContainer();
     clearAllEnhanced();
-    items.forEach((item) => layout(item));
+    items.forEach((item) => layoutEnhanced(item));
   }
 
   /**
