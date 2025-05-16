@@ -217,10 +217,13 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     }
 
     override fun destroy() {
-        // Prevent the web view from leaking when detached
-        // See https://github.com/readium/r2-navigator-kotlin/issues/52
-        removeJavascriptInterface("Android")
-
+        try {
+            // Prevent the web view from leaking when detached
+            // See https://github.com/readium/r2-navigator-kotlin/issues/52
+            removeJavascriptInterface("Android")
+        } finally {
+            //ignore
+        }
         super.destroy()
     }
 
