@@ -74,6 +74,8 @@ export function registerTemplates(newStyles) {
   // Process span elements to ensure proper text spacing
   processSpansForTextSpacing();
 
+  // Setup scaling listeners after initial DOM modifications
+  setupScalingListeners();
 }
 
 /**

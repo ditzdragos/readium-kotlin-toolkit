@@ -118,7 +118,7 @@ internal class R2EpubPageFragment : Fragment() {
                 webView -> {
                     isLoading = false
                     if (fixedLayout) {
-                        view.let { injectCenteringJavaScript(it) }
+//                        view.let { injectCenteringJavaScript(it) }
                     }
                     onPageFinished()
                     link?.let {
@@ -139,7 +139,7 @@ internal class R2EpubPageFragment : Fragment() {
                 webViewRight -> {
                     isLoadingRight = false
                     if (fixedLayout) {
-                        view.let { injectCenteringJavaScript(it) }
+//                        view.let { injectCenteringJavaScript(it) }
                     }
                     rightLink?.let {
                         webViewRight?.listener?.onResourceLoaded(webViewRight!!, it)

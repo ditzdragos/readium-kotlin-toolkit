@@ -11,6 +11,7 @@ package org.readium.r2.navigator.epub
 import android.content.SharedPreferences
 import android.graphics.PointF
 import android.graphics.RectF
+import android.os.Build
 import android.os.Bundle
 import android.util.LayoutDirection
 import android.view.ActionMode
@@ -392,14 +393,14 @@ public class EpubNavigatorFragment internal constructor(
                 var doublePageLeft: Link? = null
                 var doublePageRight: Link?
 
-                for ((index, link) in readingOrder.withIndex()) {
+                for ((_, link) in readingOrder.withIndex()) {
                     val url = viewModel.urlTo(link)
                     resourcesSingle.add(PageResource.EpubFxl(leftLink = link, leftUrl = url))
 
                     // add first page to the right,
-                    if (index == 0) {
-                        resourcesDouble.add(PageResource.EpubFxl(rightLink = link, rightUrl = url))
-                    } else {
+//                    if (index == 0) {
+//                        resourcesDouble.add(PageResource.EpubFxl(rightLink = link, rightUrl = url))
+//                    } else {
                         // add double pages, left & right
                         if (doublePageLeft == null) {
                             doublePageLeft = link
@@ -415,7 +416,7 @@ public class EpubNavigatorFragment internal constructor(
                             )
                             doublePageLeft = null
                         }
-                    }
+//                    }
                 }
                 // add last page if there is only a left page remaining
                 if (doublePageLeft != null) {
@@ -1414,6 +1415,18 @@ public class EpubNavigatorFragment internal constructor(
         super.onDestroy()
         cleanupResources()
     }
+
+
+    public fun startActionMode(callback: ActionMode.Callback, href: Url) {
+        val webView = loadedFragmentForHref(href)?.getWebView(href)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            webView?.startActionMode(callback, ActionMode.TYPE_FLOATING)
+        } else {
+            webView?.startActionMode(callback)
+        }
+    }
+
 
     public companion object {
 

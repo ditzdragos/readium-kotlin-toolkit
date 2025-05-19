@@ -339,10 +339,12 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
      */
     @android.webkit.JavascriptInterface
     fun onTap(eventJson: String): Boolean {
+
         // If there's an on-going selection, the tap will dismiss it so we don't forward it.
-        if (isSelecting) {
-            return false
-        }
+//        if (isSelecting) {
+//            Timber.d("R2BasicWebView.onTap: isSelecting is true, returning false.")
+//            return false
+//        }
 
         val event = TapEvent.fromJSON(eventJson) ?: return false
 
@@ -692,6 +694,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     // used by the web view.
 
     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? {
+        Timber.d("Starting action mode")
         val customCallback = listener?.selectionActionModeCallback
             ?: return super.startActionMode(callback)
 

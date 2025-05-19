@@ -6,6 +6,7 @@
 
 import { handleDecorationClickEvent } from "./decorator";
 import { nearestInteractiveElement } from "./dom";
+import { log } from "./utils";
 
 window.addEventListener("DOMContentLoaded", function () {
   document.addEventListener("click", onClick, false);
@@ -13,10 +14,12 @@ window.addEventListener("DOMContentLoaded", function () {
 });
 
 function onClick(event) {
-  if (!window.getSelection().isCollapsed) {
-    // There's an on-going selection, the tap will dismiss it so we don't forward it.
-    return;
-  }
+  log("Click event", JSON.stringify(event))
+//  if (!window.getSelection().isCollapsed) {
+//    log("Click canceled because of selection")
+//    // There's an on-going selection, the tap will dismiss it so we don't forward it.
+//    return;
+//  }
 
   var pixelRatio = window.devicePixelRatio;
   let clickEvent = {
