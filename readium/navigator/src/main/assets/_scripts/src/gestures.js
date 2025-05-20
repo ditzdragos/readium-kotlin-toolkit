@@ -14,13 +14,6 @@ window.addEventListener("DOMContentLoaded", function () {
 });
 
 function onClick(event) {
-  log("Click event", JSON.stringify(event))
-//  if (!window.getSelection().isCollapsed) {
-//    log("Click canceled because of selection")
-//    // There's an on-going selection, the tap will dismiss it so we don't forward it.
-//    return;
-//  }
-
   var pixelRatio = window.devicePixelRatio;
   let clickEvent = {
     defaultPrevented: event.defaultPrevented,

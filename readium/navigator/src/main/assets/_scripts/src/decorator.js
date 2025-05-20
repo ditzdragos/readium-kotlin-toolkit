@@ -10,6 +10,7 @@ import {
   toNativeRect,
 } from "./rect";
 import { log, logError, rangeFromLocator } from "./utils";
+import {setupScalingListeners} from "./scaling.js";
 
 let styles = new Map();
 let groups = new Map();
