@@ -24,6 +24,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -225,6 +226,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
             //ignore
         }
         super.destroy()
+        uiScope.cancel()
     }
 
     open fun scrollRight(animated: Boolean = false) {
