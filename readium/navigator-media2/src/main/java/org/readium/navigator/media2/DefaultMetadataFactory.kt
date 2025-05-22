@@ -17,7 +17,7 @@ import org.readium.r2.shared.publication.services.cover
 internal class DefaultMetadataFactory(private val publication: Publication) : MediaMetadataFactory {
 
     private val coroutineScope =
-        CoroutineScope(Dispatchers.Default)
+        CoroutineScope(Dispatchers.IO)
 
     private val authors: String?
         get() = publication.metadata.authors

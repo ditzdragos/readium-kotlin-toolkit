@@ -59,7 +59,7 @@ public suspend fun<R, S> S.decode(
     block: (value: S) -> R,
     wrapError: (Exception) -> Error
 ): Try<R, DecodeError> =
-    withContext(Dispatchers.Default) {
+    withContext(Dispatchers.IO) {
         try {
             Try.success(block(this@decode))
         } catch (e: Exception) {

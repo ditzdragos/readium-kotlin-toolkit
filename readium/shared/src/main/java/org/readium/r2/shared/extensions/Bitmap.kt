@@ -39,7 +39,7 @@ internal fun Bitmap.scaleToFit(maxSize: Size): Bitmap {
 internal val Bitmap.size get() = Size(width, height)
 
 @InternalReadiumApi
-public suspend fun Bitmap.toPng(quality: Int = 100): ByteArray? = withContext(Dispatchers.Default) {
+public suspend fun Bitmap.toPng(quality: Int = 100): ByteArray? = withContext(Dispatchers.IO) {
     val stream = ByteArrayOutputStream()
     compress(Bitmap.CompressFormat.PNG, quality, stream).let {
         if (it) stream.toByteArray() else null

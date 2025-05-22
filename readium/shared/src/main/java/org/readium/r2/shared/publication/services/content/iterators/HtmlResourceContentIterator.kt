@@ -158,7 +158,7 @@ public class HtmlResourceContentIterator internal constructor(
     private var parsedElements: ParsedElements? = null
 
     private suspend fun parseElements(): ParsedElements =
-        withContext(Dispatchers.Default) {
+        withContext(Dispatchers.IO) {
             val document = resource.use { res ->
                 val html = res
                     .read()

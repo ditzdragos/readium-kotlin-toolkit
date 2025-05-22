@@ -173,7 +173,7 @@ public sealed class DecorationChange {
  * The changes need to be applied in the same order, one by one.
  */
 public suspend fun List<Decoration>.changesByHref(target: List<Decoration>): Map<Url, List<DecorationChange>> = withContext(
-    Dispatchers.Default
+    Dispatchers.IO
 ) {
     val source = this@changesByHref
     val result = DiffUtil.calculateDiff(object : DiffUtil.Callback() {

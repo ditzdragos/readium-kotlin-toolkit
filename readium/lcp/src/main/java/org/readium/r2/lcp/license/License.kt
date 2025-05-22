@@ -90,7 +90,7 @@ internal class License private constructor(
         get() = documents.status
 
     override suspend fun decrypt(data: ByteArray): Try<ByteArray, LcpError> = withContext(
-        Dispatchers.Default
+        Dispatchers.IO
     ) {
         try {
             // LCP lib crashes if we call decrypt on an empty ByteArray

@@ -14,7 +14,11 @@ import android.util.Size
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER
 import java.io.ByteArrayOutputStream
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.tryOrNull
 import org.readium.r2.shared.publication.Publication
@@ -33,7 +37,7 @@ internal class DefaultMediaMetadataFactory(
 ) : MediaMetadataFactory {
 
     private val coroutineScope =
-        CoroutineScope(Dispatchers.Default)
+        CoroutineScope(Dispatchers.IO)
 
     private val title: String? =
         title ?: publication.metadata.title

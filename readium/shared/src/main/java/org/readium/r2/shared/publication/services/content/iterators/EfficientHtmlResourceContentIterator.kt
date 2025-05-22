@@ -134,7 +134,7 @@ public class EfficientHtmlResourceContentIterator internal constructor(
     private var parsedElements: ParsedElements? = null
 
     private suspend fun parseElements(): ParsedElements =
-        withContext(Dispatchers.Default) {
+        withContext(Dispatchers.IO) {
             val html = resource.use { res ->
                 res.read()
                     .flatMap { it.decodeString() }

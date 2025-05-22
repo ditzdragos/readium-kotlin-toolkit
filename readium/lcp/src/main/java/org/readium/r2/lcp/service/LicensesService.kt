@@ -271,7 +271,7 @@ internal class LicensesService(
         // calling runBlocking in LicenseValidation.handle would block the main thread and cause a severe issue
         // with LcpAuthenticating.retrievePassphrase. Specifically, the interaction of runBlocking and suspendCoroutine
         // blocks the current thread before the passphrase popup has been showed until some button not yet showed is clicked.
-        val license = withContext(Dispatchers.Default) {
+        val license = withContext(Dispatchers.IO) {
             retrieveLicenseUnsafe(
                 container,
                 authentication,
