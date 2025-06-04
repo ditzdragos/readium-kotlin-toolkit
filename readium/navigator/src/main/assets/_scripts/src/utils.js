@@ -579,14 +579,11 @@ export function getHtmlBodyTextContent() {
 }
 
 export function calculateHorizontalPageRanges() {
-  const currentScrollX = window.scrollX;
-  const currentInnerWidth = window.innerWidth;
-
   const rangeData = {};
   let node = document.body.firstChild;
   let currentPage = 0;
   let rangeIndex = 0;
-  let pageWidth = currentInnerWidth;
+  let pageWidth = window.innerWidth;
 
   // const pagesPerRange = 2;
   let currentTextLength = 0;
@@ -594,8 +591,8 @@ export function calculateHorizontalPageRanges() {
   let previousElementRect = new DOMRect(0, 0, 0, 0);
 
   function processElement(element) {
-    // log("node name " + element.nodeName);
-    // log("<" + element.textContent + ">");
+    log("node name " + element.nodeName);
+    log("<" + element.textContent + ">");
 
     let rect;
 
@@ -607,7 +604,7 @@ export function calculateHorizontalPageRanges() {
         range.selectNode(element);
         rect = range.getBoundingClientRect();
       } else {
-        // log("node text does not have text");
+        log("node text does not have text");
         addTextToRange(element.textContent, rangeIndex);
       }
     } else if (
@@ -617,27 +614,27 @@ export function calculateHorizontalPageRanges() {
       processText = true;
       rect = element.getBoundingClientRect();
     } else if (element.nodeName === "br") {
-      // log(`adding br as new line`);
+      log(`adding br as new line`);
       addTextToRange("\n", rangeIndex);
     }
 
     if (processText) {
-      rect.x += currentScrollX;
+      rect.x += window.scrollX;
 
-      // log("rect x: " + rect.x);
-      // log("rext width: " + rect.width);
-      // log("current page: " + currentPage);
-      // log("current text length: " + currentTextLength);
-      // log("current page x: " + currentPage * pageWidth);
-      // log("next page x: " + (currentPage + 1) * pageWidth);
+      log("rect x: " + rect.x);
+      log("rext width: " + rect.width);
+      log("current page: " + currentPage);
+      log("current text length: " + currentTextLength);
+      log("current page x: " + currentPage * pageWidth);
+      log("next page x: " + (currentPage + 1) * pageWidth);
 
       if (rect.x > (currentPage + 1) * pageWidth) {
         const additionalPages = Math.floor(rect.x / pageWidth - currentPage);
         currentPage = currentPage + additionalPages;
-        // log("increase current page: " + currentPage);
+        log("increase current page: " + currentPage);
 
-        // log("previous rect x: " + previousElementRect.x);
-        // log("previous rect width: " + previousElementRect.width);
+        log("previous rect x: " + previousElementRect.x);
+        log("previous rect width: " + previousElementRect.width);
 
         // if previousElementRect.x + previousElementRect.width is more than curent page x+width, then we compare with next next page max x
 
@@ -648,7 +645,7 @@ export function calculateHorizontalPageRanges() {
         if (currentTextLength >= minCharactersPerRange && maxX < rect.x) {
           rangeIndex++;
           // currentTextLength = 0;
-          // log("increase range index: " + rangeIndex);
+          log("increase range index: " + rangeIndex);
           currentTextLength = element.textContent.length;
           addTextToRange(element.textContent, rangeIndex);
           previousElementRect = rect;
@@ -660,7 +657,7 @@ export function calculateHorizontalPageRanges() {
         currentTextLength >= minCharactersPerRange &&
         rect.x + rect.width > (currentPage + 1) * pageWidth
       ) {
-        // log("paragraph does not fit on current page");
+        log("paragraph does not fit on current page");
         processTextContent(element, element.textContent);
       } else {
         // if (
@@ -670,7 +667,7 @@ export function calculateHorizontalPageRanges() {
         //   log("paragraph is too big; analyze words");
         //   processTextContent(element, element.textContent);
         // } else {
-        // log("add entire paragraph");
+        log("add entire paragraph");
         currentTextLength += element.textContent.length;
         addTextToRange(element.textContent, rangeIndex);
         // }
@@ -681,68 +678,102 @@ export function calculateHorizontalPageRanges() {
   }
 
   function processTextContent(element, textContent) {
-    const originalWords = textContent.split(/(\s|[-–—―‒])/g).filter(Boolean);
-    if (originalWords.length === 0) {
-      // No words to process, though textContent was presumably non-empty to call this.
-      // This case should ideally not be hit if called with non-empty textContent.
-      return;
-    }
+    // Split the text by spaces or dashes, and keep the delimiters
+    let words = textContent.split(/(\s|[-–—―‒])/g).filter(Boolean); // Split on spaces or dashes, keeping them as separate tokens
+    let removedText = "";
+    let removedWord = "";
+    let firstPoppedElement = true;
+    let remainderDoesNotFitOnNextPage = false;
 
-    let low = 0;
-    let high = originalWords.length;
-    let bestFitNumWords = 0;
+    let wordBoundingRect = new DOMRect(
+      Number.MAX_VALUE, // we use the max possible value for 'x' to make sure it enters the 'while' iterator
+      0,
+      0,
+      0
+    );
 
-    // Binary search for the maximum number of words that fit
-    while (low <= high) {
-      let midNumWords = low + Math.floor((high - low) / 2);
-      if (midNumWords === 0) {
-        // 0 words always fit.
-        bestFitNumWords = Math.max(bestFitNumWords, midNumWords); // Ensure bestFitNumWords can be 0
-        low = midNumWords + 1;
-        continue;
-      }
+    // Reduce the element text until it fits the page height
+    while (
+      wordBoundingRect.x + wordBoundingRect.width >
+        (currentPage + 1) * pageWidth &&
+      words.length > 0
+    ) {
+      removedWord = words.pop(); // Remove the last word or delimiter
 
-      const currentWords = originalWords.slice(0, midNumWords);
-      const textToTest = currentWords.join("");
+      log("word: <" + removedWord + ">");
 
-      try {
-        let rect;
-        // Use TextQuoteAnchor to find the first occurrence of textToTest from the start of the element.
-        // We assume textToTest is unique enough at the start or TextQuoteAnchor picks the first one.
-        let anchor = new TextQuoteAnchor(element, textToTest, { prefix: "", suffix: "" });
-        let range = anchor.toRange();
-        rect = range.getBoundingClientRect();
-        rect.x += currentScrollX;
+      if (removedWord === " ") {
+        removedText = removedWord + removedText;
+      } else {
+        try {
+          let anchor = new TextQuoteAnchor(element, removedWord, {
+            prefix: words.join(""), // Join without adding any additional characters
+            suffix: removedText.length > 0 ? removedText : "",
+          });
 
-        if (rect.x + rect.width <= (currentPage + 1) * pageWidth) {
-          // This number of words fits. Try more.
-          bestFitNumWords = midNumWords;
-          low = midNumWords + 1;
-        } else {
-          // This number of words overflows. Try fewer.
-          high = midNumWords - 1;
+          // log("anchor prefix: " + anchor.context.prefix);
+          // log("anchor suffix: " + anchor.context.suffix);
+          // log("anchor highlight: " + anchor.exact);
+
+          wordBoundingRect = anchor.toRange().getBoundingClientRect();
+          wordBoundingRect.x += window.scrollX;
+          log("word rect x: " + wordBoundingRect.x);
+          log("word rect width: " + wordBoundingRect.width);
+          log("current page max x: " + (currentPage + 1) * pageWidth);
+
+          if (
+            wordBoundingRect.x + wordBoundingRect.width >
+            (currentPage + 1) * pageWidth
+          ) {
+            removedText = removedWord + removedText;
+          }
+
+          if (firstPoppedElement) {
+            if (wordBoundingRect.x > (currentPage + 2) * pageWidth) {
+              log("text does not fit on the next page");
+              remainderDoesNotFitOnNextPage = true;
+            }
+          }
+
+          firstPoppedElement = false;
+        } catch {
+          log("could not find range for word");
+          // if (removedWord === "") {
+          //     removedText = removedText;
+          // }
         }
-      } catch (e) {
-        // If TextQuoteAnchor fails (e.g., text not found, which shouldn't happen for slice(0, N)),
-        // or if getBoundingClientRect fails, treat as overflow to be safe.
-        // logError("Error in processTextContent binary search: " + e);
-        high = midNumWords - 1;
       }
     }
 
-    const fittingText = originalWords.slice(0, bestFitNumWords).join("");
-    const overflowingText = originalWords.slice(bestFitNumWords).join("");
+    // If after removing all words it still doesn't fit, start on a new page
+    if (
+      words.length === 0 &&
+      wordBoundingRect.x > (currentPage + 1) * pageWidth
+    ) {
+      // This should never happen!!!
+      log("this should never happen");
+      rangeIndex += 1;
+      currentPage += 1; // Move to the next page
+      //TODO the element must go through the regular processing in this case
+      currentTextLength = textContent.length;
+      addTextToRange(textContent, rangeIndex);
+    } else {
+      words.push(removedWord);
 
-    addTextToRange(fittingText, rangeIndex);
-    currentTextLength += fittingText.length; // Add to current range's text length
+      addTextToRange(words.join(""), rangeIndex);
+      currentPage += 1;
+      rangeIndex += 1;
 
-    if (overflowingText.length > 0) {
-      currentPage++;
-      rangeIndex++;
-      currentTextLength = overflowingText.length; // Reset for the new range
-      addTextToRange(overflowingText, rangeIndex);
+      // TODO do we need to also check the current text length here????
+      if (remainderDoesNotFitOnNextPage) {
+        log("remainderDoesNotFitOnNextPage");
+        // processTextContent(element, removedText);
+      }
+      // else {
+      currentTextLength = removedText.length;
+      addTextToRange(removedText, rangeIndex);
+      // }
     }
-    // If overflowingText is empty, currentTextLength has been correctly updated for the current range.
   }
 
   function addTextToRange(text, range) {
@@ -754,12 +785,12 @@ export function calculateHorizontalPageRanges() {
       rangeData[range.toString()] = text;
     }
 
-    // log("adding text: <" + text + ">");
-    // log("to range index: " + range);
+    log("adding text: <" + text + ">");
+    log("to range index: " + range);
   }
 
   function processNode(node) {
-    // log(`process node with name : ${node.nodeName} and type: ${node.nodeType}`);
+    log(`process node with name : ${node.nodeName} and type: ${node.nodeType}`);
 
     // Disabling this until we find a way to integrate this in the app;
 
@@ -782,7 +813,7 @@ export function calculateHorizontalPageRanges() {
       const lastKey = keys[keys.length - 1];
       const lastItem = rangeData[lastKey];
       if (!/\s$/.test(lastItem)) {
-        // log(`appending new line before paragraph`);
+        log(`appending new line before paragraph`);
         addTextToRange("\n", rangeIndex);
       }
     }
