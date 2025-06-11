@@ -120,7 +120,7 @@ internal class R2EpubPageFragment : Fragment() {
                     if (fixedLayout) {
 //                        view.let { injectCenteringJavaScript(it) }
                     }
-                    onPageFinished()
+                    this@R2EpubPageFragment.onPageFinished() // Call the fragment's onPageFinished
                     link?.let {
                         webView?.listener?.onResourceLoaded(webView!!, it)
                     }
@@ -133,6 +133,14 @@ internal class R2EpubPageFragment : Fragment() {
                         }
 
                         onLoadPage()
+
+                        // Now, if the right WebView exists and is for a fixed layout, load it.
+                        if (webViewRight != null && rightResourceUrl != null && fixedLayout) {
+                            Timber.d("Left page finished, now loading right page: $rightResourceUrl")
+                            isLoadingRight = true
+                            // setupWebView for webViewRight was already called in onCreateView
+                            webViewRight?.loadUrl(rightResourceUrl.toString())
+                        }
                     }
                 }
 
@@ -329,16 +337,12 @@ internal class R2EpubPageFragment : Fragment() {
             }
         }
 
-        // Load right page after a short delay to ensure left page starts loading first
+        // Setup right page, but defer loading until left page is finished (handled in onPageFinished)
         webViewRight?.let {
             setupWebView(it, rightResourceUrl)
-            rightResourceUrl?.let { url ->
-                isLoadingRight = true
-                Timber.d("Loading right page: $url")
-                it.postDelayed({
-                                   it.loadUrl(url.toString())
-                               }, 100)
-            }
+            // The actual loadUrl for webViewRight will be triggered from onPageFinished
+            // when the left webView completes.
+            // isLoadingRight will be set to true at that point.
         }
 
         // Forward a tap event when the web view is not ready to propagate the taps. This allows
@@ -627,7 +631,7 @@ internal class R2EpubPageFragment : Fragment() {
 
     suspend fun runJavaScriptSuspend(javascript: String): String = suspendCoroutine { cont ->
         runJavaScript(javascript) { result ->
-            if(result != "null") {
+            if (result != "null") {
                 cont.resume(result)
             }
         }
