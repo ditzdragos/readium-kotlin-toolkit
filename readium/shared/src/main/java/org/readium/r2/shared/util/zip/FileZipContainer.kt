@@ -90,6 +90,8 @@ internal class FileZipContainer(
                 Try.failure(ReadError.Decoding(e))
             } catch (e: IOException) {
                 Try.failure(ReadError.Access(FileSystemError.IO(e)))
+            } catch (e: Exception) {
+                Try.failure(ReadError.Access(FileSystemError.IO(e)))
             }
 
         private suspend fun readFully(): ByteArray =
