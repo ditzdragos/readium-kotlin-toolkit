@@ -320,7 +320,7 @@ internal class LicensesService(
             ignoreInternetErrors = container is WritableLicenseContainer
         ) { licenseDocument ->
             try {
-                launch {
+                launch(Dispatchers.IO) {
                     this@LicensesService.licenses.addLicense(licenseDocument)
                 }
             } catch (error: Error) {
