@@ -440,13 +440,6 @@ internal class R2EpubPageFragment : Fragment() {
             wv.setOnLongClickListener(null)
             wv.setOnTouchListener(null)
 
-            // Clear web content
-            wv.loadUrl("about:blank")
-            wv.clearHistory()
-            wv.clearCache(true)
-            wv.clearFormData()
-            wv.clearSslPreferences()
-
             // Remove from parent and destroy
             (wv.parent as? ViewGroup)?.removeView(wv)
             wv.removeAllViews()
