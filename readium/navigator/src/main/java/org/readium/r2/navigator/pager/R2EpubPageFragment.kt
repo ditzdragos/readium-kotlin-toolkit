@@ -91,8 +91,7 @@ internal class R2EpubPageFragment : Fragment() {
 
     private lateinit var containerView: View
     private val viewModel: EpubNavigatorViewModel by viewModels(
-        ownerProducer = { requireParentFragment() }
-    )
+        ownerProducer = { requireParentFragment() })
 
     private var isLoading: Boolean = false
     private var isLoadingRight: Boolean = false
@@ -100,10 +99,8 @@ internal class R2EpubPageFragment : Fragment() {
 
     private var webViewClient = object : WebViewClientCompat() {
         override fun shouldOverrideUrlLoading(
-            view: WebView,
-            request: WebResourceRequest
-        ): Boolean =
-            (view as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
+            view: WebView, request: WebResourceRequest
+        ): Boolean = (view as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
 
         override fun shouldOverrideKeyEvent(view: WebView, event: KeyEvent): Boolean {
             // Do something with the event here
@@ -167,9 +164,7 @@ internal class R2EpubPageFragment : Fragment() {
 
         @SuppressLint("RequiresFeature")
         override fun onReceivedError(
-            view: WebView,
-            request: WebResourceRequest,
-            error: WebResourceErrorCompat
+            view: WebView, request: WebResourceRequest, error: WebResourceErrorCompat
         ) {
             super.onReceivedError(view, request, error)
             val errorDescription = error.description.toString()
@@ -186,10 +181,8 @@ internal class R2EpubPageFragment : Fragment() {
         }
 
         override fun shouldInterceptRequest(
-            view: WebView,
-            request: WebResourceRequest
-        ): WebResourceResponse? =
-            (view as? R2BasicWebView)?.shouldInterceptRequest(view, request)
+            view: WebView, request: WebResourceRequest
+        ): WebResourceResponse? = (view as? R2BasicWebView)?.shouldInterceptRequest(view, request)
     }
 
     internal fun setFontSize(fontSize: Double) {
@@ -232,27 +225,20 @@ internal class R2EpubPageFragment : Fragment() {
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
         Timber.d("onViewStateRestored: $resourceUrl")
-        savedInstanceState
-            ?.getInt(textZoomBundleKey)
-            ?.takeIf { it > 0 }
-            ?.let { textZoom = it }
+        savedInstanceState?.getInt(textZoomBundleKey)?.takeIf { it > 0 }?.let { textZoom = it }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingLocator = BundleCompat.getParcelable(
-            requireArguments(),
-            "initialLocator",
-            Locator::class.java
+            requireArguments(), "initialLocator", Locator::class.java
         )
         fixedLayout = requireArguments().getBoolean("fixedLayout")
     }
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
         Timber.d("onCreateView: $resourceUrl")
 
@@ -398,8 +384,7 @@ internal class R2EpubPageFragment : Fragment() {
 
         val lifecycleOwner = viewLifecycleOwner
         lifecycleOwner.lifecycleScope.launch {
-            viewModel.isScrollEnabled
-                .flowWithLifecycle(lifecycleOwner.lifecycle)
+            viewModel.isScrollEnabled.flowWithLifecycle(lifecycleOwner.lifecycle)
                 .collectLatest { enabled ->
                     webView?.scrollModeFlow?.value = enabled
                     webViewRight?.scrollModeFlow?.value = enabled
@@ -418,8 +403,8 @@ internal class R2EpubPageFragment : Fragment() {
         super.onDetach()
 
         // Clean up WebView resources
-        cleanWebViewResources(webView)
-        cleanWebViewResources(webViewRight)
+        runCatching { cleanWebViewResources(webView) }
+        runCatching { cleanWebViewResources(webViewRight) }
 
         // Clear references
         webView = null
@@ -441,9 +426,9 @@ internal class R2EpubPageFragment : Fragment() {
             wv.setOnTouchListener(null)
 
             // Remove from parent and destroy
-            (wv.parent as? ViewGroup)?.removeView(wv)
-            wv.removeAllViews()
             wv.destroy()
+            wv.removeAllViews()
+            (wv.parent as? ViewGroup)?.removeView(wv)
         }
     }
 
@@ -460,15 +445,13 @@ internal class R2EpubPageFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
                 val webView = requireNotNull(webView)
 
-                pendingLocator
-                    ?.let { locator ->
-                        loadLocator(
-                            webView,
-                            requireNotNull(navigator).overflow.value.readingProgression,
-                            locator
-                        )
-                    }
-                    .also { pendingLocator = null }
+                pendingLocator?.let { locator ->
+                    loadLocator(
+                        webView,
+                        requireNotNull(navigator).overflow.value.readingProgression,
+                        locator
+                    )
+                }.also { pendingLocator = null }
             }
         }
     }
@@ -481,8 +464,8 @@ internal class R2EpubPageFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                val webView = getWebView(locator.href)
-                    ?: requireNotNull(this@R2EpubPageFragment.webView)
+                val webView =
+                    getWebView(locator.href) ?: requireNotNull(this@R2EpubPageFragment.webView)
                 val epubNavigator = requireNotNull(navigator)
                 loadLocator(webView, epubNavigator.overflow.value.readingProgression, locator)
                 webView.listener?.onProgressionChanged()
@@ -491,9 +474,7 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     private suspend fun loadLocator(
-        webView: R2WebView,
-        readingProgression: ReadingProgression,
-        locator: Locator
+        webView: R2WebView, readingProgression: ReadingProgression, locator: Locator
     ) {
         if (locator.text.highlight != null) {
             if (webView.scrollToLocator(locator)) {
@@ -513,12 +494,11 @@ internal class R2EpubPageFragment : Fragment() {
 
         // We need to reverse the progression with RTL because the Web View
         // always scrolls from left to right, no matter the reading direction.
-        progression =
-            if (webView.scrollMode || readingProgression == ReadingProgression.LTR) {
-                progression
-            } else {
-                1 - progression
-            }
+        progression = if (webView.scrollMode || readingProgression == ReadingProgression.LTR) {
+            progression
+        } else {
+            1 - progression
+        }
 
         if (webView.scrollMode) {
             webView.scrollToPosition(progression)
@@ -550,18 +530,16 @@ internal class R2EpubPageFragment : Fragment() {
         val mainSelection = webView?.let { webView ->
             suspendCoroutine { continuation ->
                 webView.runJavaScript("readium.getCurrentSelection();") { result ->
-                    val json = result.takeIf { it != "null" }
-                        ?.let { tryOrLog { JSONObject(it) } }
+                    val json = result.takeIf { it != "null" }?.let { tryOrLog { JSONObject(it) } }
 
                     if (json == null) {
                         continuation.resume(null)
                         return@runJavaScript
                     }
 
-                    val rect = json.optRectF("rect")
-                        ?.run {
-                            RectF(left, top + paddingTop, right, bottom + paddingTop)
-                        }
+                    val rect = json.optRectF("rect")?.run {
+                        RectF(left, top + paddingTop, right, bottom + paddingTop)
+                    }
 
                     Timber.d("currentSelection in main webView: $json")
 
@@ -569,8 +547,7 @@ internal class R2EpubPageFragment : Fragment() {
                         text = Locator.Text.fromJSON(json.optJSONObject("text"))
                     )?.let {
                         Selection(
-                            locator = it,
-                            rect = rect
+                            locator = it, rect = rect
                         )
                     }
                     continuation.resume(selection)
@@ -586,18 +563,16 @@ internal class R2EpubPageFragment : Fragment() {
         return webViewRight?.let { webView ->
             suspendCoroutine { continuation ->
                 webView.runJavaScript("readium.getCurrentSelection();") { result ->
-                    val json = result.takeIf { it != "null" }
-                        ?.let { tryOrLog { JSONObject(it) } }
+                    val json = result.takeIf { it != "null" }?.let { tryOrLog { JSONObject(it) } }
 
                     if (json == null) {
                         continuation.resume(null)
                         return@runJavaScript
                     }
 
-                    val rect = json.optRectF("rect")
-                        ?.run {
-                            RectF(left, top + paddingTop, right, bottom + paddingTop)
-                        }
+                    val rect = json.optRectF("rect")?.run {
+                        RectF(left, top + paddingTop, right, bottom + paddingTop)
+                    }
 
                     Timber.d("currentSelection in right webView: $json")
 
@@ -605,8 +580,7 @@ internal class R2EpubPageFragment : Fragment() {
                         text = Locator.Text.fromJSON(json.optJSONObject("text"))
                     )?.let {
                         Selection(
-                            locator = it,
-                            rect = rect
+                            locator = it, rect = rect
                         )
                     }
                     continuation.resume(selection)
@@ -651,8 +625,7 @@ internal class R2EpubPageFragment : Fragment() {
                     val scaledHeight = (actualHeight / density).toInt()
 
                     webView.evaluateJavascript(
-                        WebViewScripts.getCenteringScript(scaledWidth, scaledHeight),
-                        null
+                        WebViewScripts.getCenteringScript(scaledWidth, scaledHeight), null
                     )
                 } else {
                     // If still no dimensions, try once more with a longer delay
@@ -667,8 +640,7 @@ internal class R2EpubPageFragment : Fragment() {
                                                     WebViewScripts.getCenteringScript(
                                                         scaledWidth.coerceAtLeast(1),
                                                         scaledHeight.coerceAtLeast(1)
-                                                    ),
-                                                    null
+                                                    ), null
                                                 )
                                             }
                                         }, 300)
@@ -680,8 +652,7 @@ internal class R2EpubPageFragment : Fragment() {
             val scaledWidth = (viewportWidth / density).toInt()
             val scaledHeight = (viewportHeight / density).toInt()
             webView.evaluateJavascript(
-                WebViewScripts.getCenteringScript(scaledWidth, scaledHeight),
-                null
+                WebViewScripts.getCenteringScript(scaledWidth, scaledHeight), null
             )
         }
 
@@ -710,8 +681,7 @@ internal class R2EpubPageFragment : Fragment() {
         if (width <= 0 || height <= 0) return
 
         webView.evaluateJavascript(
-            WebViewScripts.getUpdateViewportScript(width, height),
-            null
+            WebViewScripts.getUpdateViewportScript(width, height), null
         )
     }
 
@@ -732,18 +702,17 @@ internal class R2EpubPageFragment : Fragment() {
             rightUrl: AbsoluteUrl? = null,
             rightLink: Link? = null,
             positionCount: Int = 0,
-        ): R2EpubPageFragment =
-            R2EpubPageFragment().apply {
-                arguments = Bundle().apply {
-                    putParcelable("url", url)
-                    putParcelable("link", link)
-                    putParcelable("initialLocator", initialLocator)
-                    putLong("positionCount", positionCount.toLong())
-                    putBoolean("fixedLayout", fixedLayout)
-                    putParcelable("rightUrl", rightUrl)
-                    putParcelable("rightLink", rightLink)
-                }
+        ): R2EpubPageFragment = R2EpubPageFragment().apply {
+            arguments = Bundle().apply {
+                putParcelable("url", url)
+                putParcelable("link", link)
+                putParcelable("initialLocator", initialLocator)
+                putLong("positionCount", positionCount.toLong())
+                putBoolean("fixedLayout", fixedLayout)
+                putParcelable("rightUrl", rightUrl)
+                putParcelable("rightLink", rightLink)
             }
+        }
     }
 }
 
