@@ -110,16 +110,17 @@ public sealed class Url : Parcelable {
      * Returns the decoded query parameters present in this URL, in the order they appear.
      */
     @InternalReadiumApi
-    public val query: Query get() =
-        Query(
-            UrlQuerySanitizer(removeFragment().toString()).parameterList
-                .map { p ->
-                    QueryParameter(
-                        name = p.mParameter,
-                        value = p.mValue.takeUnless { it.isBlank() }
-                    )
-                }
-        )
+    public val query: Query
+        get() =
+            Query(
+                UrlQuerySanitizer(removeFragment().toString()).parameterList
+                    .map { p ->
+                        QueryParameter(
+                            name = p.mParameter,
+                            value = p.mValue.takeUnless { it.isBlank() }
+                        )
+                    }
+            )
 
     /**
      * Returns a copy of this URL after dropping its query.
@@ -134,8 +135,9 @@ public sealed class Url : Parcelable {
     /**
      * Returns the decoded fragment present in this URL, if any.
      */
-    public val fragment: String? get() =
-        uri.fragment?.takeUnless { it.isBlank() }
+    public val fragment: String?
+        get() =
+            uri.fragment?.takeUnless { it.isBlank() }
 
     /**
      * Returns a copy of this URL after dropping its fragment.
@@ -205,7 +207,6 @@ public sealed class Url : Parcelable {
      * WARNING: Strict URL comparisons can be a source of bug, if the URLs are not normalized.
      * In most cases, you should compare using [Url.isEquivalent].
      */
-    @DelicateReadiumApi
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -290,20 +291,23 @@ public class AbsoluteUrl private constructor(override val uri: Uri) : Url() {
     /**
      * Indicates whether this URL points to a HTTP resource.
      */
-    public val isHttp: Boolean get() =
-        scheme.isHttp
+    public val isHttp: Boolean
+        get() =
+            scheme.isHttp
 
     /**
      * Indicates whether this URL points to a file.
      */
-    public val isFile: Boolean get() =
-        scheme.isFile
+    public val isFile: Boolean
+        get() =
+            scheme.isFile
 
     /**
      * Indicates whether this URL points to an Android content resource.
      */
-    public val isContent: Boolean get() =
-        scheme.isContent
+    public val isContent: Boolean
+        get() =
+            scheme.isContent
 
     /**
      * Converts the URL to a [File], if it's a file URL.
@@ -411,7 +415,7 @@ private fun Uri.addFileAuthority(): Uri =
     }
 
 private fun String.isValidUrl(): Boolean =
-    // Uri.parse doesn't really validate the URL, it could contain invalid characters, so we use
+// Uri.parse doesn't really validate the URL, it could contain invalid characters, so we use
     // URI. However, URI allows some non-ASCII characters.
     isNotBlank() && isPrintableAscii() && tryOrNull { URI(this) } != null
 

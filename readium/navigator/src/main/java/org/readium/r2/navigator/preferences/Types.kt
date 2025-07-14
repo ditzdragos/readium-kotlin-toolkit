@@ -13,24 +13,30 @@ import kotlinx.serialization.Serializable
 import org.readium.r2.shared.ExperimentalReadiumApi
 
 // https://github.com/readium/readium-css/blob/master/css/src/modules/ReadiumCSS-day_mode.css
-@ColorInt private val dayContentColor: Int = AndroidColor.parseColor("#121212")
+@ColorInt
+private val dayContentColor: Int = AndroidColor.parseColor("#121212")
 
-@ColorInt private val dayBackgroundColor: Int = AndroidColor.parseColor("#FFFFFF")
+@ColorInt
+private val dayBackgroundColor: Int = AndroidColor.parseColor("#FFFFFF")
 
 // https://github.com/readium/readium-css/blob/master/css/src/modules/ReadiumCSS-night_mode.css
-@ColorInt private val nightContentColor: Int = AndroidColor.parseColor("#FEFEFE")
+@ColorInt
+private val nightContentColor: Int = AndroidColor.parseColor("#FEFEFE")
 
-@ColorInt private val nightBackgroundColor: Int = AndroidColor.parseColor("#000000")
+@ColorInt
+private val nightBackgroundColor: Int = AndroidColor.parseColor("#000000")
 
 // https://github.com/readium/readium-css/blob/master/css/src/modules/ReadiumCSS-sepia_mode.css
-@ColorInt private val sepiaContentColor: Int = AndroidColor.parseColor("#121212")
+@ColorInt
+private val sepiaContentColor: Int = AndroidColor.parseColor("#121212")
 
-@ColorInt private val sepiaBackgroundColor: Int = AndroidColor.parseColor("#faf4e8")
+@ColorInt
+private val sepiaBackgroundColor: Int = AndroidColor.parseColor("#faf4e8")
 
 @Serializable
 public enum class Theme(
-    @ColorInt public val contentColor: Int,
-    @ColorInt public val backgroundColor: Int
+    public val contentColor: Int,
+    public val backgroundColor: Int
 ) {
     @SerialName("light")
     LIGHT(contentColor = dayContentColor, backgroundColor = dayBackgroundColor),
@@ -121,7 +127,7 @@ public value class FontFamily(public val name: String) {
  */
 @Serializable
 @JvmInline
-public value class Color(@ColorInt public val int: Int)
+public value class Color(public val int: Int)
 
 /**
  * Layout axis.

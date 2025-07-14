@@ -8,9 +8,8 @@
 
 package org.readium.r2.navigator.epub.css
 
-import androidx.annotation.ColorInt
 import java.text.NumberFormat
-import java.util.*
+import java.util.Locale
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Either
 
@@ -387,7 +386,7 @@ public interface Color : Cssable {
     }
 
     @JvmInline
-    public value class Int(@ColorInt public val color: kotlin.Int) : Color {
+    public value class Int(public val color: kotlin.Int) : Color {
         override fun toCss(): String =
             String.format("#%06X", 0xFFFFFF and color)
     }
@@ -568,8 +567,8 @@ private fun flag(name: String, value: Boolean?) = Cssable {
 }
 
 /**
-* Converts a [String] to a CSS literal.
-*/
+ * Converts a [String] to a CSS literal.
+ */
 private fun String.toCss(): String =
     '"' + replace("\"", "\\\"") + '"'
 

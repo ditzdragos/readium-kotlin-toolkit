@@ -31,7 +31,7 @@ internal fun buildFontFamilyDeclaration(
  * are missing from [fontFamily].
  */
 @ExperimentalReadiumApi
-internal data class FontFamilyDeclaration(
+public data class FontFamilyDeclaration(
     val fontFamily: String,
     val alternates: List<String>,
     val fontFaces: List<FontFaceDeclaration>
@@ -41,21 +41,21 @@ internal data class FontFamilyDeclaration(
  * An immutable font face declaration.
  */
 @ExperimentalReadiumApi
-internal data class FontFaceDeclaration(
+public data class FontFaceDeclaration(
     val fontFamily: String,
     val sources: List<FontFaceSource>,
     var fontStyle: FontStyle? = null,
     var fontWeight: Either<FontWeight, ClosedRange<Int>>? = null
 ) {
 
-    fun links(urlNormalizer: (Url) -> Url): List<String> =
+    public fun links(urlNormalizer: (Url) -> Url): List<String> =
         sources
             .filter { it.preload }
             .map {
                 """<link rel="preload" href="${urlNormalizer(it.href)}" as="font" crossorigin="" />"""
             }
 
-    fun toCss(urlNormalizer: (Url) -> Url): String {
+    public fun toCss(urlNormalizer: (Url) -> Url): String {
         val descriptors = buildMap {
             set("font-family", """"$fontFamily"""")
 
@@ -69,6 +69,7 @@ internal data class FontFaceDeclaration(
                 when (it) {
                     is Either.Left ->
                         set("font-weight", it.value.value)
+
                     is Either.Right ->
                         set("font-weight", "${it.value.start} ${it.value.endInclusive}")
                 }
@@ -89,7 +90,7 @@ internal data class FontFaceDeclaration(
  * @param preload Indicates whether this source will be declared for preloading in the HTML using
  * `<link rel="preload">`.
  */
-internal data class FontFaceSource(
+public data class FontFaceSource(
     val href: Url,
     val preload: Boolean = false
 )
@@ -98,7 +99,7 @@ internal data class FontFaceSource(
  * A mutable font family declaration.
  */
 @ExperimentalReadiumApi
-public data class MutableFontFamilyDeclaration internal constructor(
+public data class MutableFontFamilyDeclaration public constructor(
     private val fontFamily: String,
     private val alternates: List<String>,
     private val fontFaces: MutableList<FontFaceDeclaration> = mutableListOf()
@@ -119,7 +120,7 @@ public data class MutableFontFamilyDeclaration internal constructor(
  * A mutable font face declaration.
  */
 @ExperimentalReadiumApi
-public data class MutableFontFaceDeclaration internal constructor(
+public data class MutableFontFaceDeclaration(
     private val fontFamily: String,
     private val sources: MutableList<FontFaceSource> = mutableListOf(),
     private var fontStyle: FontStyle? = null,

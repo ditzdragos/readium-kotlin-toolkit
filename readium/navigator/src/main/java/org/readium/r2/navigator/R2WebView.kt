@@ -15,7 +15,15 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Build
 import android.util.AttributeSet
-import android.view.*
+import android.view.FocusFinder
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.SoundEffectConstants
+import android.view.VelocityTracker
+import android.view.View
+import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.view.animation.Interpolator
 import android.widget.EdgeEffect
 import android.widget.Scroller
@@ -23,7 +31,11 @@ import androidx.annotation.CallSuper
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -186,7 +198,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
 
     private fun initWebPager() {
         setWillNotDraw(false)
-        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        descendantFocusability = FOCUS_AFTER_DESCENDANTS
 
         // Disable the focus overlay appearing when interacting with the keyboard.
         // https://developer.android.com/about/versions/oreo/android-8.0-changes#ian
@@ -481,6 +493,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
         }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         val count = childCount
         val width = r - l
@@ -497,7 +510,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
         // we have the proper offsets for non-decor views later.
         for (i in 0 until count) {
             val child = getChildAt(i)
-            if (child.visibility != View.GONE) {
+            if (child.visibility != GONE) {
                 val lp = child.layoutParams as? LayoutParams ?: continue
                 var childLeft: Int
                 var childTop: Int
@@ -509,14 +522,17 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                             childLeft = paddingLeft
                             paddingLeft += child.measuredWidth
                         }
+
                         Gravity.CENTER_HORIZONTAL -> childLeft = max(
                             (width - child.measuredWidth) / 2,
                             paddingLeft
                         )
+
                         Gravity.END -> {
                             childLeft = width - paddingRight - child.measuredWidth
                             paddingRight += child.measuredWidth
                         }
+
                         else -> childLeft = paddingLeft
                     }
                     when (vgrav) {
@@ -524,14 +540,17 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                             childTop = paddingTop
                             paddingTop += child.measuredHeight
                         }
+
                         Gravity.CENTER_VERTICAL -> childTop = max(
                             (height - child.measuredHeight) / 2,
                             paddingTop
                         )
+
                         Gravity.BOTTOM -> {
                             childTop = height - paddingBottom - child.measuredHeight
                             paddingBottom += child.measuredHeight
                         }
+
                         else -> childTop = paddingTop
                     }
                     childLeft += scrollX
@@ -639,14 +658,17 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                         childLeft = paddingLeft
                         paddingLeft += child.width
                     }
+
                     Gravity.CENTER_HORIZONTAL -> childLeft = max(
                         (width - child.measuredWidth) / 2,
                         paddingLeft
                     )
+
                     Gravity.END -> {
                         childLeft = width - paddingRight - child.measuredWidth
                         paddingRight += child.measuredWidth
                     }
+
                     else -> childLeft = paddingLeft
                 }
                 childLeft += scrollX
@@ -708,6 +730,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                 mInitialMotionY = ev.y
                 mActivePointerId = ev.getPointerId(0)
             }
+
             MotionEvent.ACTION_MOVE -> {
                 if ((mLastMotionX > (width - mGutterSize)) || (mLastMotionX < mGutterSize)) {
                     requestDisallowInterceptTouchEvent(true)
@@ -732,6 +755,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                     }
                 }
             }
+
             MotionEvent.ACTION_UP -> when {
                 mIsBeingDragged -> {
                     mIsBeingDragged = false
@@ -764,9 +788,11 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                             targetPage < 0 -> {
                                 scrollLeft(animated = true)
                             }
+
                             targetPage >= numPages -> {
                                 scrollRight(animated = true)
                             }
+
                             else -> {
                                 setCurrentItemInternal(targetPage, true, velocity)
                             }
@@ -786,12 +812,14 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                 mIsBeingDragged = false
                 scrollToItem(mCurItem, true, 0, false)
             }
+
             MotionEvent.ACTION_POINTER_DOWN -> {
                 val index = ev.actionIndex
                 val x = ev.safeGetX(index)
                 mLastMotionX = x
                 mActivePointerId = ev.getPointerId(index)
             }
+
             MotionEvent.ACTION_POINTER_UP -> {
                 onSecondaryPointerUp(ev)
                 mLastMotionX = ev.safeGetX(ev.findPointerIndex(mActivePointerId))
@@ -906,20 +934,22 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                 KeyEvent.KEYCODE_DPAD_LEFT -> handled = if (event.hasModifiers(KeyEvent.META_ALT_ON)) {
                     pageLeft()
                 } else {
-                    arrowScroll(View.FOCUS_LEFT)
+                    arrowScroll(FOCUS_LEFT)
                 }
+
                 KeyEvent.KEYCODE_DPAD_RIGHT -> handled = if (event.hasModifiers(
                         KeyEvent.META_ALT_ON
                     )
                 ) {
                     pageRight()
                 } else {
-                    arrowScroll(View.FOCUS_RIGHT)
+                    arrowScroll(FOCUS_RIGHT)
                 }
+
                 KeyEvent.KEYCODE_TAB -> if (event.hasNoModifiers()) {
-                    handled = arrowScroll(View.FOCUS_FORWARD)
+                    handled = arrowScroll(FOCUS_FORWARD)
                 } else if (event.hasModifiers(KeyEvent.META_SHIFT_ON)) {
-                    handled = arrowScroll(View.FOCUS_BACKWARD)
+                    handled = arrowScroll(FOCUS_BACKWARD)
                 }
             }
         }
@@ -976,7 +1006,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
             direction
         )
         if (nextFocused != null && nextFocused !== currentFocused) {
-            if (direction == View.FOCUS_LEFT) {
+            if (direction == FOCUS_LEFT) {
                 // If there is nothing to the left, or this is causing us to
                 // jump to the right, then what we really want to do is page left.
                 val nextLeft = getChildRectInPagerCoordinates(mTempRect, nextFocused).left
@@ -986,7 +1016,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                 } else {
                     nextFocused.requestFocus()
                 }
-            } else if (direction == View.FOCUS_RIGHT) {
+            } else if (direction == FOCUS_RIGHT) {
                 // If there is nothing to the right, or this is causing us to
                 // jump to the left, then what we really want to do is page right.
                 val nextLeft = getChildRectInPagerCoordinates(mTempRect, nextFocused).left
@@ -997,10 +1027,10 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                     nextFocused.requestFocus()
                 }
             }
-        } else if (direction == View.FOCUS_LEFT || direction == View.FOCUS_BACKWARD) {
+        } else if (direction == FOCUS_LEFT || direction == FOCUS_BACKWARD) {
             // Trying to move left and nothing there; try to page.
             handled = pageLeft()
-        } else if (direction == View.FOCUS_RIGHT || direction == View.FOCUS_FORWARD) {
+        } else if (direction == FOCUS_RIGHT || direction == FOCUS_FORWARD) {
             // Trying to move right and nothing there; try to page.
             handled = pageRight()
         }
@@ -1053,11 +1083,12 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
         return false
     }
 
-    internal val numPages: Int get() =
-        getClientWidth()
-            ?.let { clientWidth -> (computeHorizontalScrollRange() / clientWidth.toDouble()).roundToInt() }
-            ?.coerceAtLeast(1)
-            ?: 1
+    internal val numPages: Int
+        get() =
+            getClientWidth()
+                ?.let { clientWidth -> (computeHorizontalScrollRange() / clientWidth.toDouble()).roundToInt() }
+                ?.coerceAtLeast(1)
+                ?: 1
 
     /**
      * Layout parameters that should be supplied for views added to a
@@ -1099,10 +1130,18 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
  * May crash with java.lang.IllegalArgumentException: pointerIndex out of range
  */
 private fun MotionEvent.safeGetX(pointerIndex: Int): Float =
-    try { getX(pointerIndex) } catch (e: IllegalArgumentException) { 0F }
+    try {
+        getX(pointerIndex)
+    } catch (e: IllegalArgumentException) {
+        0F
+    }
 
 /**
  * May crash with java.lang.IllegalArgumentException: pointerIndex out of range
  */
 private fun MotionEvent.safeGetY(pointerIndex: Int): Float =
-    try { getY(pointerIndex) } catch (e: IllegalArgumentException) { 0F }
+    try {
+        getY(pointerIndex)
+    } catch (e: IllegalArgumentException) {
+        0F
+    }

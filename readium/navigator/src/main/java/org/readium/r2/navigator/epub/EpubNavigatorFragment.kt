@@ -159,7 +159,7 @@ public class EpubNavigatorFragment internal constructor(
         }
     }
 
-    public data class Configuration internal constructor(
+    public data class Configuration(
 
         /**
          * Patterns for asset paths which will be available to EPUB resources under
@@ -401,21 +401,21 @@ public class EpubNavigatorFragment internal constructor(
 //                    if (index == 0) {
 //                        resourcesDouble.add(PageResource.EpubFxl(rightLink = link, rightUrl = url))
 //                    } else {
-                        // add double pages, left & right
-                        if (doublePageLeft == null) {
-                            doublePageLeft = link
-                        } else {
-                            doublePageRight = link
-                            resourcesDouble.add(
-                                PageResource.EpubFxl(
-                                    leftLink = doublePageLeft,
-                                    leftUrl = viewModel.urlTo(doublePageLeft),
-                                    rightLink = doublePageRight,
-                                    rightUrl = viewModel.urlTo(doublePageRight)
-                                )
+                    // add double pages, left & right
+                    if (doublePageLeft == null) {
+                        doublePageLeft = link
+                    } else {
+                        doublePageRight = link
+                        resourcesDouble.add(
+                            PageResource.EpubFxl(
+                                leftLink = doublePageLeft,
+                                leftUrl = viewModel.urlTo(doublePageLeft),
+                                rightLink = doublePageRight,
+                                rightUrl = viewModel.urlTo(doublePageRight)
                             )
-                            doublePageLeft = null
-                        }
+                        )
+                        doublePageLeft = null
+                    }
 //                    }
                 }
                 // add last page if there is only a left page remaining

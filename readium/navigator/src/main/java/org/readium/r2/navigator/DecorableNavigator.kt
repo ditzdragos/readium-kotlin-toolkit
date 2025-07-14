@@ -127,19 +127,20 @@ public data class Decoration(
     public interface Style : Parcelable {
         @Parcelize
         public data class Highlight(
-            @ColorInt override val tint: Int,
+            override val tint: Int,
             override val isActive: Boolean = false
         ) : Style, Tinted, Activable
 
         @Parcelize
         public data class Underline(
-            @ColorInt override val tint: Int,
+            override val tint: Int,
             override val isActive: Boolean = false
         ) : Style, Tinted, Activable
 
         /** A type of [Style] which has a tint color. */
         public interface Tinted {
-            @get:ColorInt public val tint: Int
+            @get:ColorInt
+            public val tint: Int
         }
 
         /** A type of [Style] which can be in an "active" state. */
@@ -172,67 +173,68 @@ public sealed class DecorationChange {
  *
  * The changes need to be applied in the same order, one by one.
  */
-public suspend fun List<Decoration>.changesByHref(target: List<Decoration>): Map<Url, List<DecorationChange>> = withContext(
-    Dispatchers.IO
-) {
-    val source = this@changesByHref
-    val result = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-        override fun getOldListSize(): Int = source.size
-        override fun getNewListSize(): Int = target.size
+public suspend fun List<Decoration>.changesByHref(target: List<Decoration>): Map<Url, List<DecorationChange>> =
+    withContext(
+        Dispatchers.IO
+    ) {
+        val source = this@changesByHref
+        val result = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = source.size
+            override fun getNewListSize(): Int = target.size
 
-        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-            source[oldItemPosition].id == target[newItemPosition].id
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                source[oldItemPosition].id == target[newItemPosition].id
 
-        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-            val sourceDecoration = source[oldItemPosition]
-            val targetDecoration = target[newItemPosition]
-            return sourceDecoration.id == targetDecoration.id &&
-                sourceDecoration.locator == targetDecoration.locator &&
-                sourceDecoration.style == targetDecoration.style
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val sourceDecoration = source[oldItemPosition]
+                val targetDecoration = target[newItemPosition]
+                return sourceDecoration.id == targetDecoration.id &&
+                        sourceDecoration.locator == targetDecoration.locator &&
+                        sourceDecoration.style == targetDecoration.style
+            }
+        })
+
+        val changes = mutableMapOf<Url, List<DecorationChange>>()
+
+        fun registerChange(change: DecorationChange, locator: Locator) {
+            val resourceChanges = changes[locator.href] ?: emptyList()
+            changes[locator.href] = resourceChanges + change
         }
-    })
 
-    val changes = mutableMapOf<Url, List<DecorationChange>>()
+        result.dispatchUpdatesTo(object : ListUpdateCallback {
+            override fun onInserted(position: Int, count: Int) {
+                for (i in 0 until count) {
+                    val decoration = target[position + i]
+                    registerChange(DecorationChange.Added(decoration), decoration.locator)
+                }
+            }
 
-    fun registerChange(change: DecorationChange, locator: Locator) {
-        val resourceChanges = changes[locator.href] ?: emptyList()
-        changes[locator.href] = resourceChanges + change
+            override fun onRemoved(position: Int, count: Int) {
+                for (i in 0 until count) {
+                    val decoration = source[position + i]
+                    registerChange(DecorationChange.Removed(decoration.id), decoration.locator)
+                }
+            }
+
+            override fun onMoved(fromPosition: Int, toPosition: Int) {
+                val decoration = target[toPosition]
+                registerChange(
+                    DecorationChange.Moved(
+                        decoration.id,
+                        fromPosition = fromPosition,
+                        toPosition = toPosition
+                    ),
+                    decoration.locator
+                )
+            }
+
+            override fun onChanged(position: Int, count: Int, payload: Any?) {
+                for (i in 0 until count) {
+                    val decoration = target[position + i]
+                    registerChange(DecorationChange.Updated(decoration), decoration.locator)
+                }
+            }
+        })
+
+        changes
     }
-
-    result.dispatchUpdatesTo(object : ListUpdateCallback {
-        override fun onInserted(position: Int, count: Int) {
-            for (i in 0 until count) {
-                val decoration = target[position + i]
-                registerChange(DecorationChange.Added(decoration), decoration.locator)
-            }
-        }
-
-        override fun onRemoved(position: Int, count: Int) {
-            for (i in 0 until count) {
-                val decoration = source[position + i]
-                registerChange(DecorationChange.Removed(decoration.id), decoration.locator)
-            }
-        }
-
-        override fun onMoved(fromPosition: Int, toPosition: Int) {
-            val decoration = target[toPosition]
-            registerChange(
-                DecorationChange.Moved(
-                    decoration.id,
-                    fromPosition = fromPosition,
-                    toPosition = toPosition
-                ),
-                decoration.locator
-            )
-        }
-
-        override fun onChanged(position: Int, count: Int, payload: Any?) {
-            for (i in 0 until count) {
-                val decoration = target[position + i]
-                registerChange(DecorationChange.Updated(decoration), decoration.locator)
-            }
-        }
-    })
-
-    changes
-}

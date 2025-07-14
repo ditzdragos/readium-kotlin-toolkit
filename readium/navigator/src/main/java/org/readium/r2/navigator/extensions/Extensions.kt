@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.view.View
 import androidx.annotation.ColorInt
-import androidx.annotation.ColorRes
 import androidx.core.content.ContextCompat
 
 /**
@@ -14,10 +13,10 @@ import androidx.core.content.ContextCompat
 /** returns true if the resolved layout direction of the content view in this
  * activity is ViewCompat.LAYOUT_DIRECTION_RTL. Otherwise false. */
 internal fun Activity.layoutDirectionIsRTL(): Boolean {
-    return findViewById<View?>(android.R.id.content).layoutDirection == View.LAYOUT_DIRECTION_RTL
+    return findViewById<View?>(android.R.id.content)?.layoutDirection == View.LAYOUT_DIRECTION_RTL
 }
 
 @ColorInt
-internal fun Context.color(@ColorRes id: Int): Int {
+internal fun Context.color(id: Int): Int {
     return ContextCompat.getColor(this, id)
 }
