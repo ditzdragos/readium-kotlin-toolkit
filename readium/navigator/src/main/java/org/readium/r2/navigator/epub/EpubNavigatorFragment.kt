@@ -135,19 +135,6 @@ public class EpubNavigatorFragment internal constructor(
     HyperlinkNavigator,
     Configurable<EpubSettings, EpubPreferences> {
 
-    // Cache for hrefs that have displayed errors
-    private val errorCache = mutableSetOf<String>()
-
-    // Function to clear the error cache
-    private fun clearErrorCache() {
-        errorCache.clear()
-        Timber.d("Error cache cleared")
-    }
-
-    init {
-        clearErrorCache()
-    }
-
     // Make a copy to prevent the user from modifying the configuration after initialization.
     internal val config: Configuration = configuration.copy().apply {
         servedAssets += "readium/.*"
