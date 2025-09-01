@@ -6,29 +6,28 @@
 
 package org.readium.r2.shared.util
 
-import android.R.attr.value
 import org.readium.r2.shared.util.Try.Failure
 import org.readium.r2.shared.util.Try.Success
 
 /** A [Result] type which can be used as a return type. */
-public sealed class Try<out Success, out Failure> {
+public sealed class Try<out S, out F> {
 
     public companion object {
         /** Returns an instance that encapsulates the given value as successful value. */
-        public fun <Success> success(success: Success): Try<Success, Nothing> = Success(success)
+        public fun <T> success(success: T): Try<T, Nothing> = Success(success)
 
         /** Returns the encapsulated Throwable exception if this instance represents failure or null if it is success. */
-        public fun <Failure> failure(failure: Failure): Try<Nothing, Failure> = Failure(failure)
+        public fun <T> failure(failure: T): Try<Nothing, T> = Failure(failure)
     }
 
     public abstract val isSuccess: Boolean
     public abstract val isFailure: Boolean
 
     /** Returns the encapsulated value if this instance represents success or null if it is failure. */
-    public abstract fun getOrNull(): Success?
+    public abstract fun getOrNull(): S?
 
     /** Returns the encapsulated [Throwable] exception if this instance represents failure or null if it is success. */
-    public abstract fun failureOrNull(): Failure?
+    public abstract fun failureOrNull(): F?
 
     public class Success<out S, out F>(public val value: S) : Try<S, F>() {
         override val isSuccess: Boolean get() = true
@@ -48,7 +47,7 @@ public sealed class Try<out Success, out Failure> {
      * Returns the encapsulated result of the given transform function applied to the encapsulated value
      * if this instance represents success or the original encapsulated [Throwable] exception if it is failure.
      */
-    public inline fun <R> map(transform: (value: Success) -> R): Try<R, Failure> =
+    public inline fun <R> map(transform: (value: S) -> R): Try<R, F> =
         when (this) {
             is Success -> success(transform(value))
             is Failure -> failure(value)
@@ -58,10 +57,10 @@ public sealed class Try<out Success, out Failure> {
      * Returns the encapsulated result of the given transform function applied to the encapsulated failure
      * if this instance represents failure or the original encapsulated success value if it is a success.
      */
-    public inline fun <F> mapFailure(transform: (value: Failure) -> F): Try<Success, F> =
+    public inline fun <T> mapFailure(transform: (value: F) -> T): Try<S, T> =
         when (this) {
             is Success -> success(value)
-            is Failure -> failure(transform(failureOrNull()))
+            is Failure -> failure(transform(value))
         }
 
     /**
@@ -69,19 +68,19 @@ public sealed class Try<out Success, out Failure> {
      * the result of [onFailure] function for the encapsulated value if it is failure.
      */
     public inline fun <R> fold(
-        onSuccess: (value: Success) -> R,
-        onFailure: (exception: Failure) -> R,
+        onSuccess: (value: S) -> R,
+        onFailure: (exception: F) -> R,
     ): R =
         when (this) {
             is Success -> onSuccess(value)
-            is Failure -> onFailure(failureOrNull())
+            is Failure -> onFailure(value)
         }
 
     /**
      * Performs the given action on the encapsulated value if this instance represents success.
      * Returns the original [Try] unchanged.
      */
-    public inline fun onSuccess(action: (value: Success) -> Unit): Try<Success, Failure> {
+    public inline fun onSuccess(action: (value: S) -> Unit): Try<S, F> {
         if (this is Success) action(value)
         return this
     }
@@ -90,8 +89,8 @@ public sealed class Try<out Success, out Failure> {
      * Performs the given action on the encapsulated value if this instance represents failure.
      * Returns the original [Try] unchanged.
      */
-    public inline fun onFailure(action: (exception: Failure) -> Unit): Try<Success, Failure> {
-        if (this is Failure) action(failureOrNull())
+    public inline fun onFailure(action: (exception: F) -> Unit): Try<S, F> {
+        if (this is Failure) action(value)
         return this
     }
 }

@@ -350,7 +350,7 @@ public value class Key(public val code: String) {
     }
 }
 
-private fun inputModifiers(event: KeyEvent): Set<InputModifier> =
+private fun inputModifiers(event: AndroidKeyEvent): Set<InputModifier> =
     buildSet {
         if (event.isAltPressed) {
             add(InputModifier.Alt)
