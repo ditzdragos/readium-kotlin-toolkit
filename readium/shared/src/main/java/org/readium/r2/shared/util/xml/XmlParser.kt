@@ -11,7 +11,8 @@ package org.readium.r2.shared.util.xml
 
 import java.io.IOException
 import java.io.InputStream
-import java.util.*
+import java.util.Locale
+import java.util.Stack
 import javax.xml.XMLConstants
 import org.readium.r2.shared.InternalReadiumApi
 import org.xmlpull.v1.XmlPullParser
@@ -26,7 +27,7 @@ import org.xmlpull.v1.XmlPullParserFactory
 @InternalReadiumApi
 public class XmlParser(
     private val isNamespaceAware: Boolean = true,
-    private val isCaseSensitive: Boolean = true
+    private val isCaseSensitive: Boolean = true,
 ) {
 
     private val parser: XmlPullParser = XmlPullParserFactory.newInstance().let {
@@ -57,6 +58,7 @@ public class XmlParser(
                         }
                     stack.push(Triple(mutableListOf(), attributes, langAttr ?: stack.peek().third))
                 }
+
                 XmlPullParser.END_TAG -> {
                     val (children, attributes, lang) = stack.pop()
                     maybeAddText(text, children)
@@ -64,7 +66,11 @@ public class XmlParser(
                     val element = buildElement(attributes, children, lang)
                     stack.peek().first.add(element)
                 }
-                XmlPullParser.TEXT, XmlPullParser.ENTITY_REF -> {
+
+                XmlPullParser.CDSECT,
+                XmlPullParser.TEXT,
+                XmlPullParser.ENTITY_REF,
+                    -> {
                     text += parser.text
                 }
             }
@@ -131,7 +137,7 @@ public data class ElementNode(
     val namespace: String = "",
     val lang: String = "",
     val attributes: AttributeMap = emptyMap(),
-    val children: List<Node> = listOf()
+    val children: List<Node> = listOf(),
 ) : Node() {
 
     /** Text of the first child if it is a [TextNode], or null otherwise */

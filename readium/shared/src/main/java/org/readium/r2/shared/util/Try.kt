@@ -6,6 +6,7 @@
 
 package org.readium.r2.shared.util
 
+import android.R.attr.value
 import org.readium.r2.shared.util.Try.Failure
 import org.readium.r2.shared.util.Try.Success
 
@@ -41,14 +42,6 @@ public sealed class Try<out Success, out Failure> {
         override val isFailure: Boolean get() = true
         override fun getOrNull(): S? = null
         override fun failureOrNull(): F = value
-
-        @Deprecated(
-            "Renamed to value.",
-            level = DeprecationLevel.ERROR,
-            replaceWith = ReplaceWith("value")
-        )
-        public val exception: F
-            get() = value
     }
 
     /**
@@ -57,8 +50,8 @@ public sealed class Try<out Success, out Failure> {
      */
     public inline fun <R> map(transform: (value: Success) -> R): Try<R, Failure> =
         when (this) {
-            is Try.Success -> success(transform(value))
-            is Try.Failure -> failure(value)
+            is Success -> success(transform(value))
+            is Failure -> failure(value)
         }
 
     /**
@@ -67,8 +60,8 @@ public sealed class Try<out Success, out Failure> {
      */
     public inline fun <F> mapFailure(transform: (value: Failure) -> F): Try<Success, F> =
         when (this) {
-            is Try.Success -> success(value)
-            is Try.Failure -> failure(transform(failureOrNull()))
+            is Success -> success(value)
+            is Failure -> failure(transform(failureOrNull()))
         }
 
     /**
@@ -77,11 +70,11 @@ public sealed class Try<out Success, out Failure> {
      */
     public inline fun <R> fold(
         onSuccess: (value: Success) -> R,
-        onFailure: (exception: Failure) -> R
+        onFailure: (exception: Failure) -> R,
     ): R =
         when (this) {
-            is Try.Success -> onSuccess(value)
-            is Try.Failure -> onFailure(failureOrNull())
+            is Success -> onSuccess(value)
+            is Failure -> onFailure(failureOrNull())
         }
 
     /**
@@ -89,7 +82,7 @@ public sealed class Try<out Success, out Failure> {
      * Returns the original [Try] unchanged.
      */
     public inline fun onSuccess(action: (value: Success) -> Unit): Try<Success, Failure> {
-        if (this is Try.Success) action(value)
+        if (this is Success) action(value)
         return this
     }
 
@@ -98,7 +91,7 @@ public sealed class Try<out Success, out Failure> {
      * Returns the original [Try] unchanged.
      */
     public inline fun onFailure(action: (exception: Failure) -> Unit): Try<Success, Failure> {
-        if (this is Try.Failure) action(failureOrNull())
+        if (this is Failure) action(failureOrNull())
         return this
     }
 }
@@ -112,20 +105,6 @@ public fun <S, F : Throwable> Try<S, F>.getOrThrow(): S =
         is Success -> value
         is Failure -> throw value
     }
-
-/**
- * Returns the encapsulated value if this instance represents success
- * or throws the encapsulated ThrowableError exception if it is failure.
- */
-@Suppress("UnusedReceiverParameter")
-@Deprecated(
-    "An `Error` is not a throwable object. Refactor or wrap in an `ErrorException`.",
-    ReplaceWith("getOrElse { throw ErrorException(it) }"),
-    DeprecationLevel.ERROR
-)
-@JvmName("getOrThrowError")
-public fun <S, F : Error> Try<S, F>.getOrThrow(): S =
-    throw NotImplementedError()
 
 /**
  * Returns the encapsulated value if this instance represents success or the [defaultValue] if it is failure.
@@ -173,6 +152,7 @@ public fun <S, F> Try<S, F>.checkSuccess(): S =
     when (this) {
         is Success ->
             value
+
         is Failure -> {
             throw IllegalStateException(
                 "Try was excepted to contain a success.",

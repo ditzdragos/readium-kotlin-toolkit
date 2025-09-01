@@ -35,7 +35,7 @@ import org.readium.r2.shared.util.logging.log
 public data class PublicationCollection(
     val metadata: @WriteWith<JSONParceler> Map<String, Any> = emptyMap(),
     val links: List<Link> = emptyList(),
-    val subcollections: Map<String, List<PublicationCollection>> = emptyMap()
+    val subcollections: Map<String, List<PublicationCollection>> = emptyMap(),
 ) : JSONable, Parcelable {
 
     /**
@@ -56,7 +56,7 @@ public data class PublicationCollection(
          */
         public fun fromJSON(
             json: Any?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): PublicationCollection? {
             json ?: return null
 
@@ -111,7 +111,7 @@ public data class PublicationCollection(
          */
         public fun collectionsFromJSON(
             json: JSONObject,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): Map<String, List<PublicationCollection>> {
             val collections = mutableMapOf<String, MutableList<PublicationCollection>>()
             for (role in json.keys().asSequence().sorted()) {
@@ -159,19 +159,3 @@ internal fun Map<String, List<PublicationCollection>>.appendToJSONObject(jsonObj
             }
         }
     }
-
-@Deprecated(
-    "Use [subcollections[role].firstOrNull()] instead",
-    ReplaceWith("subcollections[role].firstOrNull()"),
-    level = DeprecationLevel.ERROR
-)
-public fun Map<String, List<PublicationCollection>>.firstWithRole(role: String): PublicationCollection? =
-    get(role)?.firstOrNull()
-
-@Deprecated(
-    "Use [subcollections[role]] instead",
-    ReplaceWith("subcollections[role]"),
-    level = DeprecationLevel.ERROR
-)
-public fun Map<String, List<PublicationCollection>>.findAllWithRole(role: String): List<PublicationCollection> =
-    get(role) ?: emptyList()

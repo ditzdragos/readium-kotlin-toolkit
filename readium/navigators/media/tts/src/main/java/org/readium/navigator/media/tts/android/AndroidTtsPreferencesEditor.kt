@@ -9,7 +9,12 @@
 package org.readium.navigator.media.tts.android
 
 import org.readium.r2.navigator.extensions.format
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.DoubleIncrement
+import org.readium.r2.navigator.preferences.Preference
+import org.readium.r2.navigator.preferences.PreferenceDelegate
+import org.readium.r2.navigator.preferences.PreferencesEditor
+import org.readium.r2.navigator.preferences.RangePreference
+import org.readium.r2.navigator.preferences.RangePreferenceDelegate
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Metadata
@@ -26,12 +31,12 @@ import org.readium.r2.shared.util.Language
 public class AndroidTtsPreferencesEditor(
     initialPreferences: AndroidTtsPreferences,
     publicationMetadata: Metadata,
-    defaults: AndroidTtsDefaults
+    defaults: AndroidTtsDefaults,
 ) : PreferencesEditor<AndroidTtsPreferences> {
 
     private data class State(
         val preferences: AndroidTtsPreferences,
-        val settings: AndroidTtsSettings
+        val settings: AndroidTtsSettings,
     )
 
     private val settingsResolver: AndroidTtsSettingsResolver =

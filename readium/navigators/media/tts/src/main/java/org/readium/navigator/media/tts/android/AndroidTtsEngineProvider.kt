@@ -8,7 +8,10 @@ package org.readium.navigator.media.tts.android
 
 import android.content.Context
 import androidx.media3.common.PlaybackException
-import androidx.media3.common.PlaybackException.*
+import androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+import androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+import androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+import androidx.media3.common.PlaybackException.ERROR_CODE_UNSPECIFIED
 import androidx.media3.common.PlaybackParameters
 import org.readium.navigator.media.tts.TtsEngineProvider
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -22,13 +25,18 @@ import org.readium.r2.shared.util.Try
 public class AndroidTtsEngineProvider(
     private val context: Context,
     private val defaults: AndroidTtsDefaults = AndroidTtsDefaults(),
-    private val voiceSelector: AndroidTtsEngine.VoiceSelector = AndroidTtsEngine.VoiceSelector { _, _ -> null }
-) : TtsEngineProvider<AndroidTtsSettings, AndroidTtsPreferences, AndroidTtsPreferencesEditor,
-        AndroidTtsEngine.Error, AndroidTtsEngine.Voice> {
+    private val voiceSelector: AndroidTtsEngine.VoiceSelector = AndroidTtsEngine.VoiceSelector { _, _ -> null },
+) : TtsEngineProvider<
+    AndroidTtsSettings,
+    AndroidTtsPreferences,
+    AndroidTtsPreferencesEditor,
+    AndroidTtsEngine.Error,
+    AndroidTtsEngine.Voice
+    > {
 
     override suspend fun createEngine(
         publication: Publication,
-        initialPreferences: AndroidTtsPreferences
+        initialPreferences: AndroidTtsPreferences,
     ): Try<AndroidTtsEngine, Error> {
         val settingsResolver =
             AndroidTtsSettingsResolver(publication.metadata, defaults)
@@ -47,7 +55,7 @@ public class AndroidTtsEngineProvider(
 
     override fun createPreferencesEditor(
         publication: Publication,
-        initialPreferences: AndroidTtsPreferences
+        initialPreferences: AndroidTtsPreferences,
     ): AndroidTtsPreferencesEditor =
         AndroidTtsPreferencesEditor(initialPreferences, publication.metadata, defaults)
 
@@ -55,14 +63,14 @@ public class AndroidTtsEngineProvider(
         AndroidTtsPreferences()
 
     override fun getPlaybackParameters(
-        settings: AndroidTtsSettings
+        settings: AndroidTtsSettings,
     ): PlaybackParameters {
         return PlaybackParameters(settings.speed.toFloat(), settings.pitch.toFloat())
     }
 
     override fun updatePlaybackParameters(
         previousPreferences: AndroidTtsPreferences,
-        playbackParameters: PlaybackParameters
+        playbackParameters: PlaybackParameters,
     ): AndroidTtsPreferences {
         return previousPreferences.copy(
             speed = playbackParameters.speed.toDouble(),
@@ -74,17 +82,22 @@ public class AndroidTtsEngineProvider(
         val errorCode = when (error) {
             AndroidTtsEngine.Error.Unknown ->
                 ERROR_CODE_UNSPECIFIED
+
             AndroidTtsEngine.Error.InvalidRequest ->
                 ERROR_CODE_IO_BAD_HTTP_STATUS
+
             AndroidTtsEngine.Error.Network ->
                 ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+
             AndroidTtsEngine.Error.NetworkTimeout ->
                 ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+
             AndroidTtsEngine.Error.Output,
             AndroidTtsEngine.Error.Service,
             AndroidTtsEngine.Error.Synthesis,
             is AndroidTtsEngine.Error.LanguageMissingData,
-            AndroidTtsEngine.Error.NotInstalledYet ->
+            AndroidTtsEngine.Error.NotInstalledYet,
+                ->
                 ERROR_CODE_UNSPECIFIED
         }
 

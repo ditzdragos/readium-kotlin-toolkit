@@ -10,22 +10,32 @@ package org.readium.r2.streamer.parser.epub
 
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.toMap
-import org.readium.r2.shared.publication.*
+import org.readium.r2.shared.publication.Accessibility
 import org.readium.r2.shared.publication.Collection
+import org.readium.r2.shared.publication.Contributor
+import org.readium.r2.shared.publication.Link
+import org.readium.r2.shared.publication.LocalizedString
+import org.readium.r2.shared.publication.Metadata
+import org.readium.r2.shared.publication.Properties
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.ReadingProgression
+import org.readium.r2.shared.publication.Subject
+import org.readium.r2.shared.publication.Tdm
 import org.readium.r2.shared.publication.presentation.Presentation
+import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Instant
 
 internal class MetadataAdapter(
     private val epubVersion: Double,
     private val uniqueIdentifierId: String?,
     private val readingProgression: ReadingProgression?,
-    private val displayOptions: Map<String, String>
+    private val displayOptions: Map<String, String>,
 ) {
     data class Result(
         val links: List<Link>,
         val metadata: Metadata,
         val durationById: Map<String, Double?>,
-        val coverId: String?
+        val coverId: String?,
     )
 
     fun adapt(items: List<MetadataItem>): Result {
@@ -88,6 +98,9 @@ internal class MetadataAdapter(
         val presentation: Presentation = globalItemsHolder
             .adapt(PresentationAdapter(epubVersion, displayOptions)::adapt)
 
+        val tdm: Tdm? = globalItemsHolder
+            .adapt(TdmAdapter()::adapt)
+
         val links: List<Link> = globalItemsHolder
             .adapt(LinksAdapter()::adapt)
 
@@ -113,6 +126,7 @@ internal class MetadataAdapter(
             readingProgression = readingProgression,
             belongsToCollections = belongsToCollections,
             belongsToSeries = belongsToSeries,
+            tdm = tdm,
             otherMetadata = otherMetadata,
 
             authors = contributors("aut"),
@@ -185,6 +199,35 @@ private class IdentifierAdapter(private val uniqueIdentifierId: String?) {
     }
 }
 
+private class TdmAdapter {
+
+    fun adapt(items: List<MetadataItem>): Pair<Tdm?, List<MetadataItem>> {
+        val itemsHolder = MetadataItemsHolder(items)
+
+        val reservation = itemsHolder
+            .adapt { it.takeAllWithProperty(Vocabularies.TDM + "reservation") }
+            .firstOrNull()
+            ?.let {
+                when (it.value) {
+                    "1" -> Tdm.Reservation.ALL
+                    "0" -> Tdm.Reservation.NONE
+                    else -> null
+                }
+            }
+
+        val policy = itemsHolder
+            .adapt { it.takeAllWithProperty(Vocabularies.TDM + "policy") }
+            .firstOrNull()
+            ?.let { AbsoluteUrl(it.value) }
+
+        val tdm = reservation?.let {
+            Tdm(reservation = it, policy = policy)
+        }
+
+        return tdm to itemsHolder.remainingItems
+    }
+}
+
 private class LanguageAdapter {
 
     fun adapt(items: List<MetadataItem>): Pair<List<String>, List<MetadataItem>> = items
@@ -197,7 +240,7 @@ private class TitleAdapter {
     data class Result(
         val localizedTitle: LocalizedString?,
         val localizedSortAs: LocalizedString?,
-        val localizedSubtitle: LocalizedString?
+        val localizedSubtitle: LocalizedString?,
     )
 
     fun adapt(items: List<MetadataItem>): Pair<Result, List<MetadataItem>> {
@@ -252,7 +295,7 @@ private class SubjectAdapter {
     private fun splitSubject(subject: Subject): List<Subject> {
         val lang = subject.localizedName.translations.keys.first()
         val names = subject.localizedName.translations.values.first().string.split(",", ";")
-            .map(kotlin.String::trim).filter(kotlin.String::isNotEmpty)
+            .map(String::trim).filter(String::isNotEmpty)
         return names.map {
             val newName = LocalizedString.fromStrings(mapOf(lang to it))
             Subject(localizedName = newName)
@@ -316,7 +359,7 @@ private class CollectionAdapter {
 
     data class Result(
         val belongsToCollections: List<Collection>,
-        val belongsToSeries: List<Collection>
+        val belongsToSeries: List<Collection>,
     )
 
     fun adapt(items: List<MetadataItem>): Pair<Result, List<MetadataItem>> {
@@ -324,7 +367,10 @@ private class CollectionAdapter {
 
         val collectionItems = remainingItems
             .takeAllWithProperty(Vocabularies.META + "belongs-to-collection")
-            .let { remainingItems = it.second; it.first }
+            .let {
+                remainingItems = it.second
+                it.first
+            }
 
         val allCollections = collectionItems
             .map { it.toCollection() }
@@ -333,7 +379,12 @@ private class CollectionAdapter {
 
         val belongsToCollections = collections.map(Pair<String?, Collection>::second)
         val belongsToSeries = series.map(Pair<String?, Collection>::second)
-            .ifEmpty { legacySeries(items).let { remainingItems = it.second; it.first } }
+            .ifEmpty {
+                legacySeries(items).let {
+                    remainingItems = it.second
+                    it.first
+                }
+            }
 
         return Result(belongsToCollections, belongsToSeries) to remainingItems
     }
@@ -386,7 +437,7 @@ private data class Title(
     val value: LocalizedString,
     val fileAs: LocalizedString? = null,
     val type: String? = null,
-    val displaySeq: Int? = null
+    val displaySeq: Int? = null,
 )
 
 private val MetadataItem.Meta.title: Title

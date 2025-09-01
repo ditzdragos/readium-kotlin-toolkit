@@ -6,7 +6,6 @@
 
 package org.readium.r2.shared.util.data
 
-import kotlin.io.use
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Closeable
@@ -58,7 +57,7 @@ public class EmptyContainer<E : Readable> :
  * The [containers] will be tested in the given order.
  */
 public class CompositeContainer<E : Readable>(
-    private val containers: List<Container<E>>
+    private val containers: List<Container<E>>,
 ) : Container<E> {
 
     public constructor(vararg containers: Container<E>) :
@@ -76,9 +75,9 @@ public class CompositeContainer<E : Readable>(
 }
 
 @InternalReadiumApi
-public suspend inline fun<S> Container<Readable>.readDecodeOrNull(
+public suspend inline fun <S> Container<Readable>.readDecodeOrNull(
     url: Url,
-    decode: (ByteArray) -> Try<S, DecodeError>
+    decode: (ByteArray) -> Try<S, DecodeError>,
 ): S? =
     get(url)?.use { resource ->
         resource.readDecodeOrNull(decode)

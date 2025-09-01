@@ -12,7 +12,7 @@
 package org.readium.r2.shared.publication
 
 import android.os.Parcelable
-import java.util.*
+import java.util.Locale
 import kotlinx.parcelize.Parcelize
 import org.json.JSONObject
 import org.readium.r2.shared.InternalReadiumApi
@@ -29,7 +29,7 @@ public data class LocalizedString(val translations: Map<String?, Translation> = 
 
     @Parcelize
     public data class Translation(
-        val string: String
+        val string: String,
     ) : Parcelable
 
     /**
@@ -166,12 +166,4 @@ public data class LocalizedString(val translations: Map<String?, Translation> = 
             return LocalizedString(translations)
         }
     }
-
-    @Deprecated("Use [string] instead.", ReplaceWith("string"), level = DeprecationLevel.ERROR)
-    val singleString: String?
-        get() = string.ifEmpty { null }
-
-    @Deprecated("Use [get] instead.", ReplaceWith("()"), level = DeprecationLevel.ERROR)
-    val multiString: Map<String?, String>
-        get() = translations.mapValues { (_, translation) -> translation.string }
 }

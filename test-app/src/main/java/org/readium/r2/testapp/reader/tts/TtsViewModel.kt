@@ -10,7 +10,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.readium.navigator.media.tts.AndroidTtsNavigator
 import org.readium.navigator.media.tts.AndroidTtsNavigatorFactory
@@ -46,7 +55,7 @@ class TtsViewModel private constructor(
     private val publication: Publication,
     private val ttsNavigatorFactory: AndroidTtsNavigatorFactory,
     private val mediaServiceFacade: MediaServiceFacade,
-    private val preferencesManager: PreferencesManager<AndroidTtsPreferences>
+    private val preferencesManager: PreferencesManager<AndroidTtsPreferences>,
 ) : TtsNavigator.Listener {
 
     companion object {
@@ -56,7 +65,7 @@ class TtsViewModel private constructor(
          */
         operator fun invoke(
             viewModelScope: CoroutineScope,
-            readerInitData: ReaderInitData
+            readerInitData: ReaderInitData,
         ): TtsViewModel? {
             if (readerInitData !is VisualReaderInitData || readerInitData.ttsInitData == null) {
                 return null
@@ -89,8 +98,9 @@ class TtsViewModel private constructor(
     private val MediaService.Session.ttsNavigator
         get() = navigator as? AndroidTtsNavigator
 
-    private val navigatorNow: AndroidTtsNavigator? get() =
-        mediaServiceFacade.session.value?.ttsNavigator
+    private val navigatorNow: AndroidTtsNavigator?
+        get() =
+            mediaServiceFacade.session.value?.ttsNavigator
 
     private var launchJob: Job? = null
 
@@ -141,9 +151,11 @@ class TtsViewModel private constructor(
                     null, TtsNavigator.State.Ready -> {
                         // Do nothing
                     }
+
                     is TtsNavigator.State.Ended -> {
                         stop()
                     }
+
                     is TtsNavigator.State.Failure -> {
                         onPlaybackError(state.error)
                     }
@@ -225,15 +237,18 @@ class TtsViewModel private constructor(
             is TtsNavigator.Error.ContentError -> {
                 Event.OnError(TtsError.ContentError(error))
             }
+
             is TtsNavigator.Error.EngineError<*> -> {
                 val engineError = (error.cause as AndroidTtsEngine.Error)
                 when (engineError) {
                     is AndroidTtsEngine.Error.LanguageMissingData ->
                         Event.OnMissingVoiceData(engineError.language)
+
                     is AndroidTtsEngine.Error.Network -> {
                         val ttsError = TtsError.EngineError.Network(engineError)
                         Event.OnError(ttsError)
                     }
+
                     else -> {
                         val ttsError = TtsError.EngineError.Other(engineError)
                         Event.OnError(ttsError)

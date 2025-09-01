@@ -6,7 +6,11 @@
 
 package org.readium.r2.navigator.epub
 
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.ColumnCount
+import org.readium.r2.navigator.preferences.ImageFilter
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
+import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Language
 
@@ -37,5 +41,5 @@ public data class EpubDefaults @ExperimentalReadiumApi constructor(
     val textAlign: TextAlign? = null,
     val textNormalization: Boolean? = null,
     val typeScale: Double? = null,
-    val wordSpacing: Double? = null
+    val wordSpacing: Double? = null,
 )

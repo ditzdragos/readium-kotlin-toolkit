@@ -18,7 +18,7 @@ package org.readium.r2.shared.extensions
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.*
+import java.util.Objects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.shared.InternalReadiumApi
@@ -31,7 +31,7 @@ import org.readium.r2.shared.InternalReadiumApi
 internal fun InputStream.copyTo(
     out: OutputStream,
     limit: Long,
-    bufferSize: Int = DEFAULT_BUFFER_SIZE
+    bufferSize: Int = DEFAULT_BUFFER_SIZE,
 ): Int {
     var bytesCopied: Int = 0
     var toRead: Int = limit.toInt()

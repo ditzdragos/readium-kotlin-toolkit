@@ -19,8 +19,18 @@ import androidx.core.app.ServiceCompat
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.sample
 import org.readium.navigator.media.common.Media3Adapter
 import org.readium.navigator.media.common.MediaNavigator
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -36,7 +46,7 @@ class MediaService : MediaSessionService() {
     class Session(
         val bookId: Long,
         val navigator: AnyMediaNavigator,
-        val mediaSession: MediaSession
+        val mediaSession: MediaSession,
     ) {
         val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     }
@@ -68,7 +78,7 @@ class MediaService : MediaSessionService() {
         @OptIn(FlowPreview::class)
         fun <N> openSession(
             navigator: N,
-            bookId: Long
+            bookId: Long,
         ) where N : AnyMediaNavigator, N : Media3Adapter {
             Timber.d("openSession")
             val activityIntent = createSessionActivityIntent()
@@ -171,7 +181,7 @@ class MediaService : MediaSessionService() {
         return binder.session.value?.mediaSession
     }
 
-    override fun onTaskRemoved(rootIntent: Intent) {
+    override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Timber.d("Task removed. Stopping session and service.")
         // Close the session to allow the service to be stopped.

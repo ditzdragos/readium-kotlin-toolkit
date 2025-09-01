@@ -11,7 +11,12 @@ package org.readium.r2.streamer.parser.pdf
 import android.content.Context
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
-import org.readium.r2.shared.publication.*
+import org.readium.r2.shared.publication.Contributor
+import org.readium.r2.shared.publication.Link
+import org.readium.r2.shared.publication.LocalizedString
+import org.readium.r2.shared.publication.Manifest
+import org.readium.r2.shared.publication.Metadata
+import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.InMemoryCacheService
 import org.readium.r2.shared.publication.services.InMemoryCoverService
 import org.readium.r2.shared.util.Try
@@ -32,14 +37,14 @@ import org.readium.r2.streamer.parser.PublicationParser
 @OptIn(ExperimentalReadiumApi::class)
 public class PdfParser(
     context: Context,
-    private val pdfFactory: PdfDocumentFactory<*>
+    private val pdfFactory: PdfDocumentFactory<*>,
 ) : PublicationParser {
 
     private val context = context.applicationContext
 
     override suspend fun parse(
         asset: Asset,
-        warnings: WarningLogger?
+        warnings: WarningLogger?,
     ): Try<Publication.Builder, PublicationParser.ParseError> {
         if (asset !is ResourceAsset || !asset.format.conformsTo(Specification.Pdf)) {
             return Try.failure(PublicationParser.ParseError.FormatNotSupported())

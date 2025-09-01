@@ -94,7 +94,7 @@ public interface DecorableNavigator : Navigator {
         val decoration: Decoration,
         val group: String,
         val rect: RectF? = null,
-        val point: PointF? = null
+        val point: PointF? = null,
     )
 }
 
@@ -114,7 +114,7 @@ public data class Decoration(
     val id: DecorationId,
     val locator: Locator,
     val style: Style,
-    val extras: @WriteWith<JSONParceler> Map<String, Any> = mapOf()
+    val extras: @WriteWith<JSONParceler> Map<String, Any> = mapOf(),
 ) : JSONable, Parcelable {
 
     /**

@@ -7,7 +7,11 @@
 package org.readium.adapter.pspdfkit.navigator
 
 import kotlinx.serialization.Serializable
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Axis
+import org.readium.r2.navigator.preferences.Configurable
+import org.readium.r2.navigator.preferences.Fit
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
 
 /**
  * Preferences for the PDF navigator with the PSPDFKit adapter.
@@ -28,7 +32,7 @@ public data class PsPdfKitPreferences(
     val readingProgression: ReadingProgression? = null,
     val scroll: Boolean? = null,
     val scrollAxis: Axis? = null,
-    val spread: Spread? = null
+    val spread: Spread? = null,
 ) : Configurable.Preferences<PsPdfKitPreferences> {
 
     init {

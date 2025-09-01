@@ -13,14 +13,14 @@ plugins {
 }
 
 android {
-    compileSdk = 35
+    compileSdk = (property("android.compileSdk") as String).toInt()
     defaultConfig {
-        minSdk = 21
-        targetSdk = 34
+        minSdk = (property("android.minSdk") as String).toInt()
+        targetSdk = (property("android.targetSdk") as String).toInt()
 
         applicationId = "org.readium.r2reader"
 
-        versionName = "3.0.3"
+        versionName = "3.1.1"
         versionCode = 1
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -37,9 +37,6 @@ android {
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_1_8.toString()
         freeCompilerArgs = freeCompilerArgs + "-opt-in=kotlin.RequiresOptIn"
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.androidx.compose.compiler.get()
     }
     buildFeatures {
         viewBinding = true
@@ -66,13 +63,10 @@ android {
     namespace = "org.readium.r2.testapp"
 }
 
-tasks.register("prepareKotlinBuildScriptModel") {}
-
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(libs.kotlin.stdlib)
-    implementation(libs.androidx.legacy.v4)
 
     implementation(project(":readium:readium-shared"))
     implementation(project(":readium:readium-streamer"))
@@ -81,15 +75,10 @@ dependencies {
     implementation(project(":readium:navigators:media:readium-navigator-media-tts"))
     // Only required if you want to support audiobooks using ExoPlayer.
     implementation(project(":readium:adapters:exoplayer"))
-    implementation(project(":readium:readium-navigator-media2"))
     implementation(project(":readium:readium-opds"))
     implementation(project(":readium:readium-lcp"))
     // Only required if you want to support PDF files using PDFium.
-    implementation(project(":readium:adapters:pdfium")) {
-        exclude(group = "com.android.support")
-        exclude(module = "support-media-compat")
-        exclude(module = "support-v4")
-    }
+    implementation(project(":readium:adapters:pdfium"))
 
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
@@ -103,7 +92,7 @@ dependencies {
     implementation(libs.androidx.core)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.fragment.ktx)
-    implementation(libs.bundles.lifecycle)
+    implementation(libs.androidx.lifecycle.common)
     implementation(libs.androidx.navigation.fragment)
     implementation(libs.androidx.navigation.ui)
     implementation(libs.androidx.paging)
@@ -122,11 +111,4 @@ dependencies {
     // Room database
     implementation(libs.bundles.room)
     ksp(libs.androidx.room.compiler)
-
-    // Tests
-    testImplementation(libs.junit)
-
-    androidTestImplementation(libs.androidx.ext.junit)
-    androidTestImplementation(libs.androidx.expresso.core)
 }
-

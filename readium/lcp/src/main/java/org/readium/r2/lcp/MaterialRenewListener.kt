@@ -11,7 +11,11 @@ import androidx.activity.result.ActivityResultCaller
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.fragment.app.FragmentManager
-import com.google.android.material.datepicker.*
+import com.google.android.material.datepicker.CalendarConstraints
+import com.google.android.material.datepicker.CompositeDateValidator
+import com.google.android.material.datepicker.DateValidatorPointBackward
+import com.google.android.material.datepicker.DateValidatorPointForward
+import com.google.android.material.datepicker.MaterialDatePicker
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -34,7 +38,7 @@ import org.readium.r2.shared.util.Url
 public class MaterialRenewListener(
     private val license: LcpLicense,
     private val caller: ActivityResultCaller,
-    private val fragmentManager: FragmentManager
+    private val fragmentManager: FragmentManager,
 ) : LcpLicense.RenewListener {
 
     override suspend fun preferredEndDate(maximumDate: Instant?): Instant? = suspendCancellableCoroutine { cont ->

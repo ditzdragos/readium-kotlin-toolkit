@@ -17,6 +17,10 @@ dependencyResolutionManagement {
 
 rootProject.name = "Readium"
 
+include(":readium:adapters:pdfium:common")
+project(":readium:adapters:pdfium:common")
+    .name = "readium-adapter-pdfium-common"
+
 include(":readium:adapters:pdfium:document")
 project(":readium:adapters:pdfium:document")
     .name = "readium-adapter-pdfium-document"
@@ -41,6 +45,14 @@ include(":readium:navigator")
 project(":readium:navigator")
     .name = "readium-navigator"
 
+include(":readium:navigators:common")
+project(":readium:navigators:common")
+    .name = "readium-navigator-common"
+
+// include(":readium:navigators:web")
+// project(":readium:navigators:web")
+//     .name = "readium-navigator-web"
+
 include(":readium:navigators:media:common")
 project(":readium:navigators:media:common")
     .name = "readium-navigator-media-common"
@@ -52,10 +64,6 @@ project(":readium:navigators:media:audio")
 include(":readium:navigators:media:tts")
 project(":readium:navigators:media:tts")
     .name = "readium-navigator-media-tts"
-
-include(":readium:navigator-media2")
-project(":readium:navigator-media2")
-    .name = "readium-navigator-media2"
 
 include(":readium:adapters:exoplayer:audio")
 project(":readium:adapters:exoplayer:audio")
@@ -74,3 +82,4 @@ project(":readium:streamer")
     .name = "readium-streamer"
 
 include("test-app")
+// include(":readium:navigators:demo")

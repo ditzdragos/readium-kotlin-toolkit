@@ -8,7 +8,6 @@
 
 package org.readium.navigator.media.tts.android
 
-import android.speech.tts.Voice as AndroidVoice
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -29,6 +28,7 @@ import android.speech.tts.TextToSpeech.OnInitListener
 import android.speech.tts.TextToSpeech.QUEUE_ADD
 import android.speech.tts.TextToSpeech.SUCCESS
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice as AndroidVoice
 import android.speech.tts.Voice.QUALITY_HIGH
 import android.speech.tts.Voice.QUALITY_LOW
 import android.speech.tts.Voice.QUALITY_NORMAL
@@ -66,9 +66,13 @@ public class AndroidTtsEngine private constructor(
     private val settingsResolver: SettingsResolver,
     private val voiceSelector: VoiceSelector,
     override val voices: Set<Voice>,
-    initialPreferences: AndroidTtsPreferences
-) : TtsEngine<AndroidTtsSettings, AndroidTtsPreferences,
-        AndroidTtsEngine.Error, AndroidTtsEngine.Voice> {
+    initialPreferences: AndroidTtsPreferences,
+) : TtsEngine<
+    AndroidTtsSettings,
+    AndroidTtsPreferences,
+    AndroidTtsEngine.Error,
+    AndroidTtsEngine.Voice
+    > {
 
     public companion object {
 
@@ -76,7 +80,7 @@ public class AndroidTtsEngine private constructor(
             context: Context,
             settingsResolver: SettingsResolver,
             voiceSelector: VoiceSelector,
-            initialPreferences: AndroidTtsPreferences
+            initialPreferences: AndroidTtsPreferences,
         ): AndroidTtsEngine? {
             val textToSpeech = initializeTextToSpeech(context)
                 ?: return null
@@ -97,7 +101,7 @@ public class AndroidTtsEngine private constructor(
         }
 
         private suspend fun initializeTextToSpeech(
-            context: Context
+            context: Context,
         ): TextToSpeech? {
             val init = CompletableDeferred<Boolean>()
 
@@ -166,7 +170,7 @@ public class AndroidTtsEngine private constructor(
 
     public sealed class Error(
         override val message: String,
-        override val cause: org.readium.r2.shared.util.Error? = null
+        override val cause: org.readium.r2.shared.util.Error? = null,
     ) : TtsEngine.Error {
 
         /** Denotes a generic operation failure. */
@@ -233,7 +237,7 @@ public class AndroidTtsEngine private constructor(
         val id: Id,
         override val language: Language,
         val quality: Quality = Quality.Normal,
-        val requiresNetwork: Boolean = false
+        val requiresNetwork: Boolean = false,
     ) : TtsEngine.Voice {
 
         @kotlinx.serialization.Serializable
@@ -241,28 +245,32 @@ public class AndroidTtsEngine private constructor(
         public value class Id(public val value: String)
 
         public enum class Quality {
-            Lowest, Low, Normal, High, Highest
+            Lowest,
+            Low,
+            Normal,
+            High,
+            Highest,
         }
     }
 
     private data class Request(
         val id: TtsEngine.RequestId,
         val text: String,
-        val language: Language?
+        val language: Language?,
     )
 
     private sealed class State {
 
         data class EngineAvailable(
-            val engine: TextToSpeech
+            val engine: TextToSpeech,
         ) : State()
 
         data class WaitingForService(
-            val pendingRequests: MutableList<Request> = mutableListOf()
+            val pendingRequests: MutableList<Request> = mutableListOf(),
         ) : State()
 
         data class Failure(
-            val error: Error
+            val error: Error,
         ) : State()
     }
 
@@ -293,7 +301,7 @@ public class AndroidTtsEngine private constructor(
     }
 
     override fun setListener(
-        listener: TtsEngine.Listener<Error>?
+        listener: TtsEngine.Listener<Error>?,
     ) {
         utteranceListener = listener
         (state as? State.EngineAvailable)
@@ -303,7 +311,7 @@ public class AndroidTtsEngine private constructor(
     override fun speak(
         requestId: TtsEngine.RequestId,
         text: String,
-        language: Language?
+        language: Language?,
     ) {
         check(!isClosed) { "Engine is closed." }
         val request = Request(requestId, text, language)
@@ -312,9 +320,11 @@ public class AndroidTtsEngine private constructor(
             is State.WaitingForService -> {
                 stateNow.pendingRequests.add(request)
             }
+
             is State.Failure -> {
                 tryReconnect(request)
             }
+
             is State.EngineAvailable -> {
                 if (!doSpeak(stateNow.engine, request)) {
                     cleanEngine(stateNow.engine)
@@ -329,9 +339,11 @@ public class AndroidTtsEngine private constructor(
             is State.EngineAvailable -> {
                 stateNow.engine.stop()
             }
+
             is State.Failure -> {
                 // Do nothing
             }
+
             is State.WaitingForService -> {
                 for (request in stateNow.pendingRequests) {
                     utteranceListener?.onFlushed(request.id)
@@ -353,9 +365,11 @@ public class AndroidTtsEngine private constructor(
             is State.EngineAvailable -> {
                 cleanEngine(stateNow.engine)
             }
+
             is State.Failure -> {
                 // Do nothing
             }
+
             is State.WaitingForService -> {
                 // Do nothing
             }
@@ -364,7 +378,7 @@ public class AndroidTtsEngine private constructor(
 
     private fun doSpeak(
         engine: TextToSpeech,
-        request: Request
+        request: Request,
     ): Boolean {
         return engine.setupVoice(settings.value, request.id, request.language, voices) &&
             (engine.speak(request.text, QUEUE_ADD, null, request.id.value) == SUCCESS)
@@ -425,7 +439,7 @@ public class AndroidTtsEngine private constructor(
         settings: AndroidTtsSettings,
         id: TtsEngine.RequestId,
         utteranceLanguage: Language?,
-        voices: Set<Voice>
+        voices: Set<Voice>,
     ): Boolean {
         val language = utteranceLanguage
             .takeUnless { settings.overrideContentLanguage }
@@ -473,7 +487,7 @@ public class AndroidTtsEngine private constructor(
         voices.firstOrNull { it.name == name }
 
     private class UtteranceListener(
-        private val listener: TtsEngine.Listener<Error>?
+        private val listener: TtsEngine.Listener<Error>?,
     ) : UtteranceProgressListener() {
         override fun onStart(utteranceId: String) {
             listener?.onStart(TtsEngine.RequestId(utteranceId))

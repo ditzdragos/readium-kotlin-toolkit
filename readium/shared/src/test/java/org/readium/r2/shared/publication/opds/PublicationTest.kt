@@ -12,14 +12,20 @@ package org.readium.r2.shared.publication.opds
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.readium.r2.shared.publication.*
+import org.readium.r2.shared.publication.Href
+import org.readium.r2.shared.publication.Link
+import org.readium.r2.shared.publication.LocalizedString
+import org.readium.r2.shared.publication.Manifest
+import org.readium.r2.shared.publication.Metadata
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.PublicationCollection
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class PublicationTest {
 
     private fun createPublication(
-        subCollections: Map<String, List<PublicationCollection>> = emptyMap()
+        subCollections: Map<String, List<PublicationCollection>> = emptyMap(),
     ) = Publication(
         Manifest(
             metadata = Metadata(localizedTitle = LocalizedString("Title")),
@@ -27,7 +33,8 @@ class PublicationTest {
         )
     )
 
-    @Test fun `get {images}`() {
+    @Test
+    fun `get {images}`() {
         val links = listOf(Link(href = Href("/image.png")!!))
         assertEquals(
             links,
@@ -39,7 +46,8 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {images} when missing`() {
+    @Test
+    fun `get {images} when missing`() {
         assertEquals(0, createPublication().images.size)
     }
 }

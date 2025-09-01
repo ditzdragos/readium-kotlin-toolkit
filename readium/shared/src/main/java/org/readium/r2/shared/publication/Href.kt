@@ -6,11 +6,11 @@
 
 package org.readium.r2.shared.publication
 
-import org.readium.r2.shared.util.Url as SharedUrl
 import android.os.Parcelable
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import org.readium.r2.shared.util.URITemplate
+import org.readium.r2.shared.util.Url as SharedUrl
 import timber.log.Timber
 
 /**
@@ -47,20 +47,22 @@ public class Href private constructor(private val href: Url) : Parcelable {
      */
     public fun resolve(
         base: SharedUrl? = null,
-        parameters: Map<String, String> = emptyMap()
+        parameters: Map<String, String> = emptyMap(),
     ): SharedUrl = href.resolve(base, parameters)
 
     /**
      * Indicates whether this HREF is templated.
      */
-    public val isTemplated: Boolean get() =
-        href is TemplatedUrl
+    public val isTemplated: Boolean
+        get() =
+            href is TemplatedUrl
 
     /**
      * List of URI template parameter keys, if the HREF is templated.
      */
-    public val parameters: List<String>? get() =
-        href.parameters
+    public val parameters: List<String>?
+        get() =
+            href.parameters
 
     /**
      * Resolves the receiver HREF to the given [baseUrl].

@@ -27,7 +27,7 @@ import timber.log.Timber
 
 internal class R2PagerAdapter internal constructor(
     val fm: FragmentManager,
-    private val resources: List<PageResource>
+    private val resources: List<PageResource>,
 ) : R2FragmentPagerAdapter(fm) {
 
     internal interface Listener {
@@ -42,7 +42,7 @@ internal class R2PagerAdapter internal constructor(
             val leftLink: Link? = null,
             val leftUrl: Url? = null,
             val rightLink: Link? = null,
-            val rightUrl: Url? = null
+            val rightUrl: Url? = null,
         ) : PageResource()
         data class Cbz(val link: Link) : PageResource()
     }

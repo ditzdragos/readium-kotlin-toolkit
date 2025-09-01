@@ -12,7 +12,7 @@
 package org.readium.r2.shared.publication
 
 import android.os.Parcelable
-import java.util.*
+import java.util.Locale
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -28,7 +28,8 @@ public enum class ReadingProgression(public val value: String) : Parcelable {
 
     /** Left to right */
     @SerialName("ltr")
-    LTR("ltr");
+    LTR("ltr"),
+    ;
 
     public companion object : MapCompanion<String, ReadingProgression>(
         entries.toTypedArray(),

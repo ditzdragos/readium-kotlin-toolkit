@@ -42,20 +42,26 @@ import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.SingleResourceContainer
 import org.readium.r2.streamer.parser.PublicationParser
 import org.readium.r2.streamer.parser.audio.AudioLocatorService
+import org.readium.r2.streamer.parser.epub.EpubPositionsService
 import timber.log.Timber
 
 /**
  * Parses any Readium Web Publication package or manifest, e.g. WebPub, Audiobook, DiViNa, LCPDF...
+ *
+ * @param epubReflowablePositionsStrategy Strategy used to calculate the number
+ * of positions in a reflowable resource of a web publication conforming to the
+ * EPUB profile.
  */
 public class ReadiumWebPubParser(
     private val context: Context? = null,
     private val httpClient: HttpClient,
-    private val pdfFactory: PdfDocumentFactory<*>?
+    private val pdfFactory: PdfDocumentFactory<*>?,
+    private val epubReflowablePositionsStrategy: EpubPositionsService.ReflowableStrategy = EpubPositionsService.ReflowableStrategy.recommended,
 ) : PublicationParser {
 
     override suspend fun parse(
         asset: Asset,
-        warnings: WarningLogger?
+        warnings: WarningLogger?,
     ): Try<Publication.Builder, PublicationParser.ParseError> = when (asset) {
         is ResourceAsset -> parseResourceAsset(asset.resource, asset.format.specification)
         is ContainerAsset -> parseContainerAsset(asset.container, asset.format.specification)
@@ -63,7 +69,7 @@ public class ReadiumWebPubParser(
 
     private suspend fun parseContainerAsset(
         container: Container<Resource>,
-        formatSpecification: FormatSpecification
+        formatSpecification: FormatSpecification,
     ): Try<Publication.Builder, PublicationParser.ParseError> {
         if (!formatSpecification.conformsTo(Specification.Rpf)) {
             return Try.failure(PublicationParser.ParseError.FormatNotSupported())
@@ -97,6 +103,8 @@ public class ReadiumWebPubParser(
                     pdfFactory?.let { LcpdfPositionsService.create(it) }
                 manifest.conformsTo(Publication.Profile.DIVINA) ->
                     PerResourcePositionsService.createFactory(MediaType("image/*")!!)
+                manifest.conformsTo(Publication.Profile.EPUB) ->
+                    EpubPositionsService.createFactory(epubReflowablePositionsStrategy)
                 else ->
                     WebPositionsService.createFactory(httpClient)
             }
@@ -147,7 +155,7 @@ public class ReadiumWebPubParser(
     @OptIn(DelicateReadiumApi::class)
     private suspend fun parseResourceAsset(
         resource: Resource,
-        formatSpecification: FormatSpecification
+        formatSpecification: FormatSpecification,
     ): Try<Publication.Builder, PublicationParser.ParseError> {
         if (!formatSpecification.conformsTo(Specification.Rwpm)) {
             return Try.failure(PublicationParser.ParseError.FormatNotSupported())

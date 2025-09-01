@@ -29,7 +29,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.Log
 import androidx.media3.common.util.Util
-import org.readium.navigator.media.tts.session.AudioFocusManager.PlayerControl
+import java.util.Objects
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 /** Manages requesting and responding to changes in audio focus.
@@ -41,7 +41,7 @@ import org.readium.navigator.media.tts.session.AudioFocusManager.PlayerControl
 internal class AudioFocusManager(
     context: Context,
     eventHandler: Handler,
-    playerControl: PlayerControl
+    playerControl: PlayerControl,
 ) {
     /** Interface to allow AudioFocusManager to give commands to a player.  */
     interface PlayerControl {
@@ -134,7 +134,7 @@ internal class AudioFocusManager(
      * managed automatically.
      */
     fun setAudioAttributes(audioAttributes: AudioAttributes?) {
-        if (!Util.areEqual(this.audioAttributes, audioAttributes)) {
+        if (!Objects.equals(this.audioAttributes, audioAttributes)) {
             this.audioAttributes = audioAttributes
             focusGainToRequest = convertAudioAttributesToFocusGain(audioAttributes)
             require(
@@ -152,7 +152,7 @@ internal class AudioFocusManager(
      */
     fun updateAudioFocus(
         playWhenReady: Boolean,
-        playbackState: @Player.State Int
+        playbackState: @Player.State Int,
     ): @PlayerCommand Int {
         if (shouldAbandonAudioFocusIfHeld(playbackState)) {
             abandonAudioFocusIfHeld()
@@ -283,11 +283,13 @@ internal class AudioFocusManager(
                 executePlayerCommand(PLAYER_COMMAND_PLAY_WHEN_READY)
                 return
             }
+
             AudioManager.AUDIOFOCUS_LOSS -> {
                 executePlayerCommand(PLAYER_COMMAND_DO_NOT_PLAY)
                 abandonAudioFocusIfHeld()
                 return
             }
+
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 if (focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT || willPauseWhenDucked()) {
                     executePlayerCommand(PLAYER_COMMAND_WAIT_FOR_CALLBACK)
@@ -297,6 +299,7 @@ internal class AudioFocusManager(
                 }
                 return
             }
+
             else -> Log.w(
                 TAG,
                 "Unknown focus change type: $focusChange"
@@ -380,7 +383,7 @@ internal class AudioFocusManager(
          * @return The type of audio focus gain that should be requested.
          */
         private fun convertAudioAttributesToFocusGain(
-            audioAttributes: AudioAttributes?
+            audioAttributes: AudioAttributes?,
         ): @AudioFocusGain Int {
             return if (audioAttributes == null) {
                 // Don't handle audio focus. It may be either video only contents or developers
@@ -398,18 +401,22 @@ internal class AudioFocusManager(
                         )
                         AUDIOFOCUS_GAIN
                     }
+
                     C.USAGE_ALARM, C.USAGE_VOICE_COMMUNICATION -> AUDIOFOCUS_GAIN_TRANSIENT
                     C.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE, C.USAGE_ASSISTANCE_SONIFICATION,
                     C.USAGE_NOTIFICATION, C.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
                     C.USAGE_NOTIFICATION_COMMUNICATION_INSTANT, C.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
-                    C.USAGE_NOTIFICATION_EVENT, C.USAGE_NOTIFICATION_RINGTONE ->
+                    C.USAGE_NOTIFICATION_EVENT, C.USAGE_NOTIFICATION_RINGTONE,
+                        ->
                         AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+
                     C.USAGE_ASSISTANT ->
                         if (Util.SDK_INT >= 19) {
                             AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE
                         } else {
                             AUDIOFOCUS_GAIN_TRANSIENT
                         }
+
                     C.USAGE_ASSISTANCE_ACCESSIBILITY -> {
                         if (audioAttributes.contentType == C.AUDIO_CONTENT_TYPE_SPEECH) {
                             // Voice shouldn't be interrupted by other playback.
@@ -418,6 +425,7 @@ internal class AudioFocusManager(
                             AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
                         }
                     }
+
                     else -> {
                         Log.w(TAG, "Unidentified audio usage: " + audioAttributes.usage)
                         AUDIOFOCUS_NONE

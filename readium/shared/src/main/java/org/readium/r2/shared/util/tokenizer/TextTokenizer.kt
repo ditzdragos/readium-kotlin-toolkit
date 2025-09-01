@@ -9,7 +9,7 @@ package org.readium.r2.shared.util.tokenizer
 import android.icu.text.BreakIterator
 import android.os.Build
 import androidx.annotation.RequiresApi
-import java.util.*
+import java.util.Locale
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Language
 
@@ -20,7 +20,9 @@ public typealias TextTokenizer = Tokenizer<String, IntRange>
 /** A text token unit which can be used with a [TextTokenizer]. */
 @ExperimentalReadiumApi
 public enum class TextUnit {
-    Word, Sentence, Paragraph
+    Word,
+    Sentence,
+    Paragraph,
 }
 
 /**
@@ -29,7 +31,7 @@ public enum class TextUnit {
  */
 @ExperimentalReadiumApi
 public class DefaultTextContentTokenizer private constructor(
-    private val tokenizer: TextTokenizer
+    private val tokenizer: TextTokenizer,
 ) : TextTokenizer by tokenizer {
     public constructor(unit: TextUnit, language: Language?) : this(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {

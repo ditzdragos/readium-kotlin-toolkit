@@ -15,7 +15,11 @@ import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.*
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.testapp.databinding.FragmentListviewBinding
@@ -50,7 +54,7 @@ class NavigationFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         binding = FragmentListviewBinding.inflate(inflater, container, false)
         return binding.root
@@ -113,7 +117,7 @@ class NavigationAdapter(private val onLinkSelected: (Link) -> Unit) :
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
-        viewType: Int
+        viewType: Int,
     ): ViewHolder {
         return ViewHolder(
             ItemRecycleNavigationBinding.inflate(
@@ -152,7 +156,7 @@ private class NavigationDiff : DiffUtil.ItemCallback<Pair<Int, Link>>() {
 
     override fun areItemsTheSame(
         oldItem: Pair<Int, Link>,
-        newItem: Pair<Int, Link>
+        newItem: Pair<Int, Link>,
     ): Boolean {
         return oldItem.first == newItem.first &&
             oldItem.second == newItem.second
@@ -160,7 +164,7 @@ private class NavigationDiff : DiffUtil.ItemCallback<Pair<Int, Link>>() {
 
     override fun areContentsTheSame(
         oldItem: Pair<Int, Link>,
-        newItem: Pair<Int, Link>
+        newItem: Pair<Int, Link>,
     ): Boolean {
         return oldItem.first == newItem.first &&
             oldItem.second == newItem.second

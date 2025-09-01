@@ -6,7 +6,10 @@
 
 package org.readium.adapter.pdfium.navigator
 
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Axis
+import org.readium.r2.navigator.preferences.Configurable
+import org.readium.r2.navigator.preferences.Fit
+import org.readium.r2.navigator.preferences.ReadingProgression
 
 /**
  *  Settings values of the PDF navigator with the PDFium adapter.
@@ -17,5 +20,5 @@ public data class PdfiumSettings(
     val fit: Fit,
     val pageSpacing: Double,
     val readingProgression: ReadingProgression,
-    val scrollAxis: Axis
+    val scrollAxis: Axis,
 ) : Configurable.Settings

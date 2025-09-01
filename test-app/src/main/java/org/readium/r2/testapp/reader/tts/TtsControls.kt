@@ -11,7 +11,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,7 +36,7 @@ import org.readium.r2.testapp.utils.extensions.asStateWhenStarted
 fun TtsControls(
     model: TtsViewModel,
     onPreferences: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val showControls by model.showControls.asStateWhenStarted()
     val isPlaying by model.isPlaying.asStateWhenStarted()
@@ -57,7 +62,7 @@ fun TtsControls(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onPreferences: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier

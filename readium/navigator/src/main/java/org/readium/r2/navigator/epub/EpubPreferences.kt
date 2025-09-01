@@ -9,7 +9,15 @@ package org.readium.r2.navigator.epub
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.serialization.Serializable
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Color
+import org.readium.r2.navigator.preferences.ColumnCount
+import org.readium.r2.navigator.preferences.Configurable
+import org.readium.r2.navigator.preferences.FontFamily
+import org.readium.r2.navigator.preferences.ImageFilter
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
+import org.readium.r2.navigator.preferences.TextAlign
+import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Language
 
@@ -73,7 +81,7 @@ public data class EpubPreferences @ExperimentalReadiumApi constructor(
     val theme: Theme? = null,
     val typeScale: Double? = null,
     val verticalText: Boolean? = null,
-    val wordSpacing: Double? = null
+    val wordSpacing: Double? = null,
 ) : Configurable.Preferences<EpubPreferences> {
 
     init {
@@ -141,7 +149,7 @@ public data class EpubPreferences @ExperimentalReadiumApi constructor(
                 "OpenDyslexic",
                 "AccessibleDfA",
                 "IA Writer Duospace"
-            )
+            ),
         ): EpubPreferences {
             val sp: SharedPreferences =
                 context.getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)

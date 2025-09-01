@@ -56,13 +56,13 @@ private var observers: MutableList<Pair<Observer, ObserverPolicy>> = mutableList
 
 internal enum class ObserverPolicy {
     Once,
-    Always
+    Always,
 }
 
 internal data class ValidatedDocuments(
     val license: LicenseDocument,
     private val context: Context,
-    val status: StatusDocument? = null
+    val status: StatusDocument? = null,
 ) {
     fun getContext(): LcpClient.Context {
         when (context) {
@@ -81,14 +81,16 @@ internal sealed class State {
     data class checkLicenseStatus(
         val license: LicenseDocument,
         val status: StatusDocument?,
-        val statusDocumentTakesPrecedence: Boolean
+        val statusDocumentTakesPrecedence: Boolean,
     ) : State()
+
     data class retrievePassphrase(val license: LicenseDocument, val status: StatusDocument?) : State()
     data class validateIntegrity(
         val license: LicenseDocument,
         val status: StatusDocument?,
-        val passphrase: String
+        val passphrase: String,
     ) : State()
+
     data class registerDevice(val documents: ValidatedDocuments, val link: Link) : State()
     data class valid(val documents: ValidatedDocuments) : State()
     data class failure(val error: Exception) : State()
@@ -121,7 +123,7 @@ internal class LicenseValidation(
     val network: NetworkService,
     val passphrases: PassphrasesService,
     val context: android.content.Context,
-    val onLicenseValidated: (LicenseDocument) -> Unit
+    val onLicenseValidated: (LicenseDocument) -> Unit,
 ) {
 
     var state: State = State.start
@@ -320,6 +322,7 @@ internal class LicenseValidation(
                         state.status,
                         state.statusDocumentTakesPrecedence
                     )
+
                     is State.retrievePassphrase -> requestPassphrase(state.license)
                     is State.validateIntegrity -> validateIntegrity(state.license, state.passphrase)
                     is State.registerDevice -> registerDevice(state.documents.license, state.link)
@@ -336,7 +339,7 @@ internal class LicenseValidation(
 
     private fun observe(event: Event, observer: Observer) {
         raise(event)
-        Companion.observe(this, ObserverPolicy.Once, observer)
+        observe(this, ObserverPolicy.Once, observer)
     }
 
     private fun notifyObservers(documents: ValidatedDocuments?, error: Exception?) {
@@ -395,7 +398,7 @@ internal class LicenseValidation(
     private fun checkLicenseStatus(
         license: LicenseDocument,
         status: StatusDocument?,
-        statusDocumentTakesPrecedence: Boolean
+        statusDocumentTakesPrecedence: Boolean,
     ) {
         var error: LcpError.LicenseStatus? = null
         val now = Instant.now()
@@ -421,6 +424,7 @@ internal class LicenseValidation(
                         } else {
                             LcpError.LicenseStatus.Expired(end)
                         }
+
                     StatusDocument.Status.Returned -> LcpError.LicenseStatus.Returned(date)
                     StatusDocument.Status.Revoked -> {
                         val devicesCount = status.events(
@@ -428,6 +432,7 @@ internal class LicenseValidation(
                         ).size
                         LcpError.LicenseStatus.Revoked(date, devicesCount = devicesCount)
                     }
+
                     StatusDocument.Status.Cancelled -> LcpError.LicenseStatus.Cancelled(date)
                 }
             } else {
@@ -471,7 +476,7 @@ internal class LicenseValidation(
         fun observe(
             licenseValidation: LicenseValidation,
             policy: ObserverPolicy = ObserverPolicy.Always,
-            observer: Observer
+            observer: Observer,
         ) {
             var notified = true
             when (licenseValidation.stateMachine.state) {
@@ -479,10 +484,12 @@ internal class LicenseValidation(
                     (licenseValidation.stateMachine.state as State.valid).documents,
                     null
                 )
+
                 is State.failure -> observer(
                     null,
                     (licenseValidation.stateMachine.state as State.failure).error
                 )
+
                 is State.cancelled -> observer(null, null)
                 else -> notified = false
             }

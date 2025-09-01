@@ -55,7 +55,7 @@ public class LcpDialogAuthentication : LcpAuthenticating {
         val continuation: Continuation<String?>,
         val license: LcpAuthenticating.AuthenticatedLicense,
         val reason: LcpAuthenticating.AuthenticationReason,
-        var currentInput: Editable? = null
+        var currentInput: Editable? = null,
     )
 
     private val mutex: Mutex = Mutex()
@@ -80,7 +80,7 @@ public class LcpDialogAuthentication : LcpAuthenticating {
     override suspend fun retrievePassphrase(
         license: LcpAuthenticating.AuthenticatedLicense,
         reason: LcpAuthenticating.AuthenticationReason,
-        allowUserInteraction: Boolean
+        allowUserInteraction: Boolean,
     ): String? =
         if (allowUserInteraction) {
             withContext(Dispatchers.Main) {
@@ -95,7 +95,7 @@ public class LcpDialogAuthentication : LcpAuthenticating {
 
     private suspend fun askPassphrase(
         license: LcpAuthenticating.AuthenticatedLicense,
-        reason: LcpAuthenticating.AuthenticationReason
+        reason: LcpAuthenticating.AuthenticationReason,
     ): String? {
         mutex.lock()
 
@@ -113,7 +113,7 @@ public class LcpDialogAuthentication : LcpAuthenticating {
 
     private fun showPopupWindow(
         suspendedCall: SuspendedCall,
-        hostView: View
+        hostView: View,
     ) {
         val context = hostView.context
 

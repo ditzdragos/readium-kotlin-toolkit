@@ -14,7 +14,9 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.util.AttributeSet
-import android.view.*
+import android.view.ActionMode
+import android.view.MenuItem
+import android.view.View
 import android.webkit.URLUtil
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -118,18 +120,6 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
         @InternalReadiumApi
         fun goToPreviousResource(jump: Boolean, animated: Boolean): Boolean = false
-
-        @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onScroll() {
-        }
-
-        @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onHighlightActivated(id: String) {
-        }
-
-        @Deprecated("Not available anymore", level = DeprecationLevel.ERROR)
-        fun onHighlightAnnotationMarkActivated(id: String) {
-        }
     }
 
     var listener: Listener? = null
@@ -142,6 +132,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     internal var isSelecting = false
 
     val scrollMode: Boolean get() = scrollModeFlow.value
+    var disablePageTurnsWhileScrolling: Boolean = false
 
     var callback: OnOverScrolledCallback? = null
 
@@ -320,6 +311,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
             }
 
             when {
+                // If the user is in scrollMode and has disabled swipe pagination, do nothing.
+                scrollMode && this@R2BasicWebView.disablePageTurnsWhileScrolling -> {}
+
                 scrollMode ->
                     goLeft(jump = true)
 
@@ -400,7 +394,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         val defaultPrevented: Boolean,
         val point: PointF,
         val targetElement: String,
-        val interactiveElement: String?
+        val interactiveElement: String?,
     ) {
         companion object {
             fun fromJSONObject(obj: JSONObject?): TapEvent? {
@@ -483,8 +477,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     fun onDragEnd(eventJson: String): Boolean {
         val event = DragEvent.fromJSON(eventJson)?.takeIf { it.isValid }
             ?: return false
-
-        return runBlocking(uiScope.coroutineContext) { listener?.onDragEnd(event) == true }
+        return runBlocking(uiScope.coroutineContext) { listener?.onDragEnd(event) ?: false }
     }
 
     @android.webkit.JavascriptInterface
@@ -520,7 +513,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         val startPoint: PointF,
         val currentPoint: PointF,
         val offset: PointF,
-        val interactiveElement: String?
+        val interactiveElement: String?,
     ) {
         internal val isValid: Boolean
             get() =
@@ -732,7 +725,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     @RequiresApi(Build.VERSION_CODES.M)
     inner class Callback2Wrapper(
         val callback: ActionMode.Callback,
-        val callback2: ActionMode.Callback2?
+        val callback2: ActionMode.Callback2?,
     ) : ActionMode.Callback by callback, ActionMode.Callback2() {
         override fun onGetContentRect(mode: ActionMode?, view: View?, outRect: Rect?) =
             callback2?.onGetContentRect(mode, view, outRect)

@@ -7,7 +7,12 @@
 package org.readium.r2.testapp.data.model
 
 import androidx.annotation.ColorInt
-import androidx.room.*
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import androidx.room.TypeConverter
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.Url
@@ -64,7 +69,7 @@ data class Highlight(
     @ColumnInfo(name = TEXT, defaultValue = "{}")
     var text: Locator.Text = Locator.Text(),
     @ColumnInfo(name = ANNOTATION, defaultValue = "")
-    var annotation: String = ""
+    var annotation: String = "",
 ) {
 
     constructor(
@@ -72,7 +77,7 @@ data class Highlight(
         style: Style,
         @ColorInt tint: Int,
         locator: Locator,
-        annotation: String
+        annotation: String,
     ) :
         this(
             bookId = bookId,
@@ -87,16 +92,19 @@ data class Highlight(
             annotation = annotation
         )
 
-    val locator: Locator get() = Locator(
-        href = Url(href)!!,
-        mediaType = MediaType(type) ?: MediaType.BINARY,
-        title = title,
-        locations = locations,
-        text = text
-    )
+    val locator: Locator
+        get() = Locator(
+            href = Url(href)!!,
+            mediaType = MediaType(type) ?: MediaType.BINARY,
+            title = title,
+            locations = locations,
+            text = text
+        )
 
     enum class Style(val value: String) {
-        HIGHLIGHT("highlight"), UNDERLINE("underline");
+        HIGHLIGHT("highlight"),
+        UNDERLINE("underline"),
+        ;
 
         companion object {
             val DEFAULT = HIGHLIGHT

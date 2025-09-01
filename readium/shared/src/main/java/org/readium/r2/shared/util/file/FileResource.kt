@@ -19,7 +19,11 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.readium.r2.shared.InternalReadiumApi
-import org.readium.r2.shared.extensions.*
+import org.readium.r2.shared.extensions.coerceFirstNonNegative
+import org.readium.r2.shared.extensions.read
+import org.readium.r2.shared.extensions.requireLengthFitInt
+import org.readium.r2.shared.extensions.tryOrLog
+import org.readium.r2.shared.extensions.tryOrNull
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.DebugError
 import org.readium.r2.shared.util.Try
@@ -36,7 +40,7 @@ import org.readium.r2.shared.util.toUrl
  * @param file the file to read.
  */
 public class FileResource(
-    private val file: File
+    private val file: File,
 ) : Resource {
 
     private val randomAccessFile by lazy {

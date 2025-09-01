@@ -19,7 +19,7 @@ class LcpDecryptorTest(val testCase: TestCase) {
 
     data class TestCase(
         val range: LongRange,
-        val paddingLength: Int
+        val paddingLength: Int,
     )
 
     companion object {

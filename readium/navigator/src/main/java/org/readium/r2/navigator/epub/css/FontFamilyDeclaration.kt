@@ -20,7 +20,7 @@ import org.readium.r2.shared.util.Url
 internal fun buildFontFamilyDeclaration(
     fontFamily: String,
     alternates: List<String>,
-    builderAction: (MutableFontFamilyDeclaration).() -> Unit
+    builderAction: (MutableFontFamilyDeclaration).() -> Unit,
 ) =
     MutableFontFamilyDeclaration(fontFamily, alternates).apply(builderAction).toFontFamilyDeclaration()
 
@@ -34,7 +34,7 @@ internal fun buildFontFamilyDeclaration(
 public data class FontFamilyDeclaration(
     val fontFamily: String,
     val alternates: List<String>,
-    val fontFaces: List<FontFaceDeclaration>
+    val fontFaces: List<FontFaceDeclaration>,
 )
 
 /**
@@ -45,7 +45,7 @@ public data class FontFaceDeclaration(
     val fontFamily: String,
     val sources: List<FontFaceSource>,
     var fontStyle: FontStyle? = null,
-    var fontWeight: Either<FontWeight, ClosedRange<Int>>? = null
+    var fontWeight: Either<FontWeight, ClosedRange<Int>>? = null,
 ) {
 
     public fun links(urlNormalizer: (Url) -> Url): List<String> =
@@ -92,7 +92,7 @@ public data class FontFaceDeclaration(
  */
 public data class FontFaceSource(
     val href: Url,
-    val preload: Boolean = false
+    val preload: Boolean = false,
 )
 
 /**
@@ -102,7 +102,7 @@ public data class FontFaceSource(
 public data class MutableFontFamilyDeclaration public constructor(
     private val fontFamily: String,
     private val alternates: List<String>,
-    private val fontFaces: MutableList<FontFaceDeclaration> = mutableListOf()
+    private val fontFaces: MutableList<FontFaceDeclaration> = mutableListOf(),
 ) {
 
     public fun addFontFace(builderAction: MutableFontFaceDeclaration.() -> Unit) {
@@ -124,7 +124,7 @@ public data class MutableFontFaceDeclaration(
     private val fontFamily: String,
     private val sources: MutableList<FontFaceSource> = mutableListOf(),
     private var fontStyle: FontStyle? = null,
-    private var fontWeight: Either<FontWeight, ClosedRange<Int>>? = null
+    private var fontWeight: Either<FontWeight, ClosedRange<Int>>? = null,
 ) {
 
     /**
@@ -184,7 +184,7 @@ public data class MutableFontFaceDeclaration(
 @ExperimentalReadiumApi
 public enum class FontStyle {
     NORMAL,
-    ITALIC;
+    ITALIC,
 }
 
 /**
@@ -202,5 +202,5 @@ public enum class FontWeight(public val value: Int) {
     SEMI_BOLD(600),
     BOLD(700),
     EXTRA_BOLD(800),
-    BLACK(900);
+    BLACK(900),
 }

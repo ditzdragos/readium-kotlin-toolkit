@@ -6,7 +6,11 @@
 
 package org.readium.adapter.pspdfkit.navigator
 
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Axis
+import org.readium.r2.navigator.preferences.Configurable
+import org.readium.r2.navigator.preferences.Fit
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
 
 /**
  * Settings values of the PDF navigator with the PSPDFKit adapter.
@@ -20,5 +24,5 @@ public data class PsPdfKitSettings(
     val readingProgression: ReadingProgression,
     val scroll: Boolean,
     val scrollAxis: Axis,
-    val spread: Spread
+    val spread: Spread,
 ) : Configurable.Settings

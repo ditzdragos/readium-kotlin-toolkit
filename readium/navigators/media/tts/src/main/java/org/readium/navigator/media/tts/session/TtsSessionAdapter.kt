@@ -14,17 +14,51 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
 import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C.*
+import androidx.media3.common.C.ALLOW_CAPTURE_BY_SYSTEM
+import androidx.media3.common.C.AUDIO_CONTENT_TYPE_SPEECH
+import androidx.media3.common.C.INDEX_UNSET
+import androidx.media3.common.C.StreamType
+import androidx.media3.common.C.TIME_UNSET
+import androidx.media3.common.C.USAGE_MEDIA
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.FlagSet
 import androidx.media3.common.IllegalSeekPositionException
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
-import androidx.media3.common.PlaybackException.*
+import androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+import androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+import androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+import androidx.media3.common.PlaybackException.ERROR_CODE_UNSPECIFIED
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
-import androidx.media3.common.Player.*
+import androidx.media3.common.Player.COMMAND_GET_AUDIO_ATTRIBUTES
+import androidx.media3.common.Player.COMMAND_GET_CURRENT_MEDIA_ITEM
+import androidx.media3.common.Player.COMMAND_GET_DEVICE_VOLUME
+import androidx.media3.common.Player.COMMAND_GET_METADATA
+import androidx.media3.common.Player.COMMAND_GET_TEXT
+import androidx.media3.common.Player.COMMAND_PLAY_PAUSE
+import androidx.media3.common.Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS
+import androidx.media3.common.Player.COMMAND_SET_SPEED_AND_PITCH
+import androidx.media3.common.Player.COMMAND_STOP
+import androidx.media3.common.Player.Commands
+import androidx.media3.common.Player.EVENT_DEVICE_INFO_CHANGED
+import androidx.media3.common.Player.EVENT_DEVICE_VOLUME_CHANGED
+import androidx.media3.common.Player.EVENT_IS_PLAYING_CHANGED
+import androidx.media3.common.Player.EVENT_PLAYBACK_PARAMETERS_CHANGED
+import androidx.media3.common.Player.EVENT_PLAYBACK_STATE_CHANGED
+import androidx.media3.common.Player.EVENT_PLAYER_ERROR
+import androidx.media3.common.Player.EVENT_PLAY_WHEN_READY_CHANGED
+import androidx.media3.common.Player.Events
+import androidx.media3.common.Player.Listener
+import androidx.media3.common.Player.PLAYBACK_SUPPRESSION_REASON_NONE
+import androidx.media3.common.Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
+import androidx.media3.common.Player.REPEAT_MODE_OFF
+import androidx.media3.common.Player.REPEAT_MODE_ONE
+import androidx.media3.common.Player.RepeatMode
+import androidx.media3.common.Player.STATE_ENDED
+import androidx.media3.common.Player.STATE_IDLE
+import androidx.media3.common.Player.STATE_READY
 import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
@@ -34,7 +68,6 @@ import androidx.media3.common.util.Clock
 import androidx.media3.common.util.ListenerSet
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.Util
-import java.lang.Error
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.StateFlow
@@ -60,7 +93,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     private val onStop: () -> Unit,
     private val playbackParametersState: StateFlow<PlaybackParameters>,
     private val updatePlaybackParameters: (PlaybackParameters) -> Unit,
-    private val mapEngineError: (E) -> PlaybackException
+    private val mapEngineError: (E) -> PlaybackException,
 ) : Player {
 
     private val coroutineScope: CoroutineScope =
@@ -85,7 +118,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     )
 
     init {
-        val streamType = Util.getStreamTypeForAudioUsage(audioAttributes.usage)
+        val streamType = audioAttributes.streamType
         streamVolumeManager.setStreamType(streamType)
     }
 
@@ -181,7 +214,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     override fun setMediaItems(
         mediaItems: MutableList<MediaItem>,
         startIndex: Int,
-        startPositionMs: Long
+        startPositionMs: Long,
     ) {
     }
 
@@ -218,7 +251,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     override fun replaceMediaItems(
         fromIndex: Int,
         toIndex: Int,
-        mediaItems: MutableList<MediaItem>
+        mediaItems: MutableList<MediaItem>,
     ) {
     }
 
@@ -343,23 +376,8 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
         ttsPlayer.nextUtterance()
     }
 
-    @Deprecated("Deprecated in Java", ReplaceWith("hasPreviousMediaItem()"))
-    override fun hasPrevious(): Boolean {
-        return hasPreviousMediaItem()
-    }
-
-    @Deprecated("Deprecated in Java", ReplaceWith("hasPreviousMediaItem()"))
-    override fun hasPreviousWindow(): Boolean {
-        return hasPreviousMediaItem()
-    }
-
     override fun hasPreviousMediaItem(): Boolean {
         return previousMediaItemIndex != INDEX_UNSET
-    }
-
-    @Deprecated("Deprecated in Java", ReplaceWith("TODO(\"Not yet implemented\")"))
-    override fun previous() {
-        seekToPreviousMediaItem()
     }
 
     @Deprecated("Deprecated in Java", ReplaceWith("TODO(\"Not yet implemented\")"))
@@ -467,7 +485,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
     }
 
     override fun getTrackSelectionParameters(): TrackSelectionParameters {
-        return TrackSelectionParameters.Builder(application)
+        return TrackSelectionParameters.Builder()
             .build()
     }
 
@@ -615,7 +633,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
 
     override fun isCurrentMediaItemLive(): Boolean {
         val timeline = currentTimeline
-        return !timeline.isEmpty && timeline.getWindow(currentMediaItemIndex, window).isLive()
+        return !timeline.isEmpty && timeline.getWindow(currentMediaItemIndex, window).isLive
     }
 
     override fun getCurrentLiveOffset(): Long {
@@ -778,7 +796,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
 
     private fun notifyListenersPlaybackChanged(
         previousPlaybackInfo: TtsPlayer.Playback,
-        playbackInfo: TtsPlayer.Playback
+        playbackInfo: TtsPlayer.Playback,
         // playWhenReadyChangeReason: @Player.PlayWhenReadyChangeReason Int,
     ) {
         if (previousPlaybackInfo.state as? TtsPlayer.State.Failure != playbackInfo.state as? Error) {
@@ -836,7 +854,7 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
 
     private fun notifyListenersPlaybackParametersChanged(
         previousPlaybackParameters: PlaybackParameters,
-        playbackParameters: PlaybackParameters
+        playbackParameters: PlaybackParameters,
     ) {
         if (previousPlaybackParameters != playbackParameters) {
             listeners.sendEvent(
@@ -916,27 +934,32 @@ internal class TtsSessionAdapter<E : TtsEngine.Error>(
         }
     }
 
-    private val TtsPlayer.State.playerCode get() = when (this) {
-        TtsPlayer.State.Ready -> STATE_READY
-        TtsPlayer.State.Ended -> STATE_ENDED
-        is TtsPlayer.State.Failure -> STATE_IDLE
-    }
+    private val TtsPlayer.State.playerCode
+        get() = when (this) {
+            TtsPlayer.State.Ready -> STATE_READY
+            TtsPlayer.State.Ended -> STATE_ENDED
+            is TtsPlayer.State.Failure -> STATE_IDLE
+        }
 
     @Suppress("Unchecked_cast")
     private fun TtsPlayer.State.Failure.toPlaybackException(): PlaybackException = when (this) {
         is TtsPlayer.State.Failure.Engine<*> -> {
             mapEngineError(error as E)
         }
+
         is TtsPlayer.State.Failure.Content -> {
             val errorCode = when (error) {
                 is ReadError.Access ->
                     when (error.cause) {
                         is HttpError.ErrorResponse ->
                             ERROR_CODE_IO_BAD_HTTP_STATUS
+
                         is HttpError.Timeout ->
                             ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+
                         is HttpError.Unreachable ->
                             ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+
                         else -> ERROR_CODE_UNSPECIFIED
                     }
 

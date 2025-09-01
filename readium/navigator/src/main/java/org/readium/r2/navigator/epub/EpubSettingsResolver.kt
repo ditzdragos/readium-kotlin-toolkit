@@ -8,7 +8,10 @@ package org.readium.r2.navigator.epub
 
 import org.readium.r2.navigator.epub.extensions.isCjk
 import org.readium.r2.navigator.epub.extensions.isRtl
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.ColumnCount
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
+import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Metadata
 import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
@@ -17,7 +20,7 @@ import org.readium.r2.shared.util.Language
 @OptIn(ExperimentalReadiumApi::class)
 internal class EpubSettingsResolver(
     private val metadata: Metadata,
-    private val defaults: EpubDefaults
+    private val defaults: EpubDefaults,
 ) {
 
     fun settings(preferences: EpubPreferences): EpubSettings {
@@ -67,7 +70,7 @@ internal class EpubSettingsResolver(
 
     private fun resolveReadingProgression(
         metadata: Metadata,
-        preferences: EpubPreferences
+        preferences: EpubPreferences,
     ): Pair<Language?, ReadingProgression> {
         val rpPref = preferences.readingProgression
         val langPref = preferences.language
@@ -87,19 +90,25 @@ internal class EpubSettingsResolver(
         val readingProgression = when {
             rpPref != null ->
                 rpPref
+
             langPref != null ->
                 if (langPref.isRtl) ReadingProgression.RTL else ReadingProgression.LTR
+
             metadataReadingProgression != null ->
                 when (metadataReadingProgression) {
                     PublicationReadingProgression.RTL -> ReadingProgression.RTL
                     PublicationReadingProgression.LTR -> ReadingProgression.LTR
                 }
+
             metadataLanguage != null ->
                 if (metadataLanguage.isRtl) ReadingProgression.RTL else ReadingProgression.LTR
+
             defaults.readingProgression != null ->
                 defaults.readingProgression
+
             defaults.language != null ->
                 if (defaults.language.isRtl) ReadingProgression.RTL else ReadingProgression.LTR
+
             else ->
                 ReadingProgression.LTR
         }
@@ -112,7 +121,7 @@ internal class EpubSettingsResolver(
     private fun resolveVerticalText(
         verticalPreference: Boolean?,
         language: Language?,
-        readingProgression: ReadingProgression
+        readingProgression: ReadingProgression,
     ) = when {
         verticalPreference != null -> verticalPreference
         language != null -> language.isCjk && readingProgression == ReadingProgression.RTL

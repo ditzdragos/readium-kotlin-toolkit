@@ -10,7 +10,9 @@
 package org.readium.r2.shared.util.logging
 
 import org.json.JSONObject
-import org.readium.r2.shared.util.logging.Warning.SeverityLevel.*
+import org.readium.r2.shared.util.logging.Warning.SeverityLevel.MAJOR
+import org.readium.r2.shared.util.logging.Warning.SeverityLevel.MINOR
+import org.readium.r2.shared.util.logging.Warning.SeverityLevel.MODERATE
 import timber.log.Timber
 
 /**
@@ -72,7 +74,7 @@ public interface Warning {
     public enum class SeverityLevel {
         MINOR,
         MODERATE,
-        MAJOR
+        MAJOR,
     }
 
     /**
@@ -104,7 +106,7 @@ public data class JsonWarning(
     val modelClass: Class<*>,
     val reason: String,
     override val severity: Warning.SeverityLevel,
-    val json: JSONObject? = null
+    val json: JSONObject? = null,
 ) : Warning {
 
     override val tag: String = "json"
@@ -124,7 +126,7 @@ public fun WarningLogger.log(
     modelClass: Class<*>,
     reason: String,
     json: JSONObject? = null,
-    severity: Warning.SeverityLevel = Warning.SeverityLevel.MAJOR
+    severity: Warning.SeverityLevel = MAJOR,
 ) {
     log(JsonWarning(modelClass, reason, severity, json))
 }

@@ -39,6 +39,11 @@ internal class AccessibilityAdapter {
             .map { Accessibility.Hazard(it.value) }
             .toSet()
 
+        val exemptions = itemsHolder
+            .adapt { it.takeAllWithProperty(Vocabularies.A11Y + "exemption") }
+            .map { Accessibility.Exemption(it.value) }
+            .toSet()
+
         val certification = itemsHolder
             .adapt(::adaptCertification)
 
@@ -52,7 +57,8 @@ internal class AccessibilityAdapter {
                 accessModes = accessModes,
                 accessModesSufficient = accessModesSufficient,
                 features = features,
-                hazards = hazards
+                hazards = hazards,
+                exemptions = exemptions
             )
             accessibility to itemsHolder.remainingItems
         }
@@ -88,27 +94,39 @@ internal class AccessibilityAdapter {
 
         var certification = remainingItems
             .takeFirstWithProperty(Vocabularies.A11Y + "certifiedBy")
-            .let { remainingItems = it.second; it.first }
+            .let {
+                remainingItems = it.second
+                it.first
+            }
             ?.toCertification()
             ?: Accessibility.Certification(certifiedBy = null, credential = null, report = null)
 
         if (certification.credential == null) {
             remainingItems.takeFirstWithProperty(Vocabularies.A11Y + "certifierCredential")
-                .let { remainingItems = it.second; it.first }
+                .let {
+                    remainingItems = it.second
+                    it.first
+                }
                 ?.let { certification = certification.copy(credential = it.value) }
         }
 
         if (certification.report == null) {
             remainingItems
                 .takeFirstWithProperty(Vocabularies.A11Y + "certifierReport")
-                .let { remainingItems = it.second; it.first }
+                .let {
+                    remainingItems = it.second
+                    it.first
+                }
                 ?.let { certification = certification.copy(report = it.value) }
         }
 
         if (certification.report == null) {
             remainingItems
                 .takeFirstWithRel(Vocabularies.A11Y + "certifierReport")
-                .let { remainingItems = it.second; it.first }
+                .let {
+                    remainingItems = it.second
+                    it.first
+                }
                 ?.let { certification = certification.copy(report = it.href.toString()) }
         }
 
@@ -139,11 +157,19 @@ internal class AccessibilityAdapter {
         isWCAG_20_A(value) -> Accessibility.Profile.EPUB_A11Y_10_WCAG_20_A
         isWCAG_20_AA(value) -> Accessibility.Profile.EPUB_A11Y_10_WCAG_20_AA
         isWCAG_20_AAA(value) -> Accessibility.Profile.EPUB_A11Y_10_WCAG_20_AAA
+        value == "EPUB Accessibility 1.1 - WCAG 2.0 Level A" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_20_A
+        value == "EPUB Accessibility 1.1 - WCAG 2.0 Level AA" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_20_AA
+        value == "EPUB Accessibility 1.1 - WCAG 2.0 Level AAA" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_20_AAA
+        value == "EPUB Accessibility 1.1 - WCAG 2.1 Level A" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_21_A
+        value == "EPUB Accessibility 1.1 - WCAG 2.1 Level AA" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_21_AA
+        value == "EPUB Accessibility 1.1 - WCAG 2.1 Level AAA" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_21_AAA
+        value == "EPUB Accessibility 1.1 - WCAG 2.2 Level A" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_22_A
+        value == "EPUB Accessibility 1.1 - WCAG 2.2 Level AA" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_22_AA
+        value == "EPUB Accessibility 1.1 - WCAG 2.2 Level AAA" -> Accessibility.Profile.EPUB_A11Y_11_WCAG_22_AAA
         else -> null
     }
 
     private fun isWCAG_20_A(value: String) = value in setOf(
-        "EPUB Accessibility 1.1 - WCAG 2.0 Level A",
         "http://idpf.org/epub/a11y/accessibility-20170105.html#wcag-a",
         "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-a",
         "https://idpf.org/epub/a11y/accessibility-20170105.html#wcag-a",
@@ -151,7 +177,6 @@ internal class AccessibilityAdapter {
     )
 
     private fun isWCAG_20_AA(value: String) = value in setOf(
-        "EPUB Accessibility 1.1 - WCAG 2.0 Level AA",
         "http://idpf.org/epub/a11y/accessibility-20170105.html#wcag-aa",
         "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aa",
         "https://idpf.org/epub/a11y/accessibility-20170105.html#wcag-aa",
@@ -159,7 +184,6 @@ internal class AccessibilityAdapter {
     )
 
     private fun isWCAG_20_AAA(value: String) = value in setOf(
-        "EPUB Accessibility 1.1 - WCAG 2.0 Level AAA",
         "http://idpf.org/epub/a11y/accessibility-20170105.html#wcag-aaa",
         "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aaa",
         "https://idpf.org/epub/a11y/accessibility-20170105.html#wcag-aaa",

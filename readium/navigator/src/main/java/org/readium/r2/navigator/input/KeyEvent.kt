@@ -14,11 +14,12 @@ public data class KeyEvent(
     val type: Type,
     val key: Key,
     val modifiers: Set<InputModifier>,
-    val characters: String?
+    val characters: String?,
 ) {
 
     public enum class Type {
-        Down, Up
+        Down,
+        Up,
     }
 
     public companion object {
@@ -349,7 +350,7 @@ public value class Key(public val code: String) {
     }
 }
 
-private fun inputModifiers(event: android.view.KeyEvent): Set<InputModifier> =
+private fun inputModifiers(event: KeyEvent): Set<InputModifier> =
     buildSet {
         if (event.isAltPressed) {
             add(InputModifier.Alt)

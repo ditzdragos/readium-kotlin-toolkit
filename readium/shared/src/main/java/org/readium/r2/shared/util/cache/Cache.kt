@@ -71,7 +71,7 @@ public suspend fun <V> CacheTransaction<V>.getOrPut(key: String, defaultValue: s
  */
 public suspend fun <V, F> CacheTransaction<V>.getOrTryPut(
     key: String,
-    defaultValue: suspend () -> Try<V, F>
+    defaultValue: suspend () -> Try<V, F>,
 ): Try<V, F> =
     get(key)?.let { Try.success(it) }
         ?: defaultValue()
@@ -123,7 +123,7 @@ public class InMemoryCache<V> : Cache<V> {
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun onTrimMemory(level: MemoryObserver.Level) {
-        if (level == MemoryObserver.Level.Critical) {
+        if (level == MemoryObserver.Level.Background) {
             GlobalScope.launch { transaction { clear() } }
         }
     }

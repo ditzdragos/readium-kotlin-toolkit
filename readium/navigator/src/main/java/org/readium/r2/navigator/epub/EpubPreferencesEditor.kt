@@ -10,7 +10,23 @@ package org.readium.r2.navigator.epub
 
 import org.readium.r2.navigator.epub.css.Layout
 import org.readium.r2.navigator.extensions.format
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Color
+import org.readium.r2.navigator.preferences.ColumnCount
+import org.readium.r2.navigator.preferences.DoubleIncrement
+import org.readium.r2.navigator.preferences.EnumPreference
+import org.readium.r2.navigator.preferences.EnumPreferenceDelegate
+import org.readium.r2.navigator.preferences.FontFamily
+import org.readium.r2.navigator.preferences.ImageFilter
+import org.readium.r2.navigator.preferences.Preference
+import org.readium.r2.navigator.preferences.PreferenceDelegate
+import org.readium.r2.navigator.preferences.PreferencesEditor
+import org.readium.r2.navigator.preferences.RangePreference
+import org.readium.r2.navigator.preferences.RangePreferenceDelegate
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
+import org.readium.r2.navigator.preferences.StepsProgression
+import org.readium.r2.navigator.preferences.TextAlign
+import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Metadata
@@ -29,13 +45,13 @@ public class EpubPreferencesEditor internal constructor(
     initialPreferences: EpubPreferences,
     publicationMetadata: Metadata,
     public val layout: EpubLayout,
-    defaults: EpubDefaults
+    defaults: EpubDefaults,
 ) : PreferencesEditor<EpubPreferences> {
 
     private data class State(
         val preferences: EpubPreferences,
         val settings: EpubSettings,
-        val layout: Layout
+        val layout: Layout,
     )
 
     private val settingsResolver: EpubSettingsResolver =

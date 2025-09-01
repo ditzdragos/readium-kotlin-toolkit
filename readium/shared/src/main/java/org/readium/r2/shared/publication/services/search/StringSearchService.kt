@@ -13,12 +13,17 @@ import android.icu.text.StringSearch
 import android.os.Build
 import androidx.annotation.RequiresApi
 import java.text.StringCharacterIterator
-import java.util.*
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.publication.*
+import org.readium.r2.shared.publication.Link
+import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.LocatorCollection
+import org.readium.r2.shared.publication.Manifest
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.PublicationServicesHolder
 import org.readium.r2.shared.publication.services.positionsByReadingOrder
 import org.readium.r2.shared.publication.services.search.SearchService.Options
 import org.readium.r2.shared.util.ThrowableError
@@ -49,14 +54,14 @@ public class StringSearchService(
     private val language: String?,
     private val snippetLength: Int,
     private val searchAlgorithm: Algorithm,
-    private val extractorFactory: ResourceContentExtractor.Factory
+    private val extractorFactory: ResourceContentExtractor.Factory,
 ) : SearchService {
 
     public companion object {
         public fun createDefaultFactory(
             snippetLength: Int = 200,
             searchAlgorithm: Algorithm? = null,
-            extractorFactory: ResourceContentExtractor.Factory = DefaultResourceContentExtractorFactory()
+            extractorFactory: ResourceContentExtractor.Factory = DefaultResourceContentExtractorFactory(),
         ): (Publication.Service.Context) -> StringSearchService =
             { context ->
                 StringSearchService(
@@ -91,7 +96,7 @@ public class StringSearchService(
         val container: Container<Resource>,
         val query: String,
         val options: Options,
-        val locale: Locale
+        val locale: Locale,
     ) : SearchIterator {
 
         override var resultCount: Int = 0
@@ -133,7 +138,7 @@ public class StringSearchService(
 
                 return Try.success(LocatorCollection(locators = locators))
             } catch (
-                e: CancellationException
+                e: CancellationException,
             ) {
                 throw e
             } catch (e: Exception) {
@@ -169,7 +174,7 @@ public class StringSearchService(
             resourceIndex: Int,
             resourceLocator: Locator,
             text: String,
-            range: IntRange
+            range: IntRange,
         ): Locator {
             val progression = range.first.toDouble() / text.length.toDouble()
 
@@ -177,8 +182,10 @@ public class StringSearchService(
             val positions = positions()
             val resourceStartTotalProg = positions.getOrNull(resourceIndex)?.firstOrNull()?.locations?.totalProgression
             if (resourceStartTotalProg != null) {
-                val resourceEndTotalProg = positions.getOrNull(resourceIndex + 1)?.firstOrNull()?.locations?.totalProgression ?: 1.0
-                totalProgression = resourceStartTotalProg + progression * (resourceEndTotalProg - resourceStartTotalProg)
+                val resourceEndTotalProg =
+                    positions.getOrNull(resourceIndex + 1)?.firstOrNull()?.locations?.totalProgression ?: 1.0
+                totalProgression =
+                    resourceStartTotalProg + progression * (resourceEndTotalProg - resourceStartTotalProg)
             }
 
             return resourceLocator.copy(
@@ -266,7 +273,7 @@ public class StringSearchService(
             query: String,
             options: Options,
             text: String,
-            locale: Locale
+            locale: Locale,
         ): List<IntRange> {
             val ranges = mutableListOf<IntRange>()
             val iter = createStringSearch(query, options, text, locale)
@@ -282,7 +289,7 @@ public class StringSearchService(
             query: String,
             options: Options,
             text: String,
-            locale: Locale
+            locale: Locale,
         ): StringSearch {
             val caseSensitive = options.caseSensitive ?: false
             var diacriticSensitive = options.diacriticSensitive ?: false
@@ -335,7 +342,7 @@ public class StringSearchService(
             query: String,
             options: Options,
             text: String,
-            locale: Locale
+            locale: Locale,
         ): List<IntRange> {
             val ranges = mutableListOf<IntRange>()
             var index: Int = text.indexOf(query)

@@ -9,7 +9,12 @@ package org.readium.r2.testapp.reader
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
-import android.view.*
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import androidx.annotation.ColorInt
@@ -26,7 +31,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
-import org.readium.r2.navigator.epub.*
+import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.epub.EpubSettings
 import org.readium.r2.navigator.epub.css.FontStyle
 import org.readium.r2.navigator.html.HtmlDecorationTemplate
 import org.readium.r2.navigator.html.toCss
@@ -125,7 +132,7 @@ class EpubReaderFragment : VisualReaderFragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         val view = super.onCreateView(inflater, container, savedInstanceState)
 
@@ -177,6 +184,7 @@ class EpubReaderFragment : VisualReaderFragment() {
                         R.id.search -> {
                             return true
                         }
+
                         android.R.id.home -> {
                             menuSearch.collapseActionView()
                             return true

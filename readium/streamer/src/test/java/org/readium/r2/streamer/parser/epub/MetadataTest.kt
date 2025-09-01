@@ -9,16 +9,26 @@
 
 package org.readium.r2.streamer.parser.epub
 
+import kotlin.test.assertEquals
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.entry
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.readium.r2.shared.publication.*
+import org.readium.r2.shared.publication.Accessibility
+import org.readium.r2.shared.publication.Collection
+import org.readium.r2.shared.publication.Contributor
+import org.readium.r2.shared.publication.Href
 import org.readium.r2.shared.publication.Link as SharedLink
+import org.readium.r2.shared.publication.LocalizedString
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.Subject
+import org.readium.r2.shared.publication.Tdm
 import org.readium.r2.shared.publication.epub.EpubLayout
+import org.readium.r2.shared.publication.firstWithRel
 import org.readium.r2.shared.publication.presentation.Presentation
 import org.readium.r2.shared.publication.presentation.presentation
+import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Instant
 import org.readium.r2.shared.util.mediatype.MediaType
 import org.robolectric.RobolectricTestRunner
@@ -435,22 +445,29 @@ class AccessibilityTest {
     private val epub2Metadata = parsePackageDocument("package/accessibility-epub2.opf").metadata
     private val epub3Metadata = parsePackageDocument("package/accessibility-epub3.opf").metadata
 
-    @Test fun `summary is rightly parsed`() {
+    @Test
+    fun `summary is rightly parsed`() {
         val expected = "The publication contains structural and page navigation."
         assertThat(epub2Metadata.accessibility?.summary).isEqualTo(expected)
         assertThat(epub3Metadata.accessibility?.summary).isEqualTo(expected)
     }
 
-    @Test fun `conformsTo contains WCAG profiles and only them`() {
+    @Test
+    fun `conformsTo contains WCAG profiles and only them`() {
         assertThat(epub2Metadata.accessibility?.conformsTo).containsExactlyInAnyOrder(
-            Accessibility.Profile.EPUB_A11Y_10_WCAG_20_A
+            Accessibility.Profile.EPUB_A11Y_10_WCAG_20_A,
+            Accessibility.Profile.EPUB_A11Y_11_WCAG_20_AAA,
+            Accessibility.Profile.EPUB_A11Y_11_WCAG_21_AA,
         )
         assertThat(epub3Metadata.accessibility?.conformsTo).containsExactlyInAnyOrder(
-            Accessibility.Profile.EPUB_A11Y_10_WCAG_20_A
+            Accessibility.Profile.EPUB_A11Y_10_WCAG_20_A,
+            Accessibility.Profile.EPUB_A11Y_11_WCAG_20_AAA,
+            Accessibility.Profile.EPUB_A11Y_11_WCAG_21_AA,
         )
     }
 
-    @Test fun `certification is rightly parsed`() {
+    @Test
+    fun `certification is rightly parsed`() {
         val expectedCertification = Accessibility.Certification(
             certifiedBy = "Accessibility Testers Group",
             credential = "DAISY OK",
@@ -460,7 +477,8 @@ class AccessibilityTest {
         assertThat(epub3Metadata.accessibility?.certification).isEqualTo(expectedCertification)
     }
 
-    @Test fun `features are rightly parsed`() {
+    @Test
+    fun `features are rightly parsed`() {
         assertThat(epub2Metadata.accessibility?.features)
             .containsExactlyInAnyOrder(
                 Accessibility.Feature.ALTERNATIVE_TEXT,
@@ -468,7 +486,8 @@ class AccessibilityTest {
             )
     }
 
-    @Test fun `hazards are rightly parsed`() {
+    @Test
+    fun `hazards are rightly parsed`() {
         assertThat(epub2Metadata.accessibility?.hazards)
             .containsExactlyInAnyOrder(
                 Accessibility.Hazard.MOTION_SIMULATION,
@@ -481,7 +500,24 @@ class AccessibilityTest {
             )
     }
 
-    @Test fun `accessModes are rightly parsed`() {
+    @Test
+    fun `exemptions are rightly parsed`() {
+        assertThat(epub2Metadata.accessibility?.exemptions)
+            .containsExactlyInAnyOrder(
+                Accessibility.Exemption.EAA_MICROENTERPRISE,
+                Accessibility.Exemption.EAA_FUNDAMENTAL_ALTERATION,
+                Accessibility.Exemption.EAA_DISPROPORTIONATE_BURDEN,
+            )
+        assertThat(epub3Metadata.accessibility?.exemptions)
+            .containsExactlyInAnyOrder(
+                Accessibility.Exemption.EAA_MICROENTERPRISE,
+                Accessibility.Exemption.EAA_FUNDAMENTAL_ALTERATION,
+                Accessibility.Exemption.EAA_DISPROPORTIONATE_BURDEN,
+            )
+    }
+
+    @Test
+    fun `accessModes are rightly parsed`() {
         assertThat(epub2Metadata.accessibility?.accessModes)
             .containsExactlyInAnyOrder(
                 Accessibility.AccessMode.VISUAL,
@@ -494,7 +530,8 @@ class AccessibilityTest {
             )
     }
 
-    @Test fun `accessModesSufficient are rightly parsed`() {
+    @Test
+    fun `accessModesSufficient are rightly parsed`() {
         assertThat(epub2Metadata.accessibility?.accessModesSufficient)
             .containsExactlyInAnyOrder(
                 setOf(
@@ -513,7 +550,8 @@ class AccessibilityTest {
             )
     }
 
-    @Test fun `non-accessibility conformsTo end up in otherMetadata`() {
+    @Test
+    fun `non-accessibility conformsTo end up in otherMetadata`() {
         assertThat(epub2Metadata.otherMetadata).contains(
             entry(
                 Vocabularies.DCTERMS + "conformsTo",
@@ -526,5 +564,21 @@ class AccessibilityTest {
                 "any profile"
             )
         )
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+class TdmTest {
+    private val epub2Metadata = parsePackageDocument("package/tdm-epub2.opf").metadata
+    private val epub3Metadata = parsePackageDocument("package/tdm-epub3.opf").metadata
+
+    @Test
+    fun `TDM is rightly parsed`() {
+        val expected = Tdm(
+            reservation = Tdm.Reservation.ALL,
+            policy = AbsoluteUrl("https://provider.com/policies/policy.json")!!
+        )
+        assertEquals(expected, epub2Metadata.tdm)
+        assertEquals(expected, epub3Metadata.tdm)
     }
 }

@@ -9,14 +9,19 @@ package org.readium.r2.testapp.reader.tts
 import org.readium.navigator.media.tts.android.AndroidTtsEngine
 import org.readium.navigator.media.tts.android.AndroidTtsPreferences
 import org.readium.navigator.media.tts.android.AndroidTtsPreferencesEditor
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.EnumPreference
+import org.readium.r2.navigator.preferences.Preference
+import org.readium.r2.navigator.preferences.PreferencesEditor
+import org.readium.r2.navigator.preferences.RangePreference
+import org.readium.r2.navigator.preferences.map
+import org.readium.r2.navigator.preferences.withSupportedValues
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Language
 
 @OptIn(ExperimentalReadiumApi::class)
 class TtsPreferencesEditor(
     private val editor: AndroidTtsPreferencesEditor,
-    private val availableVoices: Set<AndroidTtsEngine.Voice>
+    private val availableVoices: Set<AndroidTtsEngine.Voice>,
 ) : PreferencesEditor<AndroidTtsPreferences> {
 
     override val preferences: AndroidTtsPreferences

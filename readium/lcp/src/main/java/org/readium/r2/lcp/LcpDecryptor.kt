@@ -34,7 +34,7 @@ import org.readium.r2.shared.util.resource.flatMap
  */
 internal class LcpDecryptor(
     val license: LcpLicense?,
-    val encryptionData: Map<Url, Encryption>
+    val encryptionData: Map<Url, Encryption>,
 ) {
 
     fun transform(url: Url, resource: Resource): Resource {
@@ -74,7 +74,7 @@ internal class LcpDecryptor(
 private class FullLcpResource(
     resource: Resource,
     private val encryption: Encryption,
-    private val license: LcpLicense
+    private val license: LcpLicense,
 ) : TransformingResource(resource) {
 
     override suspend fun transform(data: Try<ByteArray, ReadError>): Try<ByteArray, ReadError> =
@@ -93,7 +93,7 @@ private class FullLcpResource(
 internal class CbcLcpResource(
     resource: Resource,
     private val license: LcpLicense,
-    private val originalLength: Long? = null
+    private val originalLength: Long? = null,
 ) : Resource by resource {
 
     private val resource = CachingRangeTailResource(resource, 4 * AES_BLOCK_SIZE)
@@ -135,7 +135,7 @@ internal class CbcLcpResource(
     }
 
     private suspend fun readPaddingLength(
-        encryptedSize: Long
+        encryptedSize: Long,
     ): Try<Int?, ReadError> {
         val readOffset = encryptedSize - (2 * AES_BLOCK_SIZE)
 
@@ -246,7 +246,7 @@ internal class CbcLcpResource(
 
 private suspend fun LcpLicense.decryptFully(
     data: Try<ByteArray, ReadError>,
-    isDeflated: Boolean
+    isDeflated: Boolean,
 ): Try<ByteArray, ReadError> =
     data.flatMap { encryptedData ->
         if (encryptedData.isEmpty()) {
@@ -309,12 +309,12 @@ private suspend fun LcpLicense.decryptFully(
  */
 private class CachingRangeTailResource(
     private val resource: Resource,
-    private val cacheLength: Int
+    private val cacheLength: Int,
 ) : Resource by resource {
 
     private class Cache(
         var startIndex: Int?,
-        val data: ByteArray
+        val data: ByteArray,
     )
 
     private val cache: Cache = Cache(null, ByteArray(cacheLength))
@@ -362,7 +362,7 @@ private class CachingRangeTailResource(
     private suspend fun readWithCache(
         cacheStartIndex: Int,
         cachedData: ByteArray,
-        range: LongRange
+        range: LongRange,
     ): Try<ByteArray, ReadError> {
         require(range.first >= cacheStartIndex)
         require(range.last + 1 >= cacheStartIndex + cachedData.size)

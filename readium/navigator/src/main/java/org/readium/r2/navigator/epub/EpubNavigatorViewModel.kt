@@ -59,7 +59,9 @@ import org.readium.r2.shared.util.Url
 import timber.log.Timber
 
 internal enum class DualPage {
-    AUTO, OFF, ON
+    AUTO,
+    OFF,
+    ON,
 }
 
 @OptIn(ExperimentalReadiumApi::class, DelicateReadiumApi::class)
@@ -71,7 +73,7 @@ internal class EpubNavigatorViewModel(
     val layout: EpubLayout,
     val listener: EpubNavigatorFragment.Listener?,
     private val defaults: EpubDefaults,
-    private val server: WebViewServer
+    private val server: WebViewServer,
 ) : AndroidViewModel(application) {
 
     // Make a copy to prevent new decoration templates from being registered after initializing
@@ -82,7 +84,7 @@ internal class EpubNavigatorViewModel(
         sealed class Scope {
             object CurrentResource : Scope()
             object LoadedResources : Scope()
-            data class Resource(val href: Url) : Scope()
+            data class LoadedResource(val href: Url) : Scope()
             data class WebView(val webView: R2BasicWebView) : Scope()
         }
     }
@@ -103,7 +105,6 @@ internal class EpubNavigatorViewModel(
 
     private val _settings: MutableStateFlow<EpubSettings> =
         MutableStateFlow(settingsPolicy.settings(initialPreferences))
-
     val settings: StateFlow<EpubSettings> = _settings.asStateFlow()
 
     val overflow: StateFlow<OverflowableNavigator.Overflow> =
@@ -163,26 +164,45 @@ internal class EpubNavigatorViewModel(
         }.launchIn(viewModelScope)
     }
 
-    fun onResourceLoaded(webView: R2BasicWebView, link: Link): RunScriptCommand {
-        val templates = decorationTemplates.toJSON().toString().replace("\\n", " ")
-        var script = "readium.registerDecorationTemplates($templates);\n"
+    fun onResourceLoaded(webView: R2BasicWebView, link: Link): List<RunScriptCommand> =
+        buildList {
+            val scope = RunScriptCommand.Scope.WebView(webView)
 
-        for ((group, decorations) in decorations) {
-            val changes = decorations.filter {
-                it.locator.href == link.url()
+            // Applies the Readium CSS properties in case they changed since they were injected
+            // in the HTML document.
+            val properties = css.value.run {
+                rsProperties.toCssProperties() + userProperties.toCssProperties()
             }
-                .map {
-                    if (layout == EpubLayout.REFLOWABLE) {
-                        DecorationChange.Added(it)
-                    } else {
-                        DecorationChange.AddedEnhanced(it)
+
+            add(
+                RunScriptCommand(
+                    script = "readium.setCSSProperties(${JSONObject(properties.toMap())});",
+                    scope = scope
+                )
+            )
+
+            // Applies the decorations.
+            val templates = decorationTemplates.toJSON().toString()
+                .replace("\\n", " ")
+            var script = "readium.registerDecorationTemplates($templates);\n"
+
+            for ((group, decorations) in decorations) {
+                val changes = decorations
+                    .filter { it.locator.href == link.url() }
+                    .map {
+                        if (layout == EpubLayout.REFLOWABLE) {
+                            DecorationChange.Added(it)
+                        } else {
+                            DecorationChange.AddedEnhanced(it)
+                        }
                     }
-                }
-            val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
-            script += "$groupScript\n"
+
+                val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
+                script += "$groupScript\n"
+            }
+
+            add(RunScriptCommand(script, scope = scope))
         }
-        return RunScriptCommand(script, scope = RunScriptCommand.Scope.WebView(webView))
-    }
 
     // Serving resources
 
@@ -199,7 +219,7 @@ internal class EpubNavigatorViewModel(
      */
     fun navigateToUrl(
         url: AbsoluteUrl,
-        context: HyperlinkNavigator.LinkContext? = null
+        context: HyperlinkNavigator.LinkContext? = null,
     ) = viewModelScope.launch {
         val link = internalLinkFromUrl(url)
         if (link != null) {
@@ -234,10 +254,10 @@ internal class EpubNavigatorViewModel(
 
         val needsInvalidation: Boolean =
             (oldSettings.readingProgression != newSettings.readingProgression || oldSettings.language != newSettings.language || oldSettings.verticalText != newSettings.verticalText || oldSettings.spread != newSettings.spread ||
-                    // We need to invalidate the resource pager when changing from scroll mode to
-                    // paginated, otherwise the horizontal scroll will be broken.
-                    // See https://github.com/readium/kotlin-toolkit/pull/304
-                    oldSettings.scroll != newSettings.scroll)
+                // We need to invalidate the resource pager when changing from scroll mode to
+                // paginated, otherwise the horizontal scroll will be broken.
+                // See https://github.com/readium/kotlin-toolkit/pull/304
+                oldSettings.scroll != newSettings.scroll)
 
         if (needsInvalidation) {
             _events.send(Event.InvalidateViewPager)
@@ -309,17 +329,18 @@ internal class EpubNavigatorViewModel(
                     // `clear()` as well otherwise we might recreate a highlight after it has been
                     // cleared.
                     "requestAnimationFrame(function () { " +
-                            "readium.getDecorations('$group').clearAllEnhanced();" +
-                            "readium.getDecorations('$group').clear();" +
-                            "});",
+                        "readium.getDecorations('$group').clearAllEnhanced();" +
+                        "readium.getDecorations('$group').clear();" +
+                        "});",
                     scope = RunScriptCommand.Scope.LoadedResources
                 )
             )
         } else {
             for ((href, changes) in source.changesByHref(target)) {
-                val script =
-                    changes.javascriptForGroup(group, decorationTemplates, enhanced) ?: continue
-                cmds.add(RunScriptCommand(script, scope = RunScriptCommand.Scope.Resource(href)))
+                val script = changes.javascriptForGroup(group, decorationTemplates, enhanced) ?: continue
+                cmds.add(
+                    RunScriptCommand(script, scope = RunScriptCommand.Scope.LoadedResource(href))
+                )
             }
         }
 
@@ -336,7 +357,7 @@ internal class EpubNavigatorViewModel(
                     let group = readium.getDecorations('$group');
                     ${DecorationChange.AddedEnhanced(decoration).javascript(decorationTemplates)}
                 });
-        """, scope = RunScriptCommand.Scope.Resource(decoration.locator.href)
+        """, scope = RunScriptCommand.Scope.LoadedResource(decoration.locator.href)
         )
     }
 
@@ -409,7 +430,7 @@ internal class EpubNavigatorViewModel(
             listener: EpubNavigatorFragment.Listener?,
             defaults: EpubDefaults,
             config: EpubNavigatorFragment.Configuration,
-            initialPreferences: EpubPreferences
+            initialPreferences: EpubPreferences,
         ) = createViewModelFactory {
             EpubNavigatorViewModel(
                 application,

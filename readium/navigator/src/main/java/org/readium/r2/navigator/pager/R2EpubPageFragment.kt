@@ -474,7 +474,7 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     private suspend fun loadLocator(
-        webView: R2WebView, readingProgression: ReadingProgression, locator: Locator
+        webView: R2WebView, readingProgression: ReadingProgression, locator: Locator,
     ) {
         if (locator.text.highlight != null) {
             if (webView.scrollToLocator(locator)) {
@@ -609,7 +609,7 @@ internal class R2EpubPageFragment : Fragment() {
         val viewportWidth = webView.width
         val viewportHeight = webView.height
 
-        // If dimensions are not yet available (i.e., during initial loading), 
+        // If dimensions are not yet available (i.e., during initial loading),
         // wait for layout to complete
         if (viewportWidth <= 0 || viewportHeight <= 0) {
             webView.post {

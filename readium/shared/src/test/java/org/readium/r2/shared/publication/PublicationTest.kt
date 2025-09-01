@@ -10,7 +10,11 @@
 package org.readium.r2.shared.publication
 
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.shared.publication.Publication.Profile
@@ -34,7 +38,7 @@ class PublicationTest {
         links: List<Link> = listOf(),
         readingOrder: List<Link> = emptyList(),
         resources: List<Link> = emptyList(),
-        servicesBuilder: Publication.ServicesBuilder = Publication.ServicesBuilder()
+        servicesBuilder: Publication.ServicesBuilder = Publication.ServicesBuilder(),
     ) = Publication(
         manifest = Manifest(
             metadata = Metadata(
@@ -50,11 +54,13 @@ class PublicationTest {
         servicesBuilder = servicesBuilder
     )
 
-    @Test fun `get the default empty {positions}`() {
+    @Test
+    fun `get the default empty {positions}`() {
         assertEquals(emptyList<Locator>(), runBlocking { createPublication().positions() })
     }
 
-    @Test fun `get the {positions} computed from the {PositionsService}`() {
+    @Test
+    fun `get the {positions} computed from the {PositionsService}`() {
         assertEquals(
             listOf(Locator(href = Url("locator")!!, mediaType = MediaType.HTML)),
             createPublication(
@@ -71,7 +77,8 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get the {positionsByReadingOrder} computed from the {PositionsService}`() {
+    @Test
+    fun `get the {positionsByReadingOrder} computed from the {PositionsService}`() {
         assertEquals(
             listOf(
                 listOf(
@@ -114,7 +121,8 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {baseUrl} computes the URL from the {self} link`() {
+    @Test
+    fun `get {baseUrl} computes the URL from the {self} link`() {
         val publication = createPublication(
             links = listOf(
                 Link(href = Href("http://domain.com/path/manifest.json")!!, rels = setOf("self"))
@@ -126,11 +134,13 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {baseUrl} when missing`() {
+    @Test
+    fun `get {baseUrl} when missing`() {
         assertNull(createPublication().baseUrl)
     }
 
-    @Test fun `conforms to the given profile`() {
+    @Test
+    fun `conforms to the given profile`() {
         // An empty reading order doesn't conform to anything.
         assertFalse(
             createPublication(readingOrder = emptyList(), conformsTo = setOf(Profile.EPUB))
@@ -255,7 +265,8 @@ class PublicationTest {
         )
     }
 
-    @Test fun `find the first {Link} with the given {rel}`() {
+    @Test
+    fun `find the first {Link} with the given {rel}`() {
         val link1 = Link(href = Href("found")!!, rels = setOf("rel1"))
         val link2 = Link(href = Href("found")!!, rels = setOf("rel2"))
         val link3 = Link(href = Href("found")!!, rels = setOf("rel3"))
@@ -270,11 +281,13 @@ class PublicationTest {
         assertEquals(link3, publication.linkWithRel("rel3"))
     }
 
-    @Test fun `find the first {Link} with the given {rel} when missing`() {
+    @Test
+    fun `find the first {Link} with the given {rel} when missing`() {
         assertNull(createPublication().linkWithRel("foobar"))
     }
 
-    @Test fun `find all the links with the given {rel}`() {
+    @Test
+    fun `find all the links with the given {rel}`() {
         val publication = createPublication(
             links = listOf(
                 Link(href = Href("l1")!!),
@@ -305,11 +318,13 @@ class PublicationTest {
         )
     }
 
-    @Test fun `find all the links with the given {rel} when not found`() {
+    @Test
+    fun `find all the links with the given {rel} when not found`() {
         assertTrue(createPublication().linksWithRel("foobar").isEmpty())
     }
 
-    @Test fun `find the first {Link} with the given {href}`() {
+    @Test
+    fun `find the first {Link} with the given {href}`() {
         val link1 = Link(href = Href("href1")!!)
         val link2 = Link(href = Href("href2")!!)
         val link3 = Link(href = Href("href3")!!)
@@ -354,7 +369,8 @@ class PublicationTest {
         assertEquals(link5, publication.linkWithHref(Url("href5")!!))
     }
 
-    @Test fun `find the first {Link} with the given {href} without query parameters`() {
+    @Test
+    fun `find the first {Link} with the given {href} without query parameters`() {
         val link = Link(href = Href("http://example.com/index.html")!!)
         val publication = createPublication(
             readingOrder = listOf(Link(href = Href("other")!!), link)
@@ -366,7 +382,8 @@ class PublicationTest {
         )
     }
 
-    @Test fun `find the first {Link} with the given {href} without anchor`() {
+    @Test
+    fun `find the first {Link} with the given {href} without anchor`() {
         val link = Link(href = Href("http://example.com/index.html")!!)
         val publication = createPublication(
             readingOrder = listOf(Link(href = Href("other")!!), link)
@@ -375,11 +392,13 @@ class PublicationTest {
         assertEquals(link, publication.linkWithHref(Url("http://example.com/index.html#sec1")!!))
     }
 
-    @Test fun `find the first {Link} with the given {href} when missing`() {
+    @Test
+    fun `find the first {Link} with the given {href} when missing`() {
         assertNull(createPublication().linkWithHref(Url("foobar")!!))
     }
 
-    @Test fun `find the first resource {Link} with the given {href}`() {
+    @Test
+    fun `find the first resource {Link} with the given {href}`() {
         val link1 = Link(href = Href("href1")!!)
         val link2 = Link(href = Href("href2")!!)
         val link3 = Link(href = Href("href3")!!)
@@ -394,7 +413,8 @@ class PublicationTest {
         assertEquals(link3, publication.linkWithHref(Url("href3")!!))
     }
 
-    @Test fun `find the first resource {Link} with the given {href} when missing`() {
+    @Test
+    fun `find the first resource {Link} with the given {href} when missing`() {
         assertNull(createPublication().linkWithHref(Url("foobar")!!))
     }
 }

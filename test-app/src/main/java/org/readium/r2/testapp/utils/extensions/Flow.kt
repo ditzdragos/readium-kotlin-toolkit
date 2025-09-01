@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.flowWithLifecycle
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
@@ -30,7 +31,7 @@ import kotlinx.coroutines.flow.stateIn
  */
 @Composable
 fun <T> Flow<T>.asStateWhenStarted(initialValue: T): State<T> {
-    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val owner = LocalLifecycleOwner.current
     return remember(this, owner) {
         flowWithLifecycle(owner.lifecycle)
     }.collectAsState(initial = initialValue)
@@ -54,7 +55,7 @@ fun <T> StateFlow<T>.asStateWhenStarted(): State<T> =
 // changes. In this case we're using it for the `initial` value, so it's fine.
 @Suppress("StateFlowValueCalledInComposition")
 fun <T, R> StateFlow<T>.asStateWhenStarted(transform: (T) -> R): State<R> {
-    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val owner = LocalLifecycleOwner.current
     return remember(this, owner) {
         map(transform)
             .flowWithLifecycle(owner.lifecycle)
@@ -83,7 +84,7 @@ suspend fun <P> Flow<P>.stateInFirst(scope: CoroutineScope, sharingStarted: Shar
  */
 fun <T, M> StateFlow<T>.mapStateIn(
     coroutineScope: CoroutineScope,
-    transform: (value: T) -> M
+    transform: (value: T) -> M,
 ): StateFlow<M> =
     map { transform(it) }
         .stateIn(

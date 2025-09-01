@@ -11,6 +11,11 @@ plugins {
 
 android {
     namespace = "org.readium.r2.lcp"
+
+    kotlinOptions {
+        // See https://github.com/readium/kotlin-toolkit/pull/525#issuecomment-2300084041
+        freeCompilerArgs = freeCompilerArgs + ("-Xconsistent-data-class-copy-visibility")
+    }
 }
 
 dependencies {
@@ -22,9 +27,6 @@ dependencies {
     implementation(libs.androidx.core)
     implementation(libs.google.material)
     implementation(libs.timber)
-    implementation("com.mcxiaoke.koi:async:0.5.5") {
-        exclude(module = "support-v4")
-    }
     implementation("com.mcxiaoke.koi:core:0.5.5") {
         exclude(module = "support-v4")
     }
@@ -40,7 +42,4 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
-
-    androidTestImplementation(libs.androidx.ext.junit)
-    androidTestImplementation(libs.androidx.expresso.core)
 }

@@ -8,8 +8,16 @@
 
 package org.readium.r2.testapp.reader.preferences
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,8 +30,22 @@ import org.readium.adapter.exoplayer.audio.ExoPlayerPreferencesEditor
 import org.readium.adapter.pdfium.navigator.PdfiumPreferencesEditor
 import org.readium.navigator.media.tts.android.AndroidTtsEngine
 import org.readium.r2.navigator.epub.EpubPreferencesEditor
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Axis
+import org.readium.r2.navigator.preferences.Color
+import org.readium.r2.navigator.preferences.ColumnCount
+import org.readium.r2.navigator.preferences.Configurable
+import org.readium.r2.navigator.preferences.EnumPreference
+import org.readium.r2.navigator.preferences.Fit
+import org.readium.r2.navigator.preferences.FontFamily
+import org.readium.r2.navigator.preferences.ImageFilter
+import org.readium.r2.navigator.preferences.Preference
+import org.readium.r2.navigator.preferences.PreferencesEditor
+import org.readium.r2.navigator.preferences.RangePreference
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.preferences.Spread
 import org.readium.r2.navigator.preferences.TextAlign as ReadiumTextAlign
+import org.readium.r2.navigator.preferences.Theme
+import org.readium.r2.navigator.preferences.withSupportedValues
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.epub.EpubLayout
 import org.readium.r2.shared.util.Language
@@ -31,7 +53,12 @@ import org.readium.r2.testapp.LITERATA
 import org.readium.r2.testapp.R
 import org.readium.r2.testapp.reader.ReaderViewModel
 import org.readium.r2.testapp.reader.tts.TtsPreferencesEditor
-import org.readium.r2.testapp.shared.views.*
+import org.readium.r2.testapp.shared.views.ButtonGroupItem
+import org.readium.r2.testapp.shared.views.ColorItem
+import org.readium.r2.testapp.shared.views.LanguageItem
+import org.readium.r2.testapp.shared.views.MenuItem
+import org.readium.r2.testapp.shared.views.StepperItem
+import org.readium.r2.testapp.shared.views.SwitchItem
 import org.readium.r2.testapp.utils.compose.DropdownMenuButton
 
 /**
@@ -40,7 +67,7 @@ import org.readium.r2.testapp.utils.compose.DropdownMenuButton
 @Composable
 fun UserPreferences(
     model: UserPreferencesViewModel<*, *>,
-    title: String
+    title: String,
 ) {
     val editor by model.editor.collectAsState()
 
@@ -55,7 +82,7 @@ fun UserPreferences(
 private fun <P : Configurable.Preferences<P>, E : PreferencesEditor<P>> UserPreferences(
     editor: E,
     commit: () -> Unit,
-    title: String
+    title: String,
 ) {
     Column(
         modifier = Modifier.padding(vertical = 24.dp)
@@ -78,7 +105,10 @@ private fun <P : Configurable.Preferences<P>, E : PreferencesEditor<P>> UserPref
             PresetsMenuButton(presets = editor.presets, commit = commit, clear = editor::clear)
 
             Button(
-                onClick = { editor.clear(); commit() }
+                onClick = {
+                    editor.clear()
+                    commit()
+                }
             ) {
                 Text("Reset")
             }
@@ -126,6 +156,7 @@ private fun <P : Configurable.Preferences<P>, E : PreferencesEditor<P>> UserPref
                             verticalText = editor.verticalText,
                             wordSpacing = editor.wordSpacing
                         )
+
                     EpubLayout.FIXED ->
                         FixedLayoutUserPreferences(
                             commit = commit,
@@ -135,6 +166,7 @@ private fun <P : Configurable.Preferences<P>, E : PreferencesEditor<P>> UserPref
                             spread = editor.spread
                         )
                 }
+
             is TtsPreferencesEditor ->
                 MediaUserPreferences(
                     commit = commit,
@@ -143,6 +175,7 @@ private fun <P : Configurable.Preferences<P>, E : PreferencesEditor<P>> UserPref
                     speed = editor.speed,
                     pitch = editor.pitch
                 )
+
             is ExoPlayerPreferencesEditor ->
                 MediaUserPreferences(
                     commit = commit,
@@ -159,7 +192,7 @@ private fun MediaUserPreferences(
     language: Preference<Language?>? = null,
     voice: EnumPreference<AndroidTtsEngine.Voice.Id?>? = null,
     speed: RangePreference<Double>? = null,
-    pitch: RangePreference<Double>? = null
+    pitch: RangePreference<Double>? = null,
 ) {
     Column {
         if (speed != null) {
@@ -209,7 +242,7 @@ private fun FixedLayoutUserPreferences(
     fit: EnumPreference<Fit>? = null,
     spread: EnumPreference<Spread>? = null,
     offsetFirstPage: Preference<Boolean>? = null,
-    pageSpacing: RangePreference<Double>? = null
+    pageSpacing: RangePreference<Double>? = null,
 ) {
     if (language != null || readingProgression != null) {
         if (language != null) {
@@ -338,7 +371,7 @@ private fun ReflowableUserPreferences(
     theme: EnumPreference<Theme>? = null,
     typeScale: RangePreference<Double>? = null,
     verticalText: Preference<Boolean>? = null,
-    wordSpacing: RangePreference<Double>? = null
+    wordSpacing: RangePreference<Double>? = null,
 ) {
     if (language != null || readingProgression != null || verticalText != null) {
         if (language != null) {
@@ -602,7 +635,7 @@ private fun Divider() {
 private fun PresetsMenuButton(
     presets: List<Preset>,
     clear: () -> Unit,
-    commit: () -> Unit
+    commit: () -> Unit,
 ) {
     if (presets.isEmpty()) return
 
@@ -633,35 +666,37 @@ private fun PresetsMenuButton(
  */
 class Preset(
     val title: String,
-    val apply: () -> Unit
+    val apply: () -> Unit,
 )
 
 /**
  * Returns the presets associated with the [Configurable.Settings] receiver.
  */
-val <P : Configurable.Preferences<P>> PreferencesEditor<P>.presets: List<Preset> get() =
-    when (this) {
-        is EpubPreferencesEditor ->
-            when (layout) {
-                EpubLayout.FIXED -> emptyList()
-                EpubLayout.REFLOWABLE -> listOf(
-                    Preset("Increase legibility") {
-                        wordSpacing.set(0.6)
-                        fontSize.set(1.4)
-                        fontWeight.set(2.0)
-                    },
-                    Preset("Document") {
-                        scroll.set(true)
-                    },
-                    Preset("Ebook") {
-                        scroll.set(false)
-                    },
-                    Preset("Manga") {
-                        scroll.set(false)
-                        readingProgression.set(ReadingProgression.RTL)
-                    }
-                )
-            }
-        else ->
-            emptyList()
-    }
+val <P : Configurable.Preferences<P>> PreferencesEditor<P>.presets: List<Preset>
+    get() =
+        when (this) {
+            is EpubPreferencesEditor ->
+                when (layout) {
+                    EpubLayout.FIXED -> emptyList()
+                    EpubLayout.REFLOWABLE -> listOf(
+                        Preset("Increase legibility") {
+                            wordSpacing.set(0.6)
+                            fontSize.set(1.4)
+                            fontWeight.set(2.0)
+                        },
+                        Preset("Document") {
+                            scroll.set(true)
+                        },
+                        Preset("Ebook") {
+                            scroll.set(false)
+                        },
+                        Preset("Manga") {
+                            scroll.set(false)
+                            readingProgression.set(ReadingProgression.RTL)
+                        }
+                    )
+                }
+
+            else ->
+                emptyList()
+        }

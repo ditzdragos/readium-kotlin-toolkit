@@ -19,7 +19,15 @@ import org.json.JSONObject
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.JSONable
-import org.readium.r2.shared.extensions.*
+import org.readium.r2.shared.extensions.JSONParceler
+import org.readium.r2.shared.extensions.optNullableDouble
+import org.readium.r2.shared.extensions.optNullableInt
+import org.readium.r2.shared.extensions.optNullableString
+import org.readium.r2.shared.extensions.optPositiveInt
+import org.readium.r2.shared.extensions.optStringsFromArrayOrSingle
+import org.readium.r2.shared.extensions.parseObjects
+import org.readium.r2.shared.extensions.putIfNotEmpty
+import org.readium.r2.shared.extensions.toMap
 import org.readium.r2.shared.toJSON
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.fromLegacyHref
@@ -45,7 +53,7 @@ public data class Locator(
     val mediaType: MediaType,
     val title: String? = null,
     val locations: Locations = Locations(),
-    val text: Text = Text()
+    val text: Text = Text(),
 ) : JSONable, Parcelable {
 
     /**
@@ -65,7 +73,7 @@ public data class Locator(
         val progression: Double? = null,
         val position: Int? = null,
         val totalProgression: Double? = null,
-        val otherLocations: @WriteWith<JSONParceler> Map<String, Any> = emptyMap()
+        val otherLocations: @WriteWith<JSONParceler> Map<String, Any> = emptyMap(),
     ) : JSONable, Parcelable {
 
         override fun toJSON(): JSONObject = JSONObject(otherLocations).apply {
@@ -84,11 +92,12 @@ public data class Locator(
         public companion object {
 
             public fun fromJSON(
-                json: JSONObject?
+                json: JSONObject?,
             ): Locations {
-                val fragments = json?.optStringsFromArrayOrSingle("fragments", remove = true)?.takeIf { it.isNotEmpty() }
-                    ?: json?.optStringsFromArrayOrSingle("fragment", remove = true)
-                    ?: emptyList()
+                val fragments =
+                    json?.optStringsFromArrayOrSingle("fragments", remove = true)?.takeIf { it.isNotEmpty() }
+                        ?: json?.optStringsFromArrayOrSingle("fragment", remove = true)
+                        ?: emptyList()
 
                 val progression = json?.optNullableDouble("progression", remove = true)
                     ?.takeIf { it in 0.0..1.0 }
@@ -108,13 +117,6 @@ public data class Locator(
                 )
             }
         }
-
-        @Deprecated(
-            "Renamed to [fragments]",
-            ReplaceWith("fragments"),
-            level = DeprecationLevel.ERROR
-        )
-        val fragment: String? get() = fragments.firstOrNull()
     }
 
     /**
@@ -132,7 +134,7 @@ public data class Locator(
     public data class Text(
         val before: String? = null,
         val highlight: String? = null,
-        val after: String? = null
+        val after: String? = null,
     ) : JSONable, Parcelable {
 
         override fun toJSON(): JSONObject = JSONObject().apply {
@@ -173,7 +175,7 @@ public data class Locator(
         progression: Double? = locations.progression,
         position: Int? = locations.position,
         totalProgression: Double? = locations.totalProgression,
-        otherLocations: Map<String, Any> = locations.otherLocations
+        otherLocations: Map<String, Any> = locations.otherLocations,
     ): Locator = copy(
         locations = locations.copy(
             fragments = fragments,
@@ -192,27 +194,6 @@ public data class Locator(
         putIfNotEmpty("text", text)
     }
 
-    @Suppress("UNUSED_PARAMETER")
-    @Deprecated(
-        "Provide a `Url` and `MediaType` instances.",
-        ReplaceWith("Locator(href = Url(href)!!, mediaType = MediaType(type)!!"),
-        level = DeprecationLevel.ERROR
-    )
-    public constructor(
-        href: String,
-        type: String,
-        title: String? = null,
-        locations: Locations = Locations(),
-        text: Text = Text()
-    ) : this(Url("#")!!, MediaType.BINARY)
-
-    @Deprecated(
-        "Use [mediaType.toString()] instead",
-        ReplaceWith("mediaType.toString()"),
-        level = DeprecationLevel.ERROR
-    )
-    public val type: String get() = throw NotImplementedError()
-
     public companion object {
 
         /**
@@ -220,7 +201,7 @@ public data class Locator(
          */
         public fun fromJSON(
             json: JSONObject?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): Locator? =
             fromJSON(json, warnings, withLegacyHref = false)
 
@@ -233,7 +214,7 @@ public data class Locator(
         @DelicateReadiumApi
         public fun fromLegacyJSON(
             json: JSONObject?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): Locator? =
             fromJSON(json, warnings, withLegacyHref = true)
 
@@ -241,7 +222,7 @@ public data class Locator(
         private fun fromJSON(
             json: JSONObject?,
             warnings: WarningLogger? = null,
-            withLegacyHref: Boolean = false
+            withLegacyHref: Boolean = false,
         ): Locator? {
             val href = json?.optNullableString("href")
             val type = json?.optNullableString("type")
@@ -277,21 +258,12 @@ public data class Locator(
 
         public fun fromJSONArray(
             json: JSONArray?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): List<Locator> {
             return json.parseObjects { fromJSON(it as? JSONObject, warnings) }
         }
     }
 }
-
-/**
- * Creates a [Locator] from a reading order [Link].
- */
-@Deprecated(
-    "This may create an incorrect `Locator` if the link `type` is missing. Use `publication.locatorFromLink()` instead.",
-    level = DeprecationLevel.ERROR
-)
-public fun Link.toLocator(): Locator = throw NotImplementedError()
 
 /**
  * Represents a sequential list of `Locator` objects.
@@ -302,7 +274,7 @@ public fun Link.toLocator(): Locator = throw NotImplementedError()
 public data class LocatorCollection(
     val metadata: Metadata = Metadata(),
     val links: List<Link> = emptyList(),
-    val locators: List<Locator> = emptyList()
+    val locators: List<Locator> = emptyList(),
 ) : JSONable, Parcelable {
 
     /**
@@ -314,7 +286,7 @@ public data class LocatorCollection(
     public data class Metadata(
         val localizedTitle: LocalizedString? = null,
         val numberOfItems: Int? = null,
-        val otherMetadata: @WriteWith<JSONParceler> Map<String, Any> = mapOf()
+        val otherMetadata: @WriteWith<JSONParceler> Map<String, Any> = mapOf(),
     ) : JSONable, Parcelable {
 
         /**
@@ -354,7 +326,7 @@ public data class LocatorCollection(
 
         public fun fromJSON(
             json: JSONObject?,
-            warnings: WarningLogger? = null
+            warnings: WarningLogger? = null,
         ): LocatorCollection {
             return LocatorCollection(
                 metadata = Metadata.fromJSON(json?.optJSONObject("metadata"), warnings),

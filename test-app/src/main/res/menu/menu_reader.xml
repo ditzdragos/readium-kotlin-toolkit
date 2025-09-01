@@ -20,7 +20,7 @@
         android:title="@string/epubactivity_read_aloud_start"
         android:visible="false"
         app:showAsAction="always"
-        tools:ignore="AlwaysShowAction"/>
+        tools:ignore="AlwaysShowAction" />
 
 
     <item
@@ -28,23 +28,30 @@
         android:icon="@drawable/ic_baseline_bookmark_24"
         android:title="@string/epubactivity_set_bookmark"
         app:showAsAction="always"
-        tools:ignore="AlwaysShowAction"/>
+        tools:ignore="AlwaysShowAction" />
 
     <item
         android:id="@+id/settings"
         android:icon="@drawable/ic_outline_format_size_24"
-        android:visible="false"
         android:title="@string/epubactivity_settings"
+        android:visible="false"
         app:showAsAction="always"
-        tools:ignore="AlwaysShowAction"/>
+        tools:ignore="AlwaysShowAction" />
 
     <item
         android:id="@+id/drm"
         android:icon="@drawable/ic_baseline_enhanced_encryption_24"
-        android:visible="false"
         android:title="@string/epubactivity_drm_info"
+        android:visible="false"
         app:showAsAction="always"
-        tools:ignore="AlwaysShowAction"/>
+        tools:ignore="AlwaysShowAction" />
+
+    <item
+        android:id="@+id/info"
+        android:icon="@drawable/ic_baseline_info_24"
+        android:title="@string/info"
+        app:showAsAction="always"
+        tools:ignore="AlwaysShowAction" />
 
 
     <item
@@ -52,6 +59,6 @@
         android:icon="@drawable/ic_outline_menu_24"
         android:title="@string/epubactivity_book_nav_options"
         app:showAsAction="always"
-        tools:ignore="AlwaysShowAction"/>
+        tools:ignore="AlwaysShowAction" />
 
 </menu>

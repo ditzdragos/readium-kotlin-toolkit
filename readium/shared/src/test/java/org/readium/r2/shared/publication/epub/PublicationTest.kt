@@ -12,14 +12,20 @@ package org.readium.r2.shared.publication.epub
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.readium.r2.shared.publication.*
+import org.readium.r2.shared.publication.Href
+import org.readium.r2.shared.publication.Link
+import org.readium.r2.shared.publication.LocalizedString
+import org.readium.r2.shared.publication.Manifest
+import org.readium.r2.shared.publication.Metadata
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.PublicationCollection
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class PublicationTest {
 
     private fun createPublication(
-        subcollections: Map<String, List<PublicationCollection>> = emptyMap()
+        subcollections: Map<String, List<PublicationCollection>> = emptyMap(),
     ) = Publication(
         manifest = Manifest(
             metadata = Metadata(localizedTitle = LocalizedString("Title")),
@@ -27,7 +33,8 @@ class PublicationTest {
         )
     )
 
-    @Test fun `get {pageList}`() {
+    @Test
+    fun `get {pageList}`() {
         val links = listOf(Link(href = Href("/page1.html")!!))
         assertEquals(
             links,
@@ -39,11 +46,13 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {pageList} when missing`() {
+    @Test
+    fun `get {pageList} when missing`() {
         assertEquals(0, createPublication().pageList.size)
     }
 
-    @Test fun `get {landmarks}`() {
+    @Test
+    fun `get {landmarks}`() {
         val links = listOf(Link(href = Href("/landmark.html")!!))
         assertEquals(
             links,
@@ -55,11 +64,13 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {landmarks} when missing`() {
+    @Test
+    fun `get {landmarks} when missing`() {
         assertEquals(0, createPublication().landmarks.size)
     }
 
-    @Test fun `get {listOfAudioClips}`() {
+    @Test
+    fun `get {listOfAudioClips}`() {
         val links = listOf(Link(href = Href("/audio.mp3")!!))
         assertEquals(
             links,
@@ -71,11 +82,13 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {listOfAudioClips} when missing`() {
+    @Test
+    fun `get {listOfAudioClips} when missing`() {
         assertEquals(0, createPublication().listOfAudioClips.size)
     }
 
-    @Test fun `get {listOfIllustrations}`() {
+    @Test
+    fun `get {listOfIllustrations}`() {
         val links = listOf(Link(href = Href("/image.jpg")!!))
         assertEquals(
             links,
@@ -87,11 +100,13 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {listOfIllustrations} when missing`() {
+    @Test
+    fun `get {listOfIllustrations} when missing`() {
         assertEquals(0, createPublication().listOfIllustrations.size)
     }
 
-    @Test fun `get {listOfTables}`() {
+    @Test
+    fun `get {listOfTables}`() {
         val links = listOf(Link(href = Href("/table.html")!!))
         assertEquals(
             links,
@@ -105,11 +120,13 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {listOfTables} when missing`() {
+    @Test
+    fun `get {listOfTables} when missing`() {
         assertEquals(0, createPublication().listOfTables.size)
     }
 
-    @Test fun `get {listOfVideoClips}`() {
+    @Test
+    fun `get {listOfVideoClips}`() {
         val links = listOf(Link(href = Href("/video.mov")!!))
         assertEquals(
             links,
@@ -121,7 +138,8 @@ class PublicationTest {
         )
     }
 
-    @Test fun `get {listOfVideoClips} when missing`() {
+    @Test
+    fun `get {listOfVideoClips} when missing`() {
         assertEquals(0, createPublication().listOfVideoClips.size)
     }
 }

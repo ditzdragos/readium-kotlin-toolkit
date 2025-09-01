@@ -7,7 +7,10 @@
 package org.readium.r2.shared.publication.services.content
 
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.publication.*
+import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.Manifest
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.PublicationServicesHolder
 import org.readium.r2.shared.publication.ServiceFactory
 import org.readium.r2.shared.publication.services.content.iterators.PublicationContentIterator
 import org.readium.r2.shared.publication.services.content.iterators.ResourceContentIteratorFactory
@@ -55,12 +58,12 @@ public class DefaultContentService(
     private val manifest: Manifest,
     private val container: Container<Resource>,
     private val services: PublicationServicesHolder,
-    private val resourceContentIteratorFactories: List<ResourceContentIteratorFactory>
+    private val resourceContentIteratorFactories: List<ResourceContentIteratorFactory>,
 ) : ContentService {
 
     public companion object {
         public fun createFactory(
-            resourceContentIteratorFactories: List<ResourceContentIteratorFactory>
+            resourceContentIteratorFactories: List<ResourceContentIteratorFactory>,
         ): (Publication.Service.Context) -> DefaultContentService = { context ->
             DefaultContentService(
                 context.manifest,
@@ -79,7 +82,7 @@ public class DefaultContentService(
         val manifest: Manifest,
         val container: Container<Resource>,
         val services: PublicationServicesHolder,
-        val start: Locator?
+        val start: Locator?,
     ) : Content {
         override fun iterator(): Content.Iterator =
             PublicationContentIterator(

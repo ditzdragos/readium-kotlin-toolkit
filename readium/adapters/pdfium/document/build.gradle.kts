@@ -14,14 +14,8 @@ android {
 
 dependencies {
     api(project(":readium:readium-shared"))
+    implementation(project(":readium:adapters:pdfium:readium-adapter-pdfium-common"))
 
-    implementation(libs.androidx.core)
-    implementation(libs.pdfium)
     implementation(libs.timber)
     implementation(libs.kotlinx.coroutines.android)
-
-    testImplementation(libs.junit)
-
-    androidTestImplementation(libs.androidx.ext.junit)
-    androidTestImplementation(libs.androidx.expresso.core)
 }

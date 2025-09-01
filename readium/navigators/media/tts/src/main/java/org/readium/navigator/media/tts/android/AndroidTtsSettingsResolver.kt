@@ -6,7 +6,7 @@
 
 package org.readium.navigator.media.tts.android
 
-import java.util.*
+import java.util.Locale
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Metadata
 import org.readium.r2.shared.util.Language
@@ -14,7 +14,7 @@ import org.readium.r2.shared.util.Language
 @OptIn(ExperimentalReadiumApi::class)
 internal class AndroidTtsSettingsResolver(
     private val metadata: Metadata,
-    private val defaults: AndroidTtsDefaults
+    private val defaults: AndroidTtsDefaults,
 ) : AndroidTtsEngine.SettingsResolver {
 
     override fun settings(preferences: AndroidTtsPreferences): AndroidTtsSettings {

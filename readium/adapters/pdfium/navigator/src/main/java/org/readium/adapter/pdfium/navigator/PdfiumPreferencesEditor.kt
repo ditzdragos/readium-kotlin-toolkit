@@ -9,7 +9,15 @@
 package org.readium.adapter.pdfium.navigator
 
 import org.readium.r2.navigator.extensions.format
-import org.readium.r2.navigator.preferences.*
+import org.readium.r2.navigator.preferences.Axis
+import org.readium.r2.navigator.preferences.DoubleIncrement
+import org.readium.r2.navigator.preferences.EnumPreference
+import org.readium.r2.navigator.preferences.EnumPreferenceDelegate
+import org.readium.r2.navigator.preferences.Fit
+import org.readium.r2.navigator.preferences.PreferencesEditor
+import org.readium.r2.navigator.preferences.RangePreference
+import org.readium.r2.navigator.preferences.RangePreferenceDelegate
+import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Metadata
 
@@ -23,12 +31,12 @@ import org.readium.r2.shared.publication.Metadata
 public class PdfiumPreferencesEditor internal constructor(
     initialPreferences: PdfiumPreferences,
     publicationMetadata: Metadata,
-    defaults: PdfiumDefaults
+    defaults: PdfiumDefaults,
 ) : PreferencesEditor<PdfiumPreferences> {
 
     private data class State(
         val preferences: PdfiumPreferences,
-        val settings: PdfiumSettings
+        val settings: PdfiumSettings,
     )
 
     private val settingsResolver: PdfiumSettingsResolver =

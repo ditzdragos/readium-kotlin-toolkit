@@ -4,7 +4,10 @@ package org.readium.r2.shared.publication.services.content.iterators
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -163,7 +166,7 @@ class HtmlResourceContentIteratorTest {
         selector: String? = null,
         before: String? = null,
         highlight: String? = null,
-        after: String? = null
+        after: String? = null,
     ): Locator =
         locator.copy(
             locations = Locator.Locations(
@@ -178,7 +181,7 @@ class HtmlResourceContentIteratorTest {
     private fun iterator(
         html: String,
         startLocator: Locator = locator,
-        totalProgressionRange: ClosedRange<Double>? = null
+        totalProgressionRange: ClosedRange<Double>? = null,
     ): HtmlResourceContentIterator =
         HtmlResourceContentIterator(
             StringResource(html),
@@ -196,8 +199,10 @@ class HtmlResourceContentIteratorTest {
     @Test
     fun `cannot call previous() without first hasPrevious()`() = runTest {
         val iter = iterator(html)
-        iter.hasNext(); iter.next()
-        iter.hasNext(); iter.next()
+        iter.hasNext()
+        iter.next()
+        iter.hasNext()
+        iter.next()
 
         assertThrows(IllegalStateException::class.java) { iter.previous() }
         iter.hasPrevious()
@@ -252,8 +257,10 @@ class HtmlResourceContentIteratorTest {
     @Test
     fun `calling hasPrevious() several times doesn't move the index`() = runTest {
         val iter = iterator(html)
-        iter.hasNext(); iter.next()
-        iter.hasNext(); iter.next()
+        iter.hasNext()
+        iter.next()
+        iter.hasNext()
+        iter.next()
         assertTrue(iter.hasPrevious())
         assertTrue(iter.hasPrevious())
         assertTrue(iter.hasPrevious())

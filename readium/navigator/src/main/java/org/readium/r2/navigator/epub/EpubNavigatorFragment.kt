@@ -8,7 +8,6 @@
 
 package org.readium.r2.navigator.epub
 
-import android.content.SharedPreferences
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Build
@@ -94,7 +93,6 @@ import org.readium.r2.shared.publication.Href
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
-import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
 import org.readium.r2.shared.publication.epub.EpubLayout
 import org.readium.r2.shared.publication.presentation.presentation
 import org.readium.r2.shared.publication.services.positionsByReadingOrder
@@ -127,7 +125,7 @@ public class EpubNavigatorFragment internal constructor(
     internal val paginationListener: PaginationListener?,
     epubLayout: EpubLayout,
     private val defaults: EpubDefaults,
-    configuration: Configuration
+    configuration: Configuration,
 ) : NavigatorFragment(publication),
     OverflowableNavigator,
     SelectableNavigator,
@@ -190,6 +188,11 @@ public class EpubNavigatorFragment internal constructor(
         var decorationTemplates: HtmlDecorationTemplates,
 
         /**
+         * Indicates if a user can swipe to change resources when scroll is enabled.
+         */
+        var disablePageTurnsWhileScrolling: Boolean,
+
+        /**
          * Custom [ActionMode.Callback] to be used when the user selects content.
          *
          * Provide one if you want to customize the selection context menu items.
@@ -213,18 +216,20 @@ public class EpubNavigatorFragment internal constructor(
         var disableSelectionWhenProtected: Boolean,
 
         internal var fontFamilyDeclarations: List<FontFamilyDeclaration>,
-        internal var javascriptInterfaces: Map<String, JavascriptInterfaceFactory>
+        internal var javascriptInterfaces: Map<String, JavascriptInterfaceFactory>,
     ) {
         public constructor(
             servedAssets: List<String> = emptyList(),
             readiumCssRsProperties: RsProperties = RsProperties(),
             decorationTemplates: HtmlDecorationTemplates = HtmlDecorationTemplates.defaultTemplates(),
+            disablePageTurnsWhileScrolling: Boolean = false,
             selectionActionModeCallback: ActionMode.Callback? = null,
-            shouldApplyInsetsPadding: Boolean? = true
+            shouldApplyInsetsPadding: Boolean? = true,
         ) : this(
             servedAssets = servedAssets,
             readiumCssRsProperties = readiumCssRsProperties,
             decorationTemplates = decorationTemplates,
+            disablePageTurnsWhileScrolling = disablePageTurnsWhileScrolling,
             selectionActionModeCallback = selectionActionModeCallback,
             shouldApplyInsetsPadding = shouldApplyInsetsPadding,
             disableSelectionWhenProtected = true,
@@ -252,7 +257,7 @@ public class EpubNavigatorFragment internal constructor(
         public fun addFontFamilyDeclaration(
             fontFamily: FontFamily,
             alternates: List<FontFamily> = emptyList(),
-            builderAction: (MutableFontFamilyDeclaration).() -> Unit
+            builderAction: (MutableFontFamilyDeclaration).() -> Unit,
         ) {
             fontFamilyDeclarations += buildFontFamilyDeclaration(
                 fontFamily = fontFamily.name,
@@ -337,12 +342,6 @@ public class EpubNavigatorFragment internal constructor(
     private lateinit var resourcesSingle: List<PageResource>
     private lateinit var resourcesDouble: List<PageResource>
 
-    @Deprecated(
-        "Migrate to the new Settings API (see migration guide)",
-        level = DeprecationLevel.ERROR
-    )
-    public val preferences: SharedPreferences get() = throw NotImplementedError()
-
     internal var currentPagerPosition: Int = 0
     internal lateinit var adapter: R2PagerAdapter
     private lateinit var currentActivity: FragmentActivity
@@ -353,7 +352,7 @@ public class EpubNavigatorFragment internal constructor(
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         currentActivity = requireActivity()
         _binding = ReadiumNavigatorViewpagerBinding.inflate(inflater, container, false)
@@ -701,12 +700,15 @@ public class EpubNavigatorFragment internal constructor(
             RunScriptCommand.Scope.LoadedResources -> {
                 r2PagerAdapter?.mFragments?.forEach { _, fragment ->
                     (fragment as? R2EpubPageFragment)
+                        ?.takeIf { it.isLoaded.value }
                         ?.runJavaScript(command.script)
                 }
             }
 
-            is RunScriptCommand.Scope.Resource -> {
-                loadedFragmentForHref(command.scope.href)?.getWebView(command.scope.href)
+            is RunScriptCommand.Scope.LoadedResource -> {
+                loadedFragmentForHref(command.scope.href)
+                    ?.takeIf { it.isLoaded.value }
+                    ?.getWebView(command.scope.href)
                     ?.runJavaScript(command.script)
             }
 
@@ -723,14 +725,6 @@ public class EpubNavigatorFragment internal constructor(
 
     override val overflow: StateFlow<OverflowableNavigator.Overflow>
         get() = viewModel.overflow
-
-    @Deprecated(
-        "Use `presentation.value.readingProgression` instead",
-        replaceWith = ReplaceWith("presentation.value.readingProgression"),
-        level = DeprecationLevel.ERROR
-    )
-    override val readingProgression: PublicationReadingProgression
-        get() = throw NotImplementedError()
 
     private val inputListener = CompositeInputListener()
 
@@ -868,7 +862,7 @@ public class EpubNavigatorFragment internal constructor(
             id: DecorationId,
             group: String,
             rect: RectF,
-            point: PointF
+            point: PointF,
         ): Boolean =
             viewModel.onDecorationActivated(
                 id = id,
@@ -913,7 +907,7 @@ public class EpubNavigatorFragment internal constructor(
 
         override fun onFootnoteLinkActivated(
             url: AbsoluteUrl,
-            context: HyperlinkNavigator.FootnoteContext
+            context: HyperlinkNavigator.FootnoteContext,
         ) {
             viewModel.navigateToUrl(url, context)
         }
@@ -1295,29 +1289,31 @@ public class EpubNavigatorFragment internal constructor(
 
                 if (parsedRect != null) {
                     val adjustedRect = adjustRectForLayout(parsedRect, locator.href)
-                    continuation.resume(adjustedRect) { throwable ->
+                    continuation.resume(adjustedRect) { cause, _, _ ->
                         Timber.e(
-                            throwable,
+                            cause,
                             "Error resuming continuation in getRectForLocator for ${locator.href}"
                         )
-                        continuation.cancel(throwable)
+                        continuation.cancel(cause)
                     }
                 } else {
                     // Parsing failed or rect data was invalid
-                    continuation.resume(RectF(-1f, -1f, -1f, -1f)) { throwable ->
+                    continuation.resume(RectF(-1f, -1f, -1f, -1f)) { cause, _, _ ->
                         Timber.e(
-                            throwable,
+                            cause,
                             "Error resuming continuation with defaultRect after parsing failure for ${locator.href}"
                         )
-                        continuation.cancel(throwable)
+                        continuation.cancel(cause)
                     }
                 }
-            } ?: continuation.resume(RectF(-1f, -1f, -1f, -1f)) { throwable ->
-                Timber.e(
-                    throwable,
-                    "Error resuming continuation with defaultRect when WebView not found for ${locator.href}"
-                )
-                continuation.cancel(throwable)
+            } ?: run {
+                continuation.resume(RectF(-1f, -1f, -1f, -1f)) { cause, _, _ ->
+                    Timber.e(
+                        cause,
+                        "Error resuming continuation with defaultRect when WebView not found for ${locator.href}"
+                    )
+                    continuation.cancel(cause)
+                }
             }
         }
     }
@@ -1328,11 +1324,9 @@ public class EpubNavigatorFragment internal constructor(
             val fragment = loadedFragmentForHref(href)
             Timber.d("getHtmlBodyTextContent: $href -> $fragment")
             fragment?.getWebView(href)?.getHtmlBodyTextContent { result ->
-                continuation.resume(result) { throwable ->
-                    continuation.cancel(throwable)
-                }
-            } ?: continuation.resume("") { throwable ->
-                continuation.cancel(throwable)
+                continuation.resume(result) { cause, _, _ -> continuation.cancel(cause) }
+            } ?: run {
+                continuation.resume("") { cause, _, _ -> continuation.cancel(cause) }
             }
         }
     }
@@ -1416,39 +1410,6 @@ public class EpubNavigatorFragment internal constructor(
 
 
     public companion object {
-
-        /**
-         * Creates a factory for [EpubNavigatorFragment].
-         *
-         * @param publication EPUB publication to render in the navigator.
-         * @param baseUrl A base URL where this publication is served from. This is optional, only
-         * if you use a local HTTP server.
-         * @param initialLocator The first location which should be visible when rendering the
-         * publication. Can be used to restore the last reading location.
-         * @param readingOrder Custom order of resources to display. Used for example to display a
-         * non-linear resource on its own.
-         * @param listener Optional listener to implement to observe events, such as user taps.
-         * @param readingOrder Custom order of resources to display. Used for example to display a
-         * non-linear resource on its own.
-         * @param config Additional configuration.
-         */
-        @Deprecated(
-            "Use `EpubNavigatorFactory().createFragmentFactory()` instead",
-            level = DeprecationLevel.ERROR
-        )
-        @Suppress("UNUSED_PARAMETER")
-        public fun createFactory(
-            publication: Publication,
-            baseUrl: String? = null,
-            initialLocator: Locator? = null,
-            readingOrder: List<Link>? = null,
-            listener: Listener? = null,
-            paginationListener: PaginationListener? = null,
-            config: Configuration = Configuration(),
-            initialPreferences: EpubPreferences = EpubPreferences()
-        ): FragmentFactory {
-            throw NotImplementedError()
-        }
 
         /**
          * Creates a factory for a dummy [EpubNavigatorFragment].
