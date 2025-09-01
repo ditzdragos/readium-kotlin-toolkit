@@ -4,7 +4,59 @@ All notable changes to this project will be documented in this file. Take a look
 
 **Warning:** Features marked as *experimental* may change or be removed in a future release without notice. Use with caution.
 
-<!-- ## [Unreleased] -->
+## [Unreleased]
+
+### Fixed
+
+#### Navigator
+
+* Fixed vertical text scrolling in EPUB for right-to-left reading progression (contributed by [@shovel-kun](https://github.com/readium/kotlin-toolkit/pull/656)).
+* Fixed notifying the current location when using vertical text scrolling in EPUB (contributed by [@shovel-kun](https://github.com/readium/kotlin-toolkit/pull/656)).
+* Fixed drawing EPUB decorators with vertical text (contributed by [@shovel-kun](https://github.com/readium/kotlin-toolkit/pull/671)).
+
+
+## [3.1.1]
+
+### Fixed
+
+* [#662](https://github.com/readium/kotlin-toolkit/issues/662) Fixed duplicate class when using `readium-adapter-pdfium`.
+
+
+## [3.1.0]
+
+### Added
+
+#### Shared
+
+* Implementation of the [W3C Accessibility Metadata Display Guide](https://w3c.github.io/publ-a11y/a11y-meta-display-guide/2.0/guidelines/) specification to facilitate displaying accessibility metadata to users. [See the dedicated user guide](docs/guides/accessibility.md).
+* Support for [W3C's Text & data mining Reservation Protocol](https://www.w3.org/community/reports/tdmrep/CG-FINAL-tdmrep-20240510/) in our metadata models.
+* Support for [accessibility exemption metadata](https://readium.org/webpub-manifest/contexts/default/#exemption), which allows content creators to identify publications that do not meet conformance requirements but fall under exemptions in a given juridiction.
+* Support for [EPUB Accessibility 1.1](https://www.w3.org/TR/epub-a11y-11/) conformance profiles.
+
+#### Navigator
+
+* The `EpubNavigatorFragment.Configuration.disablePageTurnsWhileScrolling` property disables horizontal swipes for navigating to previous or next resources when scroll mode is enabled. When set to `true`, you must implement your own mechanism to move to the next resource (contributed by [@tm-bookshop](https://github.com/readium/kotlin-toolkit/pull/624)).
+
+#### Streamer
+
+* The EPUB 2 `<guide>` element is now parsed into the RWPM `landmarks` subcollection when no EPUB 3 `landmarks` navigation document is declared (contributed by [@erkasraim](https://github.com/readium/kotlin-toolkit/pull/628)).
+
+### Changed
+
+* Upgraded to Kotlin 2.1.20 and Gradle 8.13.
+* Jetifier is not required anymore, you can remove `android.enableJetifier=true` from your `gradle.properties` if you were using Readium as a local clone.
+
+#### Shared
+
+* [go-toolkit#92](https://github.com/readium/go-toolkit/issues/92) The accessibility feature `printPageNumbers` is deprecated in favor of `pageNavigation`.
+
+### Fixed
+
+#### Navigator
+
+* Fixed a race condition causing EPUB decorations to be applied twice when opening a publication.
+* Fixed support of Readium Web Publication packages conforming to the EPUB profile (contributed by [@ddfreiling](https://github.com/readium/kotlin-toolkit/pull/642)).
+
 
 ## [3.0.3]
 
@@ -926,3 +978,5 @@ progression. Now if no reading progression is set, the `effectiveReadingProgress
 [3.0.1]: https://github.com/readium/kotlin-toolkit/compare/3.0.0...3.0.1
 [3.0.2]: https://github.com/readium/kotlin-toolkit/compare/3.0.1...3.0.2
 [3.0.3]: https://github.com/readium/kotlin-toolkit/compare/3.0.2...3.0.3
+[3.1.0]: https://github.com/readium/kotlin-toolkit/compare/3.0.3...3.1.0
+[3.1.1]: https://github.com/readium/kotlin-toolkit/compare/3.1.0...3.1.1

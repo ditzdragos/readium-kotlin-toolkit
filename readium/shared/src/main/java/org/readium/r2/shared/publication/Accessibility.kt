@@ -18,6 +18,7 @@ import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.JSONable
 import org.readium.r2.shared.extensions.*
 import org.readium.r2.shared.publication.Accessibility.AccessMode.Companion.toJSONArray
+import org.readium.r2.shared.publication.Accessibility.Exemption.Companion.toJSONArray
 import org.readium.r2.shared.publication.Accessibility.Feature.Companion.toJSONArray
 import org.readium.r2.shared.publication.Accessibility.Hazard.Companion.toJSONArray
 import org.readium.r2.shared.publication.Accessibility.PrimaryAccessMode.Companion.toJSONArray
@@ -46,16 +47,19 @@ import org.readium.r2.shared.util.logging.log
  *   supported enhancements for accessibility.
  * @property [hazards] A characteristic of the described resource that is physiologically
  *   dangerous to some users.
+ * @property [exemptions] Justifications for non-conformance based on exemptions in a given
+ *   jurisdiction.
  */
 @Parcelize
 public data class Accessibility(
-    val conformsTo: Set<Profile>,
+    val conformsTo: Set<Profile> = emptySet(),
     val certification: Certification? = null,
     val summary: String? = null,
-    val accessModes: Set<AccessMode>,
-    val accessModesSufficient: Set<Set<PrimaryAccessMode>>,
-    val features: Set<Feature>,
-    val hazards: Set<Hazard>,
+    val accessModes: Set<AccessMode> = emptySet(),
+    val accessModesSufficient: Set<Set<PrimaryAccessMode>> = emptySet(),
+    val features: Set<Feature> = emptySet(),
+    val hazards: Set<Hazard> = emptySet(),
+    val exemptions: Set<Exemption> = emptySet(),
 ) : JSONable, Parcelable {
 
     /**
@@ -64,19 +68,70 @@ public data class Accessibility(
     @Parcelize
     public data class Profile(public val uri: String) : Parcelable {
 
+        /** Indicates whether this profile matches WCAG level A. */
+        public val isWCAGLevelA: Boolean get() =
+            this == EPUB_A11Y_10_WCAG_20_A ||
+                this == EPUB_A11Y_11_WCAG_20_A ||
+                this == EPUB_A11Y_11_WCAG_21_A ||
+                this == EPUB_A11Y_11_WCAG_22_A
+
+        /** Indicates whether this profile matches WCAG level AA. */
+        public val isWCAGLevelAA: Boolean get() =
+            this == EPUB_A11Y_10_WCAG_20_AA ||
+                this == EPUB_A11Y_11_WCAG_20_AA ||
+                this == EPUB_A11Y_11_WCAG_21_AA ||
+                this == EPUB_A11Y_11_WCAG_22_AA
+
+        /** Indicates whether this profile matches WCAG level AAA. */
+        public val isWCAGLevelAAA: Boolean get() =
+            this == EPUB_A11Y_10_WCAG_20_AAA ||
+                this == EPUB_A11Y_11_WCAG_20_AAA ||
+                this == EPUB_A11Y_11_WCAG_21_AAA ||
+                this == EPUB_A11Y_11_WCAG_22_AAA
+
         public companion object {
 
+            /** EPUB Accessibility 1.0 - WCAG 2.0 Level A */
             public val EPUB_A11Y_10_WCAG_20_A: Profile = Profile(
                 "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-a"
             )
 
+            /** EPUB Accessibility 1.0 - WCAG 2.0 Level AA */
             public val EPUB_A11Y_10_WCAG_20_AA: Profile = Profile(
                 "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aa"
             )
 
+            /** EPUB Accessibility 1.0 - WCAG 2.0 Level AAA */
             public val EPUB_A11Y_10_WCAG_20_AAA: Profile = Profile(
                 "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aaa"
             )
+
+            /** EPUB Accessibility 1.1 - WCAG 2.0 Level A */
+            public val EPUB_A11Y_11_WCAG_20_A: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.0-a")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.0 Level AA */
+            public val EPUB_A11Y_11_WCAG_20_AA: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.0-aa")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.0 Level AAA */
+            public val EPUB_A11Y_11_WCAG_20_AAA: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.0-aaa")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.1 Level A */
+            public val EPUB_A11Y_11_WCAG_21_A: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.1-a")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.1 Level AA */
+            public val EPUB_A11Y_11_WCAG_21_AA: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.1-aa")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.1 Level AAA */
+            public val EPUB_A11Y_11_WCAG_21_AAA: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.1-aaa")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.2 Level A */
+            public val EPUB_A11Y_11_WCAG_22_A: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.2-a")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.2 Level AA */
+            public val EPUB_A11Y_11_WCAG_22_AA: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.2-aa")
+
+            /** EPUB Accessibility 1.1 - WCAG 2.2 Level AAA */
+            public val EPUB_A11Y_11_WCAG_22_AAA: Profile = Profile("https://www.w3.org/TR/epub-a11y-11#wcag-2.2-aaa")
 
             public fun Set<Profile>.toJSONArray(): JSONArray =
                 JSONArray(this.map(Profile::uri))
@@ -283,6 +338,11 @@ public data class Accessibility(
 
         public companion object {
             /**
+             * Indicates that the resource does not contain any accessibility features.
+             */
+            public val NONE: Feature = Feature("none")
+
+            /**
              * The work includes annotations from the author, instructor and/or others.
              */
             public val ANNOTATIONS: Feature = Feature("annotations")
@@ -298,6 +358,7 @@ public data class Accessibility(
             /**
              * The work includes bookmarks to facilitate navigation to key points.
              */
+            @Deprecated("The use of the bookmarks value is now deprecated due to its ambiguity. For PDF bookmarks, the tableOfContents value should be used instead. For bookmarks in ebooks, the annotations value can be used.")
             public val BOOKMARKS: Feature = Feature("bookmark")
 
             /**
@@ -306,8 +367,29 @@ public data class Accessibility(
             public val INDEX: Feature = Feature("index")
 
             /**
+             * The resource includes static page markers, such as those identified by the
+             * doc-pagebreak role (DPUB-ARIA-1.0).
+             *
+             * This value is most commonly used with ebooks for which there is a statically
+             * paginated equivalent, such as a print edition, but it is not required that the page
+             * markers correspond to another work. The markers may exist solely to facilitate
+             * navigation in purely digital works.
+             */
+            public val PAGE_BREAK_MARKERS: Feature = Feature("pageBreakMarkers")
+
+            /**
+             * The resource includes a means of navigating to static page break locations.
+             *
+             * The most common way of providing page navigation in digital publications is through
+             * a page list.
+             */
+            public val PAGE_NAVIGATION: Feature = Feature("pageNavigation")
+
+            /**
              * The work includes equivalent print page numbers. This setting is most commonly used
              * with ebooks for which there is a print equivalent.
+             *
+             * Deprecated for publication authors: https://github.com/readium/go-toolkit/issues/92
              */
             public val PRINT_PAGE_NUMBERS: Feature = Feature("printPageNumbers")
 
@@ -348,7 +430,18 @@ public data class Accessibility(
             /**
              * Indicates that synchronized captions are available for audio and video content.
              */
+            @Deprecated("Authors should use the more specific closedCaptions or openCaptions values, as appropriate.")
             public val CAPTIONS: Feature = Feature("captions")
+
+            /**
+             * Indicates that synchronized closed captions are available for
+             * audio and video content.
+             *
+             * Closed captions are defined separately from the video, allowing
+             * users to control whether they are rendered or not, unlike open
+             * captions.
+             */
+            public val CLOSED_CAPTIONS: Feature = Feature("closedCaptions")
 
             /**
              * Textual descriptions of math equations are included, whether in the alt attribute
@@ -363,13 +456,13 @@ public data class Accessibility(
             public val LONG_DESCRIPTION: Feature = Feature("longDescription")
 
             /**
-             * Indicates that `ruby` annotations HTML are provided in the content. Ruby annotations
-             * are used as pronunciation guides for the logographic characters for languages like
-             * Chinese or Japanese. It makes difficult Kanji or CJK ideographic characters more accessible.
+             * Indicates that synchronized open captions are available for audio
+             * and video content.
              *
-             * The absence of rubyAnnotations implies that no CJK ideographic characters have ruby.
+             * Open captions are part of the video stream and cannot be turned
+             * off by the user, unlike closed captions.
              */
-            public val RUBY_ANNOTATIONS: Feature = Feature("rubyAnnotations")
+            public val OPEN_CAPTIONS: Feature = Feature("openCaptions")
 
             /**
              * Sign language interpretation is available for audio and video content.
@@ -412,7 +505,7 @@ public data class Accessibility(
             /**
              * Identifies that chemical information is encoded using the ChemML markup language.
              */
-            public val CHEM_ML: Feature = Feature("ChemML")
+            public val CHEMML: Feature = Feature("ChemML")
 
             /**
              * Identifies that mathematical equations and formulas are encoded in the LaTeX
@@ -421,9 +514,21 @@ public data class Accessibility(
             public val LATEX: Feature = Feature("latex")
 
             /**
+             * Identifies that the LaTeX typesetting system is used to encode
+             * chemical equations and formulas.
+             */
+            public val LATEX_CHEMISTRY: Feature = Feature("latex-chemistry")
+
+            /**
              * Identifies that mathematical equations and formulas are encoded in MathML.
              */
-            public val MATH_ML: Feature = Feature("MathML")
+            public val MATHML: Feature = Feature("MathML")
+
+            /**
+             * Identifies that MathML is used to encode chemical equations and
+             * formulas.
+             */
+            public val MATHML_CHEMISTRY: Feature = Feature("MathML-chemistry")
 
             /**
              * One or more of SSML, Pronunciation-Lexicon, and CSS3-Speech properties has been used
@@ -468,10 +573,60 @@ public data class Accessibility(
              */
             public val TACTILE_OBJECT: Feature = Feature("tactileObject")
 
+            //
+            // The internationalization terms identify those accessibility
+            // characteristics of the content which are required for
+            // internationalization.
+
             /**
-             * Indicates that the resource does not contain any accessibility features.
+             * Indicates that ruby annotations JLreq are attached to every CJK
+             * ideographic character in the content. Ruby annotations are used
+             * as pronunciation guides for the logographic characters for
+             * languages like Chinese or Japanese. They make difficult CJK
+             * ideographic characters more accessible.
              */
-            public val NONE: Feature = Feature("none")
+            public val FULL_RUBY_ANNOTATIONS: Feature = Feature("fullRubyAnnotations")
+
+            /**
+             * Indicates that the content can be laid out horizontally (e.g,
+             * using the horizontal-tb writing mode of css-writing-modes-3).
+             * This value should only be set when the language of the content
+             * allows both horizontal and vertical directions. Notable examples
+             * of such languages are Chinese, Japanese, and Korean.
+             */
+            public val HORIZONTAL_WRITING: Feature = Feature("horizontalWriting")
+
+            /**
+             * Indicates that `ruby` annotations HTML are provided in the
+             * content. Ruby annotations are used as pronunciation guides for
+             * the logographic characters for languages like Chinese or
+             * Japanese. It makes difficult Kanji or CJK ideographic characters
+             * more accessible.
+             *
+             * The absence of rubyAnnotations implies that no CJK ideographic
+             * characters have ruby.
+             */
+            public val RUBY_ANNOTATIONS: Feature = Feature("rubyAnnotations")
+
+            /**
+             * Indicates that the content can be laid out vertically (e.g, using
+             * the vertical-rl of [css-writing-modes-3]). This value should only
+             * be set when the language of the content allows both horizontal
+             * and vertical directions.
+             */
+            public val VERTICAL_WRITING: Feature = Feature("verticalWriting")
+
+            /**
+             * Indicates that the content can be rendered with additional word
+             * segmentation.
+             */
+            public val WITH_ADDITIONAL_WORD_SEGMENTATION: Feature = Feature("withAdditionalWordSegmentation")
+
+            /**
+             * Indicates that the content can be rendered without additional
+             * word segmentation.
+             */
+            public val WITHOUT_ADDITIONAL_WORD_SEGMENTATION: Feature = Feature("withoutAdditionalWordSegmentation")
 
             /**
              * Creates a list of [Feature] from its RWPM JSON representation.
@@ -505,6 +660,12 @@ public data class Accessibility(
             public val NO_FLASHING_HAZARD: Hazard = Hazard("noFlashingHazard")
 
             /**
+             * Indicates that the author cannot determine if a flashing hazard
+             * exists.
+             */
+            public val UNKNOWN_FLASHING_HAZARD: Hazard = Hazard("unknownFlashingHazard")
+
+            /**
              * Indicates that the resource contains instances of motion simulation that
              * may affect some individuals.
              *
@@ -521,6 +682,12 @@ public data class Accessibility(
             public val NO_MOTION_SIMULATION_HAZARD: Hazard = Hazard("noMotionSimulationHazard")
 
             /**
+             * Indicates that the author cannot determine if a motion simulation
+             * hazard exists.
+             */
+            public val UNKNOWN_MOTION_SIMULATION_HAZARD: Hazard = Hazard("unknownMotionSimulationHazard")
+
+            /**
              * Indicates that the resource contains auditory sounds that may affect some individuals.
              */
             public val SOUND: Hazard = Hazard("sound")
@@ -529,6 +696,12 @@ public data class Accessibility(
              * Indicates that the resource does not contain auditory hazards.
              */
             public val NO_SOUND_HAZARD: Hazard = Hazard("noSoundHazard")
+
+            /**
+             * Indicates that the author cannot determine if a sound hazard
+             * exists.
+             */
+            public val UNKNOWN_SOUND_HAZARD: Hazard = Hazard("unknownSoundHazard")
 
             /**
              * Indicates that the author is not able to determine if the resource presents any hazards.
@@ -553,6 +726,65 @@ public data class Accessibility(
         }
     }
 
+    /**
+     * [Exemption] allows content creators to identify publications that do not meet conformance
+     * requirements but fall under exemptions in a given juridiction.
+     *
+     * While this list is currently limited to exemptions covered by the European Accessibility Act,
+     * it will be extended to cover additional exemptions in the future.
+     */
+    @Parcelize
+    public data class Exemption(public val value: String) : Parcelable {
+
+        public companion object {
+
+            /**
+             * Article 14, paragraph 1 of the European Accessibility Act states that its
+             * accessibility requirements shall apply only to the extent that compliance: … (b) does
+             * not result in the imposition of a disproportionate burden on the economic operators
+             * concerned
+             *
+             * https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?
+             */
+            public val EAA_DISPROPORTIONATE_BURDEN: Exemption = Exemption("eaa-disproportionate-burden")
+
+            /**
+             * Article 14, paragraph 1 of the European Accessibility Act states that its
+             * accessibility requirements shall apply only to the extent that compliance: (a) does
+             * not require a significant change in a product or service that results in the
+             * fundamental alteration of its basic nature
+             *
+             * https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32019L0882#d1e2148-70-1
+             */
+            public val EAA_FUNDAMENTAL_ALTERATION: Exemption = Exemption("eaa-fundamental-alteration")
+
+            /**
+             * The European Accessibility Act defines a microenterprise as: an enterprise which
+             * employs fewer than 10 persons and which has an annual turnover not exceeding EUR 2
+             * million or an annual balance sheet total not exceeding EUR 2 million.
+             *
+             * It further states in Article 4, paragraph 5: Microenterprises providing services
+             * shall be exempt from complying with the accessibility requirements referred to in
+             * paragraph 3 of this Article and any obligations relating to the compliance with those
+             * requirements.
+             *
+             * https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32019L0882#d1e1798-70-1
+             */
+            public val EAA_MICROENTERPRISE: Exemption = Exemption("eaa-microenterprise")
+
+            /**
+             * Creates a list of [Exemption] from its RWPM JSON representation.
+             */
+            public fun fromJSONArray(json: JSONArray?): List<Exemption> =
+                json?.filterIsInstance(String::class.java)
+                    ?.map { Exemption(it) }
+                    .orEmpty()
+
+            public fun Set<Exemption>.toJSONArray(): JSONArray =
+                JSONArray(this.map(Exemption::value))
+        }
+    }
+
     override fun toJSON(): JSONObject = JSONObject().apply {
         putIfNotEmpty("conformsTo", conformsTo.toJSONArray())
         put("certification", certification?.toJSON())
@@ -561,6 +793,7 @@ public data class Accessibility(
         putIfNotEmpty("accessModeSufficient", accessModesSufficient.map { it.toJSONArray() })
         putIfNotEmpty("hazard", hazards.toJSONArray())
         putIfNotEmpty("feature", features.toJSONArray())
+        putIfNotEmpty("exemption", exemptions.toJSONArray())
     }
 
     public companion object {
@@ -592,6 +825,7 @@ public data class Accessibility(
 
             val features = Feature.fromJSONArray(json.remove("feature") as? JSONArray)
             val hazards = Hazard.fromJSONArray(json.remove("hazard") as? JSONArray)
+            val exemptions = Exemption.fromJSONArray(json.remove("exemption") as? JSONArray)
 
             return Accessibility(
                 conformsTo = conformsTo.toSet(),
@@ -600,7 +834,8 @@ public data class Accessibility(
                 accessModes = accessModes.toSet(),
                 accessModesSufficient = accessModesSufficient.toSet(),
                 features = features.toSet(),
-                hazards = hazards.toSet()
+                hazards = hazards.toSet(),
+                exemptions = exemptions.toSet()
             )
         }
     }

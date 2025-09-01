@@ -10,6 +10,7 @@ package org.readium.r2.streamer.parser.readium
 
 import android.content.Context
 import org.readium.r2.shared.DelicateReadiumApi
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Manifest
 import org.readium.r2.shared.publication.Publication
@@ -17,8 +18,13 @@ import org.readium.r2.shared.publication.services.InMemoryCacheService
 import org.readium.r2.shared.publication.services.PerResourcePositionsService
 import org.readium.r2.shared.publication.services.WebPositionsService
 import org.readium.r2.shared.publication.services.cacheServiceFactory
+import org.readium.r2.shared.publication.services.content.DefaultContentService
+import org.readium.r2.shared.publication.services.content.contentServiceFactory
+import org.readium.r2.shared.publication.services.content.iterators.HtmlResourceContentIterator
 import org.readium.r2.shared.publication.services.locatorServiceFactory
 import org.readium.r2.shared.publication.services.positionsServiceFactory
+import org.readium.r2.shared.publication.services.search.StringSearchService
+import org.readium.r2.shared.publication.services.search.searchServiceFactory
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.DebugError
 import org.readium.r2.shared.util.Try
@@ -42,15 +48,22 @@ import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.SingleResourceContainer
 import org.readium.r2.streamer.parser.PublicationParser
 import org.readium.r2.streamer.parser.audio.AudioLocatorService
+import org.readium.r2.streamer.parser.epub.EpubPositionsService
 import timber.log.Timber
 
 /**
  * Parses any Readium Web Publication package or manifest, e.g. WebPub, Audiobook, DiViNa, LCPDF...
+ *
+ * @param epubReflowablePositionsStrategy Strategy used to calculate the number
+ * of positions in a reflowable resource of a web publication conforming to the
+ * EPUB profile.
  */
+@OptIn(ExperimentalReadiumApi::class)
 public class ReadiumWebPubParser(
     private val context: Context? = null,
     private val httpClient: HttpClient,
     private val pdfFactory: PdfDocumentFactory<*>?,
+    private val epubReflowablePositionsStrategy: EpubPositionsService.ReflowableStrategy = EpubPositionsService.ReflowableStrategy.recommended,
 ) : PublicationParser {
 
     override suspend fun parse(
@@ -97,6 +110,8 @@ public class ReadiumWebPubParser(
                     pdfFactory?.let { LcpdfPositionsService.create(it) }
                 manifest.conformsTo(Publication.Profile.DIVINA) ->
                     PerResourcePositionsService.createFactory(MediaType("image/*")!!)
+                manifest.conformsTo(Publication.Profile.EPUB) ->
+                    EpubPositionsService.createFactory(epubReflowablePositionsStrategy)
                 else ->
                     WebPositionsService.createFactory(httpClient)
             }
@@ -106,6 +121,16 @@ public class ReadiumWebPubParser(
                     AudioLocatorService.createFactory()
                 else ->
                     null
+            }
+
+            // Add content- and search-service for WebPubs with HTML contents.
+            if (manifest.readingOrder.any { it.mediaType?.isHtml == true }) {
+                contentServiceFactory = DefaultContentService.createFactory(
+                    resourceContentIteratorFactories = listOf(
+                        HtmlResourceContentIterator.Factory()
+                    )
+                )
+                searchServiceFactory = StringSearchService.createDefaultFactory()
             }
         }
 
