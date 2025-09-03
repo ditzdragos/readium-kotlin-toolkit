@@ -17,25 +17,26 @@ dependencyResolutionManagement {
 
 rootProject.name = "Readium"
 
-include(":readium:adapters:pdfium:common")
-project(":readium:adapters:pdfium:common")
-    .name = "readium-adapter-pdfium-common"
+// Commented out unused PDF adapters
+// include(":readium:adapters:pdfium:common")
+// project(":readium:adapters:pdfium:common")
+//     .name = "readium-adapter-pdfium-common"
 
-include(":readium:adapters:pdfium:document")
-project(":readium:adapters:pdfium:document")
-    .name = "readium-adapter-pdfium-document"
+// include(":readium:adapters:pdfium:document")
+// project(":readium:adapters:pdfium:document")
+//     .name = "readium-adapter-pdfium-document"
 
-include(":readium:adapters:pdfium:navigator")
-project(":readium:adapters:pdfium:navigator")
-    .name = "readium-adapter-pdfium-navigator"
+// include(":readium:adapters:pdfium:navigator")
+// project(":readium:adapters:pdfium:navigator")
+//     .name = "readium-adapter-pdfium-navigator"
 
-include(":readium:adapters:pspdfkit:document")
-project(":readium:adapters:pspdfkit:document")
-    .name = "readium-adapter-pspdfkit-document"
+// include(":readium:adapters:pspdfkit:document")
+// project(":readium:adapters:pspdfkit:document")
+//     .name = "readium-adapter-pspdfkit-document"
 
-include(":readium:adapters:pspdfkit:navigator")
-project(":readium:adapters:pspdfkit:navigator")
-    .name = "readium-adapter-pspdfkit-navigator"
+// include(":readium:adapters:pspdfkit:navigator")
+// project(":readium:adapters:pspdfkit:navigator")
+//     .name = "readium-adapter-pspdfkit-navigator"
 
 include(":readium:lcp")
 project(":readium:lcp")
@@ -53,21 +54,23 @@ project(":readium:navigators:common")
 // project(":readium:navigators:web")
 //     .name = "readium-navigator-web"
 
-include(":readium:navigators:media:common")
-project(":readium:navigators:media:common")
-    .name = "readium-navigator-media-common"
+// Commented out unused media navigators
+// include(":readium:navigators:media:common")
+// project(":readium:navigators:media:common")
+//     .name = "readium-navigator-media-common"
 
-include(":readium:navigators:media:audio")
-project(":readium:navigators:media:audio")
-    .name = "readium-navigator-media-audio"
+// include(":readium:navigators:media:audio")
+// project(":readium:navigators:media:audio")
+//     .name = "readium-navigator-media-audio"
 
-include(":readium:navigators:media:tts")
-project(":readium:navigators:media:tts")
-    .name = "readium-navigator-media-tts"
+// include(":readium:navigators:media:tts")
+// project(":readium:navigators:media:tts")
+//     .name = "readium-navigator-media-tts"
 
-include(":readium:adapters:exoplayer:audio")
-project(":readium:adapters:exoplayer:audio")
-    .name = "readium-adapter-exoplayer-audio"
+// Commented out unused ExoPlayer adapter
+// include(":readium:adapters:exoplayer:audio")
+// project(":readium:adapters:exoplayer:audio")
+//     .name = "readium-adapter-exoplayer-audio"
 
 include(":readium:opds")
 project(":readium:opds")
@@ -81,5 +84,6 @@ include(":readium:streamer")
 project(":readium:streamer")
     .name = "readium-streamer"
 
-include("test-app")
+// Commented out test-app and demo projects
+// include("test-app")
 // include(":readium:navigators:demo")
