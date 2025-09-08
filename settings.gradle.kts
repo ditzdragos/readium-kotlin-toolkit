@@ -11,7 +11,6 @@ dependencyResolutionManagement {
         mavenLocal()
         mavenCentral()
         maven(url = "https://s3.amazonaws.com/repo.commonsware.com")
-        maven(url = "https://customers.pspdfkit.com/maven")
     }
 }
 
