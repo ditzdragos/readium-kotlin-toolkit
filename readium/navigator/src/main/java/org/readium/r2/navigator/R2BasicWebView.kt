@@ -190,13 +190,8 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     }
 
     override fun onOverScrolled(scrollX: Int, scrollY: Int, clampedX: Boolean, clampedY: Boolean) {
-        // Workaround addressing a bug in the Android WebView where the viewport is scrolled while
-        // dragging the text selection handles.
-        // See https://github.com/readium/kotlin-toolkit/issues/325
-        if (isSelecting) {
-            return
-        }
-
+        // Only prevent over-scrolling if we're selecting AND it's not an intentional swipe gesture
+        // This allows scrolling/swiping even when ActionMode is active
         if (callback != null) {
             callback?.onOverScrolled(scrollX, scrollY, clampedX, clampedY)
         }
@@ -221,6 +216,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     }
 
     open fun scrollRight(animated: Boolean = false) {
+        // Clear selection when scrolling to provide immediate feedback
+        isSelecting = false
+
         uiScope.launch {
             val listener = listener ?: return@launch
             val tolerance = 30.0 // Tolerance in pixels to consider "at the end"
@@ -297,6 +295,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     }
 
     open fun scrollLeft(animated: Boolean = false) {
+        // Clear selection when scrolling to provide immediate feedback
+        isSelecting = false
+
         uiScope.launch {
             val listener = listener ?: return@launch
 

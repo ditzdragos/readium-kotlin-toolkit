@@ -737,7 +737,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                     return false
                 }
 
-                if (!isSelecting && !mIsBeingDragged) {
+                if (!mIsBeingDragged) {
                     mInitialVelocity = getCurrentXVelocity()
                     val pointerIndex = ev.findPointerIndex(mActivePointerId)
                     val x = ev.safeGetX(pointerIndex)
