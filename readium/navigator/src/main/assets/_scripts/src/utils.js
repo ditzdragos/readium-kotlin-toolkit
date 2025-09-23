@@ -397,9 +397,9 @@ export function rangeFromLocator(locator) {
           end = Math.min(locations.end+10, root.textContent.length);
 //          log("adjusted start and end: ",start, end, root.textContent.length);
         }
+       log("rangeFromLocator: Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
       }
 
-       log("rangeFromLocator: Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
        log("rangeFromLocator: Text at adjusted range: ", root.textContent.slice(start, end));
 
       let anchor = new TextQuoteAnchor(root, text.highlight, {
