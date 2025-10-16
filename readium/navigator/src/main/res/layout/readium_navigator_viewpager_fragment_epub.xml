@@ -11,12 +11,11 @@
     android:layout_gravity="center"
     android:focusable="false">
 
-        <org.readium.r2.navigator.R2WebView
-            android:id="@+id/webView"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layerType="hardware"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+    <org.readium.r2.navigator.R2WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -82,7 +82,6 @@ internal fun SpreadWebView(
             webview.isVerticalScrollBarEnabled = false
             webview.isHorizontalScrollBarEnabled = false
             webview.setBackgroundColor(backgroundColor.toArgb())
-            webview.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         }
     )
 }

@@ -4,34 +4,32 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-        <org.readium.r2.navigator.R2WebView
-            android:id="@+id/webView"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layerType="hardware"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/middle"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+    <org.readium.r2.navigator.R2WebView
+        android:id="@+id/webView"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/middle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <View
-            android:id="@+id/middle"
-            android:layout_width="0.5dp"
-            android:layout_height="0.5dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+    <View
+        android:id="@+id/middle"
+        android:layout_width="0.5dp"
+        android:layout_height="0.5dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <org.readium.r2.navigator.R2WebView
-            android:id="@+id/webViewRight"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layerType="hardware"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/middle"
-            app:layout_constraintTop_toTopOf="parent" />
+    <org.readium.r2.navigator.R2WebView
+        android:id="@+id/webViewRight"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/middle"
+        app:layout_constraintTop_toTopOf="parent" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>
