@@ -12,10 +12,12 @@ package org.readium.r2.lcp.license.container
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.zip.ZipFile
+import org.readium.r2.lcp.BuildConfig.DEBUG
 import org.readium.r2.lcp.LcpError
 import org.readium.r2.lcp.LcpException
 import org.readium.r2.lcp.license.model.LicenseDocument
 import org.readium.r2.shared.util.Url
+import timber.log.Timber
 
 /**
  * Access to a License Document stored in a ZIP archive.
@@ -26,15 +28,35 @@ internal class FileZipLicenseContainer(
 ) : WritableLicenseContainer {
 
     override fun read(): ByteArray {
+        val file = File(zip)
+
+        if (DEBUG) {
+            Timber.d("FileZipLicenseContainer.read() - Attempting to read from: $zip")
+            Timber.d("FileZipLicenseContainer.read() - File exists: ${file.exists()}, canRead: ${file.canRead()}, size: ${file.length()}")
+        }
+
+        if (!file.exists()) {
+            if (DEBUG) Timber.e("FileZipLicenseContainer.read() - File does not exist: $zip")
+            throw LcpException(LcpError.Container.FileNotFound(pathInZIP))
+        }
+
+        if (!file.canRead()) {
+            if (DEBUG) Timber.e("FileZipLicenseContainer.read() - File cannot be read: $zip")
+            throw LcpException(LcpError.Container.OpenFailed)
+        }
+
         val archive = try {
-            ZipFile(zip)
+            ZipFile(file)
         } catch (e: Exception) {
+            if (DEBUG) Timber.e(e, "FileZipLicenseContainer.read() - Failed to open ZIP file: $zip")
             throw LcpException(LcpError.Container.OpenFailed)
         }
 
         val entry = try {
-            archive.getEntry(pathInZIP.toString())!!
+            archive.getEntry(pathInZIP.toString())
+                ?: throw Exception("Entry not found: $pathInZIP")
         } catch (e: Exception) {
+            if (DEBUG) Timber.e(e, "FileZipLicenseContainer.read() - Failed to get entry: $pathInZIP")
             archive.close()
             throw LcpException(LcpError.Container.FileNotFound(pathInZIP))
         }
@@ -42,6 +64,7 @@ internal class FileZipLicenseContainer(
         return try {
             archive.getInputStream(entry).readBytes()
         } catch (e: Exception) {
+            if (DEBUG) Timber.e(e, "FileZipLicenseContainer.read() - Failed to read entry: $pathInZIP")
             throw LcpException(LcpError.Container.ReadFailed(pathInZIP))
         } finally {
             archive.close()

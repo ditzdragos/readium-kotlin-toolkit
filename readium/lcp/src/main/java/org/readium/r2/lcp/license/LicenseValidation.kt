@@ -23,6 +23,7 @@ import org.readium.r2.lcp.service.DeviceService
 import org.readium.r2.lcp.service.LcpClient
 import org.readium.r2.lcp.service.NetworkService
 import org.readium.r2.lcp.service.PassphrasesService
+import org.readium.r2.lcp.service.ValidationCacheService
 import org.readium.r2.shared.util.Instant
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.mediatype.MediaType
@@ -122,6 +123,7 @@ internal class LicenseValidation(
     val device: DeviceService,
     val network: NetworkService,
     val passphrases: PassphrasesService,
+    val validationCache: ValidationCacheService,
     val context: android.content.Context,
     val onLicenseValidated: (LicenseDocument) -> Unit,
 ) {
@@ -326,7 +328,12 @@ internal class LicenseValidation(
                     is State.retrievePassphrase -> requestPassphrase(state.license)
                     is State.validateIntegrity -> validateIntegrity(state.license, state.passphrase)
                     is State.registerDevice -> registerDevice(state.documents.license, state.link)
-                    is State.valid -> notifyObservers(state.documents, null)
+                    is State.valid -> {
+                        // Mark validation as successful in cache
+                        val licenseEnd = state.documents.license.rights.end
+                        validationCache.markValidationSuccess(state.documents.license.id, licenseEnd)
+                        notifyObservers(state.documents, null)
+                    }
                     is State.failure -> notifyObservers(null, state.error)
                     State.cancelled -> notifyObservers(null, null)
                 }
@@ -362,20 +369,42 @@ internal class LicenseValidation(
     }
 
     private suspend fun fetchStatus(license: LicenseDocument) {
+        if (DEBUG) Timber.d("fetchStatus: Attempting to fetch status for license ${license.id}")
+
         val url = license.url(
             LicenseDocument.Rel.Status,
             preferredType = MediaType.LCP_STATUS_DOCUMENT
         ).toString()
+
+        if (DEBUG) Timber.d("fetchStatus: URL = $url")
+
         // Short timeout to avoid blocking the License, when the LSD is optional.
         val timeout = 5.seconds.takeIf { ignoreInternetErrors }
-        val data = network.fetch(
+
+        val result = network.fetch(
             url,
             timeout = timeout,
             headers = mapOf("Accept" to MediaType.LCP_STATUS_DOCUMENT.toString())
         )
-            .getOrElse { throw LcpException(LcpError.Network(it)) }
 
-        raise(Event.retrievedStatusData(data))
+        result.onSuccess { data ->
+            // Cache the successfully fetched status document
+            if (DEBUG) Timber.d("fetchStatus: Successfully fetched status document for license ${license.id}, caching...")
+            validationCache.cacheStatusDocument(license.id, data)
+            raise(Event.retrievedStatusData(data))
+        }.onFailure { error ->
+            if (DEBUG) Timber.d("fetchStatus: Network fetch failed for license ${license.id}: ${error.message}")
+
+            // If network fails, try to use cached status document
+            val cachedStatus = validationCache.getCachedStatusDocument(license.id)
+            if (cachedStatus != null) {
+                if (DEBUG) Timber.d("Using cached status document for license ${license.id} due to network error")
+                raise(Event.retrievedStatusData(cachedStatus))
+            } else {
+                if (DEBUG) Timber.d("fetchStatus: No cached status document found for license ${license.id}")
+                throw LcpException(LcpError.Network(error))
+            }
+        }
     }
 
     private fun validateStatus(data: ByteArray) {

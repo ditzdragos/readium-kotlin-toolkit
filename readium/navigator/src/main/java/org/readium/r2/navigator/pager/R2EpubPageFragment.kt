@@ -424,9 +424,6 @@ internal class R2EpubPageFragment : Fragment() {
             wv.setOnLongClickListener(null)
             wv.setOnTouchListener(null)
 
-            // Remove from parent and destroy
-            wv.destroy()
-            wv.removeAllViews()
             (wv.parent as? ViewGroup)?.removeView(wv)
         }
     }

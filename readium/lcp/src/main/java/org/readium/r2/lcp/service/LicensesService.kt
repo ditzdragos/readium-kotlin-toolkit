@@ -19,7 +19,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -62,7 +62,12 @@ internal class LicensesService(
     private val passphrases: PassphrasesService,
     private val context: Context,
     private val assetRetriever: AssetRetriever,
-) : LcpService, CoroutineScope by MainScope() {
+) : LcpService, CoroutineScope {
+
+    // Use a long-lived job on IO dispatcher to avoid premature cancellation
+    override val coroutineContext = SupervisorJob() + Dispatchers.IO
+
+    private val validationCache = ValidationCacheService(context)
 
     override fun contentProtection(
         authentication: LcpAuthenticating,
@@ -262,6 +267,38 @@ internal class LicensesService(
             }
         }
 
+    /**
+     * Get information about cached licenses for debugging.
+     * Returns a map of license ID to cache information.
+     */
+    fun getValidationCacheInfo(): Map<String, String> {
+        return try {
+            val cachedIds = validationCache.getAllCachedLicenseIds()
+            cachedIds.associateWith { licenseId ->
+                validationCache.getCacheInfo(licenseId)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get validation cache info")
+            emptyMap()
+        }
+    }
+
+    /**
+     * Clear validation cache for a specific license.
+     * Useful for testing or troubleshooting.
+     */
+    fun clearValidationCache(licenseId: String) {
+        validationCache.clearCache(licenseId)
+    }
+
+    /**
+     * Clear all validation caches.
+     * Useful for testing or troubleshooting.
+     */
+    fun clearAllValidationCaches() {
+        validationCache.clearAllCaches()
+    }
+
     private suspend fun retrieveLicense(
         container: LicenseContainer,
         authentication: LcpAuthenticating,
@@ -316,11 +353,12 @@ internal class LicensesService(
             network = this.network,
             passphrases = this.passphrases,
             context = this.context,
+            validationCache = this.validationCache,
             allowUserInteraction = allowUserInteraction,
             ignoreInternetErrors = container is WritableLicenseContainer
         ) { licenseDocument ->
             try {
-                launch(Dispatchers.IO) {
+                launch {
                     this@LicensesService.licenses.addLicense(licenseDocument)
                 }
             } catch (error: Error) {
