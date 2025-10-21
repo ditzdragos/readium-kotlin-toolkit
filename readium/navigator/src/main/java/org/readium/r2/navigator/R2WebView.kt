@@ -49,7 +49,10 @@ import timber.log.Timber
 internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView(context, attrs) {
 
     init {
-        initWebPager()
+        // Defer initialization to reduce UI thread blocking
+        post {
+            initWebPager()
+        }
     }
 
     private val uiScope = CoroutineScope(Dispatchers.Main)
@@ -104,7 +107,15 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
 
     internal var mCurItem: Int = 0 // Index of currently displayed page.
 
+    // Lazy-initialize Scroller to avoid creating it during inflation
     private var mScroller: Scroller? = null
+        get() {
+            if (field == null) {
+                field = Scroller(context, sInterpolator)
+            }
+            return field
+        }
+
     private var mIsScrollStarted: Boolean = false
 
     private var mPageMargin: Int = 0
@@ -168,8 +179,22 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
     // "catching" the flinging pager.
     private val CLOSE_ENOUGH = 2 // dp
 
+    // Lazy-initialize EdgeEffects - they are rarely used and expensive to create
     private var mLeftEdge: EdgeEffect? = null
+        get() {
+            if (field == null) {
+                field = EdgeEffect(context)
+            }
+            return field
+        }
+
     private var mRightEdge: EdgeEffect? = null
+        get() {
+            if (field == null) {
+                field = EdgeEffect(context)
+            }
+            return field
+        }
 
     private var mFirstLayout = true
 
@@ -206,16 +231,13 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
             defaultFocusHighlightEnabled = false
         }
 
-        val context = context
-        mScroller = Scroller(context, sInterpolator)
         val configuration = ViewConfiguration.get(context)
         val density = context.resources.displayMetrics.density
 
         mTouchSlop = configuration.scaledPagingTouchSlop
         mMinimumVelocity = (MIN_FLING_VELOCITY * density).toInt()
         mMaximumVelocity = configuration.scaledMaximumFlingVelocity
-        mLeftEdge = EdgeEffect(context)
-        mRightEdge = EdgeEffect(context)
+        // EdgeEffects are now lazy-initialized when first accessed
 
         mFlingDistance = (MIN_DISTANCE_FOR_FLING * density).toInt()
         mCloseEnough = (CLOSE_ENOUGH * density).toInt()
@@ -227,74 +249,55 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
             )
         }
 
-        ViewCompat.setOnApplyWindowInsetsListener(
-            this,
-            object : androidx.core.view.OnApplyWindowInsetsListener {
-                private val mTempRect = Rect()
-
-                override fun onApplyWindowInsets(
-                    v: View,
-                    originalInsets: WindowInsetsCompat,
-                ): WindowInsetsCompat {
-                    // First let the ViewPager itself try and consume them...
-                    val applied = ViewCompat.onApplyWindowInsets(v, originalInsets)
-                    if (applied.isConsumed) {
-                        // If the ViewPager consumed all insets, return now
-                        return applied
-                    }
-
-                    // Now we'll manually dispatch the insets to our children. Since ViewPager
-                    // children are always full-height, we do not want to use the standard
-                    // ViewGroup dispatchApplyWindowInsets since if child 0 consumes them,
-                    // the rest of the children will not receive any insets. To workaround this
-                    // we manually dispatch the applied insets, not allowing children to
-                    // consume them from each other. We do however keep track of any insets
-                    // which are consumed, returning the union of our children's consumption
-                    val res = mTempRect
-                    val insets = applied.getInsets(WindowInsetsCompat.Type.systemBars())
-                    res.left = insets.left
-                    res.top = insets.top
-                    res.right = insets.right
-                    res.bottom = insets.bottom
-
-                    var i = 0
-                    val count = childCount
-                    while (i < count) {
-                        val childInsets = ViewCompat
-                            .dispatchApplyWindowInsets(getChildAt(i), applied).getInsets(
-                                WindowInsetsCompat.Type.systemBars()
-                            )
-                        // Now keep track of any consumed by tracking each dimension's min
-                        // value
-                        res.left = min(
-                            childInsets.left,
-                            res.left
-                        )
-                        res.top = min(
-                            childInsets.top,
-                            res.top
-                        )
-                        res.right = min(
-                            childInsets.right,
-                            res.right
-                        )
-                        res.bottom = min(
-                            childInsets.bottom,
-                            res.bottom
-                        )
-                        i++
-                    }
-
-                    // Now return a new WindowInsets, using the consumed window insets
-                    return WindowInsetsCompat.Builder(applied)
-                        .setInsets(
-                            WindowInsetsCompat.Type.systemBars(),
-                            Insets.of(res.left, res.top, res.right, res.bottom)
-                        )
-                        .build()
-                }
+        // Simplified WindowInsets listener - only create the temp rect when needed
+        ViewCompat.setOnApplyWindowInsetsListener(this) { v, originalInsets ->
+            // First let the ViewPager itself try and consume them...
+            val applied = ViewCompat.onApplyWindowInsets(v, originalInsets)
+            if (applied.isConsumed) {
+                // If the ViewPager consumed all insets, return now
+                return@setOnApplyWindowInsetsListener applied
             }
-        )
+
+            // Simplified inset handling - only process if we have children
+            val count = childCount
+            if (count == 0) {
+                return@setOnApplyWindowInsetsListener applied
+            }
+
+            // Now we'll manually dispatch the insets to our children. Since ViewPager
+            // children are always full-height, we do not want to use the standard
+            // ViewGroup dispatchApplyWindowInsets since if child 0 consumes them,
+            // the rest of the children will not receive any insets. To workaround this
+            // we manually dispatch the applied insets, not allowing children to
+            // consume them from each other. We do however keep track of any insets
+            // which are consumed, returning the union of our children's consumption
+            val tempRect = Rect()
+            val insets = applied.getInsets(WindowInsetsCompat.Type.systemBars())
+            tempRect.left = insets.left
+            tempRect.top = insets.top
+            tempRect.right = insets.right
+            tempRect.bottom = insets.bottom
+
+            for (i in 0 until count) {
+                val childInsets = ViewCompat
+                    .dispatchApplyWindowInsets(getChildAt(i), applied)
+                    .getInsets(WindowInsetsCompat.Type.systemBars())
+
+                // Now keep track of any consumed by tracking each dimension's min value
+                tempRect.left = min(childInsets.left, tempRect.left)
+                tempRect.top = min(childInsets.top, tempRect.top)
+                tempRect.right = min(childInsets.right, tempRect.right)
+                tempRect.bottom = min(childInsets.bottom, tempRect.bottom)
+            }
+
+            // Now return a new WindowInsets, using the consumed window insets
+            WindowInsetsCompat.Builder(applied)
+                .setInsets(
+                    WindowInsetsCompat.Type.systemBars(),
+                    Insets.of(tempRect.left, tempRect.top, tempRect.right, tempRect.bottom)
+                )
+                .build()
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -400,18 +403,19 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
      */
     private fun smoothScrollTo(x: Int, y: Int, velocity: Int) {
         val width = getClientWidth() ?: return
+        val scroller = mScroller ?: return // Ensure scroller is initialized
 
         var v = velocity
         val sx: Int
-        val wasScrolling = mScroller != null && !mScroller!!.isFinished
+        val wasScrolling = !scroller.isFinished
         if (wasScrolling) {
             // We're in the middle of a previously initiated scrolling. Check to see
             // whether that scrolling has actually started (if we always call getStartX
             // we can get a stale value from the scroller if it hadn't yet had its first
             // computeScrollOffset call) to decide what is the current scrolling position.
-            sx = if (mIsScrollStarted) mScroller!!.currX else mScroller!!.startX
+            sx = if (mIsScrollStarted) scroller.currX else scroller.startX
             // And abort the current scrolling.
-            mScroller!!.abortAnimation()
+            scroller.abortAnimation()
         } else {
             sx = scrollX
         }
@@ -444,7 +448,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
         // Reset the "scroll started" flag. It will be flipped to true in all places
         // where we call computeScrollOffset().
         mIsScrollStarted = false
-        mScroller!!.startScroll(sx, sy, dx, dy, duration)
+        scroller.startScroll(sx, sy, dx, dy, duration)
         ViewCompat.postInvalidateOnAnimation(this)
     }
 
@@ -467,12 +471,13 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
 
     private fun recomputeScrollPosition(width: Int, oldWidth: Int, margin: Int, oldMargin: Int) {
         val clientWidth = getClientWidth() ?: return
+        val scroller = mScroller
 
         if (oldWidth > 0 /*&& !mItems.isEmpty()*/) {
-            if (!mScroller!!.isFinished) {
+            if (scroller != null && !scroller.isFinished) {
                 val currentPage = (scrollX / clientWidth.toDouble()).roundToInt()
 
-                mScroller!!.finalX = (currentPage * clientWidth)
+                scroller.finalX = (currentPage * clientWidth)
             } else {
                 val widthWithMargin = width - paddingLeft - paddingRight + margin
                 val oldWidthWithMargin = oldWidth - paddingLeft - paddingRight + oldMargin
@@ -580,17 +585,19 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
             return super.computeScroll()
         }
 
+        val scroller = mScroller ?: return // Exit early if scroller not initialized
+
         mIsScrollStarted = true
-        if (!mScroller!!.isFinished && mScroller!!.computeScrollOffset()) {
+        if (!scroller.isFinished && scroller.computeScrollOffset()) {
             val oldX = scrollX
             val oldY = scrollY
-            val x = mScroller!!.currX
-            val y = mScroller!!.currY
+            val x = scroller.currX
+            val y = scroller.currY
 
             if (oldX != x || oldY != y) {
                 scrollTo(x, y)
                 if (!pageScrolled(x)) {
-                    mScroller!!.abortAnimation()
+                    scroller.abortAnimation()
                     scrollTo(0, y)
                 }
             }
@@ -686,13 +693,14 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
     private fun completeScroll(postEvents: Boolean) {
         val needPopulate = mScrollState == SCROLL_STATE_SETTLING
         if (needPopulate) {
-            val wasScrolling = !mScroller!!.isFinished
+            val scroller = mScroller
+            val wasScrolling = scroller != null && !scroller.isFinished
             if (wasScrolling) {
-                mScroller!!.abortAnimation()
+                scroller?.abortAnimation()
                 val oldX = scrollX
                 val oldY = scrollY
-                val x = mScroller!!.currX
-                val y = mScroller!!.currY
+                val x = scroller?.currX ?: scrollX
+                val y = scroller?.currY ?: scrollY
                 if (oldX != x || oldY != y) {
                     scrollTo(x, y)
                     if (x != oldX) {
