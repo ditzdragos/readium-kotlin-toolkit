@@ -157,6 +157,11 @@ public data class Locator(
             )
         }
 
+        override fun toString(): String {
+            return "Text(highlight=$highlight)"
+        }
+
+
         public companion object {
 
             public fun fromJSON(json: JSONObject?): Text = Text(
@@ -192,6 +197,10 @@ public data class Locator(
         put("title", title)
         putIfNotEmpty("locations", locations)
         putIfNotEmpty("text", text)
+    }
+
+    override fun toString(): String {
+        return "Locator(href=$href, text=$text)"
     }
 
     public companion object {
@@ -263,6 +272,8 @@ public data class Locator(
             return json.parseObjects { fromJSON(it as? JSONObject, warnings) }
         }
     }
+
+
 }
 
 /**
