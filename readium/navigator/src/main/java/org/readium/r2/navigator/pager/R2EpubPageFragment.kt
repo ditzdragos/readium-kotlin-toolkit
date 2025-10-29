@@ -216,18 +216,6 @@ internal class R2EpubPageFragment : Fragment() {
     private val navigator: EpubNavigatorFragment?
         get() = parentFragment as? EpubNavigatorFragment
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putInt(textZoomBundleKey, textZoom)
-
-        super.onSaveInstanceState(outState)
-    }
-
-    override fun onViewStateRestored(savedInstanceState: Bundle?) {
-        super.onViewStateRestored(savedInstanceState)
-        Timber.d("onViewStateRestored: $resourceUrl")
-        savedInstanceState?.getInt(textZoomBundleKey)?.takeIf { it > 0 }?.let { textZoom = it }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingLocator = BundleCompat.getParcelable(
@@ -285,32 +273,6 @@ internal class R2EpubPageFragment : Fragment() {
             }
         }
 
-        fun setupWebView(webView: R2WebView, resourceUrl: AbsoluteUrl?) {
-            webView.settings.javaScriptEnabled = true
-            webView.isVerticalScrollBarEnabled = false
-            webView.isHorizontalScrollBarEnabled = false
-            webView.settings.useWideViewPort = true
-            webView.settings.loadWithOverviewMode = true
-            webView.settings.setSupportZoom(false)
-            webView.settings.builtInZoomControls = false
-            webView.settings.displayZoomControls = false
-            webView.resourceUrl = resourceUrl
-            webView.setPadding(0, 0, 0, 0)
-            webView.webViewClient = webViewClient
-            webView.addJavascriptInterface(webView, "Android")
-            if (fixedLayout) {
-                webView.setBackgroundColor(Color.WHITE)
-                webView.settings.textZoom = 100
-                webView.setInitialScale(1)
-                webView.overScrollMode = View.OVER_SCROLL_NEVER
-                webView.zoomOut()
-            } else {
-                webView.settings.textZoom = textZoom
-            }
-            webView.isHapticFeedbackEnabled = false
-            webView.isLongClickable = true
-        }
-
         // Load left page first
         webView?.let {
             setupWebView(it, resourceUrl)
@@ -338,6 +300,33 @@ internal class R2EpubPageFragment : Fragment() {
 
         return containerView
     }
+
+    fun setupWebView(webView: R2WebView, resourceUrl: AbsoluteUrl?) {
+        webView.settings.javaScriptEnabled = true
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
+        webView.settings.useWideViewPort = true
+        webView.settings.loadWithOverviewMode = true
+        webView.settings.setSupportZoom(false)
+        webView.settings.builtInZoomControls = false
+        webView.settings.displayZoomControls = false
+        webView.resourceUrl = resourceUrl
+        webView.setPadding(0, 0, 0, 0)
+        webView.webViewClient = webViewClient
+        webView.addJavascriptInterface(webView, "Android")
+        if (fixedLayout) {
+            webView.setBackgroundColor(Color.WHITE)
+            webView.settings.textZoom = 100
+            webView.setInitialScale(1)
+            webView.overScrollMode = View.OVER_SCROLL_NEVER
+            webView.zoomOut()
+        } else {
+            webView.settings.textZoom = textZoom
+        }
+        webView.isHapticFeedbackEnabled = false
+        webView.isLongClickable = true
+    }
+
 
     private var isPageFinished = false
     private val pendingPageFinished = mutableListOf<() -> Unit>()
@@ -598,92 +587,6 @@ internal class R2EpubPageFragment : Fragment() {
                 cont.resume(result)
             }
         }
-    }
-
-    private fun injectCenteringJavaScript(webView: WebView) {
-        // Get the actual dimensions of the WebView
-        val viewportWidth = webView.width
-        val viewportHeight = webView.height
-
-        // If dimensions are not yet available (i.e., during initial loading),
-        // wait for layout to complete
-        if (viewportWidth <= 0 || viewportHeight <= 0) {
-            webView.post {
-                // After layout, the dimensions should be available
-                val actualWidth = webView.width
-                val actualHeight = webView.height
-
-                // Only inject if we have valid dimensions
-                if (actualWidth > 0 && actualHeight > 0) {
-                    // Account for device pixel ratio
-                    val density = resources.displayMetrics.density
-                    val scaledWidth = (actualWidth / density).toInt()
-                    val scaledHeight = (actualHeight / density).toInt()
-
-                    webView.evaluateJavascript(
-                        WebViewScripts.getCenteringScript(scaledWidth, scaledHeight), null
-                    )
-                } else {
-                    // If still no dimensions, try once more with a longer delay
-                    webView.postDelayed({
-                                            val finalWidth = webView.width
-                                            val finalHeight = webView.height
-                                            if (finalWidth > 0 && finalHeight > 0) {
-                                                val density = resources.displayMetrics.density
-                                                val scaledWidth = (finalWidth / density).toInt()
-                                                val scaledHeight = (finalHeight / density).toInt()
-                                                webView.evaluateJavascript(
-                                                    WebViewScripts.getCenteringScript(
-                                                        scaledWidth.coerceAtLeast(1),
-                                                        scaledHeight.coerceAtLeast(1)
-                                                    ), null
-                                                )
-                                            }
-                                        }, 300)
-                }
-            }
-        } else {
-            // If dimensions are immediately available, use them directly
-            val density = resources.displayMetrics.density
-            val scaledWidth = (viewportWidth / density).toInt()
-            val scaledHeight = (viewportHeight / density).toInt()
-            webView.evaluateJavascript(
-                WebViewScripts.getCenteringScript(scaledWidth, scaledHeight), null
-            )
-        }
-
-        // Add layout change listener to handle viewport size changes
-        webView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            val newWidth = right - left
-            val newHeight = bottom - top
-            val oldWidth = oldRight - oldLeft
-            val oldHeight = oldBottom - oldTop
-
-            // If dimensions have changed significantly, update the scaling
-            if (Math.abs(newWidth - oldWidth) > 5 || Math.abs(newHeight - oldHeight) > 5) {
-                val density = resources.displayMetrics.density
-                val scaledWidth = (newWidth / density).toInt()
-                val scaledHeight = (newHeight / density).toInt()
-                updateViewportScaling(webView, scaledWidth, scaledHeight)
-            }
-        }
-    }
-
-    /**
-     * Updates the scaling when viewport dimensions change (e.g., orientation change).
-     */
-    private fun updateViewportScaling(webView: WebView, width: Int, height: Int) {
-        // Ensure dimensions are valid
-        if (width <= 0 || height <= 0) return
-
-        webView.evaluateJavascript(
-            WebViewScripts.getUpdateViewportScript(width, height), null
-        )
-    }
-
-    internal fun setCurrentItem(item: Int, smoothScroll: Boolean = false) {
-        webView?.setCurrentItem(item, smoothScroll)
-        webViewRight?.setCurrentItem(item, smoothScroll)
     }
 
     companion object {
