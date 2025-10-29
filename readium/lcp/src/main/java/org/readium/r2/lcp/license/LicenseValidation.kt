@@ -10,7 +10,9 @@
 package org.readium.r2.lcp.license
 
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.readium.r2.lcp.BuildConfig.DEBUG
 import org.readium.r2.lcp.LcpAuthenticating
 import org.readium.r2.lcp.LcpError
@@ -125,6 +127,7 @@ internal class LicenseValidation(
     val passphrases: PassphrasesService,
     val validationCache: ValidationCacheService,
     val context: android.content.Context,
+    val scope: CoroutineScope,
     val onLicenseValidated: (LicenseDocument) -> Unit,
 ) {
 
@@ -312,35 +315,40 @@ internal class LicenseValidation(
 
     private fun handle(state: State) {
         try {
-            runBlocking {
-                when (state) {
-                    is State.start -> notifyObservers(documents = null, error = null)
-                    is State.validateLicense -> validateLicense(state.data)
-                    is State.fetchStatus -> fetchStatus(state.license)
-                    is State.validateStatus -> validateStatus(state.data)
-                    is State.fetchLicense -> fetchLicense(state.status)
-                    is State.checkLicenseStatus -> checkLicenseStatus(
-                        state.license,
-                        state.status,
-                        state.statusDocumentTakesPrecedence
-                    )
-
-                    is State.retrievePassphrase -> requestPassphrase(state.license)
-                    is State.validateIntegrity -> validateIntegrity(state.license, state.passphrase)
-                    is State.registerDevice -> registerDevice(state.documents.license, state.link)
-                    is State.valid -> {
-                        // Mark validation as successful in cache
-                        val licenseEnd = state.documents.license.rights.end
-                        validationCache.markValidationSuccess(state.documents.license.id, licenseEnd)
-                        notifyObservers(state.documents, null)
-                    }
-                    is State.failure -> notifyObservers(null, state.error)
-                    State.cancelled -> notifyObservers(null, null)
-                }
+            scope.launch(Dispatchers.IO) {
+                handleState(state)
             }
         } catch (error: Exception) {
             if (DEBUG) Timber.e(error)
             raise(Event.failed(error))
+        }
+    }
+
+    private suspend fun handleState(state: State) {
+        when (state) {
+            is State.start -> notifyObservers(documents = null, error = null)
+            is State.validateLicense -> validateLicense(state.data)
+            is State.fetchStatus -> fetchStatus(state.license)
+            is State.validateStatus -> validateStatus(state.data)
+            is State.fetchLicense -> fetchLicense(state.status)
+            is State.checkLicenseStatus -> checkLicenseStatus(
+                state.license,
+                state.status,
+                state.statusDocumentTakesPrecedence
+            )
+
+            is State.retrievePassphrase -> requestPassphrase(state.license)
+            is State.validateIntegrity -> validateIntegrity(state.license, state.passphrase)
+            is State.registerDevice -> registerDevice(state.documents.license, state.link)
+            is State.valid -> {
+                // Mark validation as successful in cache
+                val licenseEnd = state.documents.license.rights.end
+                validationCache.markValidationSuccess(state.documents.license.id, licenseEnd)
+                notifyObservers(state.documents, null)
+            }
+
+            is State.failure -> notifyObservers(null, state.error)
+            State.cancelled -> notifyObservers(null, null)
         }
     }
 
