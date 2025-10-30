@@ -116,7 +116,7 @@ public typealias JavascriptInterfaceFactory = (resource: Link) -> Any?
  * To use this [Fragment], create a factory with `EpubNavigatorFragment.createFactory()`.
  */
 @OptIn(ExperimentalReadiumApi::class, DelicateReadiumApi::class)
-public class EpubNavigatorFragment internal constructor(
+public class EpubNavigatorFragment public constructor(
     publication: Publication,
     private val initialLocator: Locator?,
     readingOrder: List<Link>?,
