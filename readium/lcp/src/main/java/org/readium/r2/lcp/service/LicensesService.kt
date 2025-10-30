@@ -355,32 +355,30 @@ internal class LicensesService(
             context = this.context,
             validationCache = this.validationCache,
             allowUserInteraction = allowUserInteraction,
-            ignoreInternetErrors = container is WritableLicenseContainer,
-            scope = this@LicensesService,
-            onLicenseValidated = { licenseDocument ->
-                try {
-                    launch {
-                        this@LicensesService.licenses.addLicense(licenseDocument)
-                    }
-                } catch (error: Error) {
-                    Timber.d("Failed to add the LCP License to the local database: $error")
+            ignoreInternetErrors = container is WritableLicenseContainer
+        ) { licenseDocument ->
+            try {
+                launch {
+                    this@LicensesService.licenses.addLicense(licenseDocument)
                 }
-                if (!licenseDocument.toByteArray().contentEquals(initialData)) {
-                    try {
-                        (container as? WritableLicenseContainer)
-                            ?.let { container.write(licenseDocument) }
+            } catch (error: Error) {
+                Timber.d("Failed to add the LCP License to the local database: $error")
+            }
+            if (!licenseDocument.toByteArray().contentEquals(initialData)) {
+                try {
+                    (container as? WritableLicenseContainer)
+                        ?.let { container.write(licenseDocument) }
 
-                        Timber.d("licenseDocument ${licenseDocument.json}")
+                    Timber.d("licenseDocument ${licenseDocument.json}")
 
-                        initialData = container.read()
-                        Timber.d("license ${LicenseDocument(data = initialData).json}")
-                        Timber.d("Wrote updated License Document in container")
-                    } catch (error: Error) {
-                        Timber.d("Failed to write updated License Document in container: $error")
-                    }
+                    initialData = container.read()
+                    Timber.d("license ${LicenseDocument(data = initialData).json}")
+                    Timber.d("Wrote updated License Document in container")
+                } catch (error: Error) {
+                    Timber.d("Failed to write updated License Document in container: $error")
                 }
             }
-        )
+        }
 
         validation.validate(LicenseValidation.Document.license(initialData)) { documents, error ->
             documents?.let {
