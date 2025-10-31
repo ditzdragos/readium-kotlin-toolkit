@@ -37,6 +37,7 @@ import androidx.viewpager.widget.ViewPager
 import kotlin.coroutines.resume
 import kotlin.math.ceil
 import kotlin.reflect.KClass
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import org.readium.r2.navigator.DecorableNavigator
@@ -811,20 +813,26 @@ public class EpubNavigatorFragment public constructor(
 
         override fun onPageLoaded(webView: R2BasicWebView, link: Link) {
             Timber.d("onPageLoaded: ${link.href} ${state}")
+            viewLifecycleOwner.lifecycleScope.launch {
+                paginationListener?.onPageLoaded()
+                val href = link.url()
+                withContext(Dispatchers.IO) {
 
-            paginationListener?.onPageLoaded()
-            val href = link.url()
-            if (state is State.Initializing || (state as? State.Loading)?.initialResourceHref?.isEquivalent(
-                    href
-                ) == true
-            ) {
-                state = State.Ready
+                    if (state is State.Initializing || (state as? State.Loading)?.initialResourceHref?.isEquivalent(
+                            href
+                        ) == true || readingOrder.none {
+                            (state as? State.Loading)?.initialResourceHref?.toString() == it.href.toString()
+                        }
+                    ) {
+                        state = State.Ready
+                    }
+                }
+
+                notifyCurrentLocation()
+
+                Timber.d("onPageLoaded: ${link.href} ${state}")
+                paginationListener?.onPageLoaded(link.url(), state == State.Ready)
             }
-
-            notifyCurrentLocation()
-
-            Timber.d("onPageLoaded: ${link.href} ${state}")
-            paginationListener?.onPageLoaded(link.url(), state == State.Ready)
 
         }
 
