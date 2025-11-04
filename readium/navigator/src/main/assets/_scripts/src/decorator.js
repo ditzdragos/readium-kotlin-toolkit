@@ -289,9 +289,13 @@ export function DecorationGroup(groupId, groupName) {
   /**
    * Notifies that the given decoration was modified and needs to be updated.
    */
-  function update(decoration) {
+  function update(decoration, enhanced) {
     remove(decoration.id);
-    add(decoration);
+    if(enhanced){
+        addEnhanced(decoration);
+    }else{
+        add(decoration);
+    }
   }
 
   /**

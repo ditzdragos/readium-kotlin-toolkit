@@ -57,7 +57,13 @@ public fun DecorationChange.javascript(
 
     return when (this) {
         is DecorationChange.Added ->
-            toJSON(decoration)?.let { "group.add($it);" }
+            toJSON(decoration)?.let {
+                if (enhanced) {
+                    "group.addEnhanced($it);"
+                } else {
+                    "group.add($it);"
+                }
+            }
 
         is DecorationChange.AddedEnhanced ->
             toJSON(decoration)?.let { "group.addEnhanced($it);" }
@@ -69,6 +75,6 @@ public fun DecorationChange.javascript(
             "group.clearEnhanced('$id');"
 
         is DecorationChange.Updated ->
-            toJSON(decoration)?.let { "group.update($it);" }
+            toJSON(decoration)?.let { "group.update($it,$enhanced);" }
     }
 }
