@@ -230,6 +230,20 @@ internal class R2EpubPageFragment : Fragment() {
     ): View {
         Timber.d("onCreateView: $resourceUrl")
 
+        // Check if WebView is available before proceeding
+        val webViewError = R2BasicWebView.checkWebViewAvailability(requireContext())
+        if (webViewError != null) {
+            Timber.e("WebView not available: $webViewError")
+            // Show error view instead of crashing
+            val errorView = inflater.inflate(
+                R.layout.readium_navigator_error_webview,
+                container,
+                false
+            )
+            errorView.findViewById<android.widget.TextView>(R.id.error_message)?.text = webViewError
+            return errorView
+        }
+
         // Choose layout based on whether we have a right resource
         val layoutRes = if (fixedLayout && rightResourceUrl != null) {
             R.layout.readium_navigator_viewpager_fragment_epub_double

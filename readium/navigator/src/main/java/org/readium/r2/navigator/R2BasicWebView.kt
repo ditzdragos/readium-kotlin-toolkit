@@ -57,6 +57,36 @@ import timber.log.Timber
 internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     WebView(context, attrs) {
 
+    companion object {
+        /**
+         * Checks if WebView is available on this device.
+         * Returns null if available, or an error message if not.
+         */
+        @JvmStatic
+        fun checkWebViewAvailability(context: Context): String? {
+            return try {
+                // Try to get the WebView package info
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    getCurrentWebViewPackage()
+                }
+                null
+            } catch (e: Exception) {
+                when (e) {
+                    is java.lang.reflect.InvocationTargetException,
+                    is RuntimeException -> {
+                        Timber.e(e, "WebView is not available on this device")
+                        "WebView is not available. Please install Android System WebView from the Play Store."
+                    }
+
+                    else -> {
+                        Timber.e(e, "Unknown error checking WebView availability")
+                        "Unable to initialize WebView: ${e.message}"
+                    }
+                }
+            }
+        }
+    }
+
     interface Listener {
         val readingProgression: ReadingProgression
 
