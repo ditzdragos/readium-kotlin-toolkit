@@ -35,6 +35,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.withStarted
 import androidx.viewpager.widget.ViewPager
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.ceil
 import kotlin.reflect.KClass
 import kotlinx.coroutines.Dispatchers
@@ -1355,10 +1356,10 @@ public class EpubNavigatorFragment public constructor(
                     continuation.resume(pageRanges)
                 } catch (e: JSONException) {
                     Timber.e(e, "Error parsing page ranges JSON: $result")
-                    continuation.cancel(e)
+                    continuation.resumeWithException(e)
                 } catch (e: Exception) {
                     Timber.e(e, "Unexpected error processing page ranges result")
-                    continuation.cancel(e)
+                    continuation.resumeWithException(e)
                 }
             }
         }

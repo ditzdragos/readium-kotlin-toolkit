@@ -464,6 +464,13 @@ export function DecorationGroup(groupId, groupName) {
           );
   }
 
+    function isPageNumber(text) {
+      const trimmedText = text.trim();
+      // Only return true for strings that consist entirely of digits
+      return /^\d+$/.test(trimmedText);
+    }
+
+
   function layoutEnhanced(item, postMessage) {
       let style = styles.get(item.decoration.style);
       if (!style) {
@@ -500,6 +507,64 @@ export function DecorationGroup(groupId, groupName) {
                       ) {
                         postMessageWithInvalidRect();
                       }
+
+       const startTime = performance.now();
+       const text = item.decoration.locator.text.highlight;
+       log(`PAGE NUMBER :: page number: ${text}`)
+       if (isPageNumber(text)) {
+             log(`PAGE NUMBER :: page number detected: ${text}`);
+
+             const isAtTopOrBottom =
+               boundingRect.top < window.innerHeight * 0.2 ||
+               boundingRect.top > window.innerHeight * 0.8;
+
+             if (isAtTopOrBottom) {
+               log(`PAGE NUMBER :: is at top or bottom: ${text}`);
+
+               const before = item.decoration.locator.text.before || "";
+               const after = item.decoration.locator.text.after || "";
+
+               // Check if 'before' ends in newline, is empty, or has no alphanumeric characters
+               const beforeIsEmpty = before.length === 0;
+               const beforeEndsInNewline = before.endsWith("\n");
+               const beforeHasNoAlphanumeric = !/[a-zA-Z0-9]/.test(before);
+
+               // Check if 'after' begins with newline, is empty, or has no alphanumeric characters
+               const afterIsEmpty = after.length === 0;
+               const afterBeginsWithNewline = after.startsWith("\n");
+               const afterHasNoAlphanumeric = !/[a-zA-Z0-9]/.test(after);
+
+               // Isolated page number if both before and after match our criteria
+               const isIsolatedPageNumber =
+                 (beforeIsEmpty || beforeEndsInNewline || beforeHasNoAlphanumeric) &&
+                 (afterIsEmpty || afterBeginsWithNewline || afterHasNoAlphanumeric);
+
+               // Calculate elapsed time
+               const endTime = performance.now();
+               const elapsedTime = endTime - startTime;
+               log(
+                 `PAGE NUMBER :: isolation check took ${elapsedTime.toFixed(
+                   3
+                 )} ms for: ${text}`
+               );
+
+               log(`PAGE NUMBER :: before: ${before}`);
+               log(
+                 `PAGE NUMBER :: before is empty: ${beforeIsEmpty} | before ends in newline: ${beforeEndsInNewline} | before has no alphanumeric: ${beforeHasNoAlphanumeric}`
+               );
+
+               log(`PAGE NUMBER :: after: ${after}`);
+               log(
+                 `PAGE NUMBER :: after is empty: ${afterIsEmpty} | after begins with newline: ${afterBeginsWithNewline} | after has no alphanumeric: ${afterHasNoAlphanumeric}`
+               );
+
+               if (isIsolatedPageNumber) {
+                 log(`PAGE NUMBER :: is isolated: ${text}`);
+                 postMessageWithInvalidRect();
+                 return;
+               }
+             }
+           }
 
       let visibleAreaResponse = applyContainmentToArea(pageIndex); // Get or create the container for this page
       let visibleArea = visibleAreaResponse.visibleArea;
