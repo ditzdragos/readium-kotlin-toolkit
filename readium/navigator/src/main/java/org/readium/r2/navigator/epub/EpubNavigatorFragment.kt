@@ -335,7 +335,7 @@ public class EpubNavigatorFragment public constructor(
         if (readingOrder != null) {
             emptyList()
         } else {
-            runBlocking { publication.positionsByReadingOrder() }
+            runBlocking(Dispatchers.Default) { publication.positionsByReadingOrder() }
         }
 
     internal lateinit var positions: List<Locator>

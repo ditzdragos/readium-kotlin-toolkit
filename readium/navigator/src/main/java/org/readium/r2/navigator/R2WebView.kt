@@ -251,47 +251,30 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
 
         // Simplified WindowInsets listener - only create the temp rect when needed
         ViewCompat.setOnApplyWindowInsetsListener(this) { v, originalInsets ->
-            // First let the ViewPager itself try and consume them...
-            val applied = ViewCompat.onApplyWindowInsets(v, originalInsets)
-            if (applied.isConsumed) {
-                // If the ViewPager consumed all insets, return now
-                return@setOnApplyWindowInsetsListener applied
-            }
-
-            // Simplified inset handling - only process if we have children
             val count = childCount
             if (count == 0) {
-                return@setOnApplyWindowInsetsListener applied
+                // If no children, just return standard insets (or let WebView consume logic if not blocked)
+                return@setOnApplyWindowInsetsListener originalInsets
             }
 
-            // Now we'll manually dispatch the insets to our children. Since ViewPager
-            // children are always full-height, we do not want to use the standard
-            // ViewGroup dispatchApplyWindowInsets since if child 0 consumes them,
-            // the rest of the children will not receive any insets. To workaround this
-            // we manually dispatch the applied insets, not allowing children to
-            // consume them from each other. We do however keep track of any insets
-            // which are consumed, returning the union of our children's consumption
             val tempRect = Rect()
-            val insets = applied.getInsets(WindowInsetsCompat.Type.systemBars())
-            tempRect.left = insets.left
-            tempRect.top = insets.top
-            tempRect.right = insets.right
-            tempRect.bottom = insets.bottom
+            val insets = originalInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            tempRect.set(insets.left, insets.top, insets.right, insets.bottom)
 
+            // Dispatch to children manually (your existing logic)
             for (i in 0 until count) {
                 val childInsets = ViewCompat
-                    .dispatchApplyWindowInsets(getChildAt(i), applied)
+                    .dispatchApplyWindowInsets(getChildAt(i), originalInsets) // Pass original, not 'applied'
                     .getInsets(WindowInsetsCompat.Type.systemBars())
 
-                // Now keep track of any consumed by tracking each dimension's min value
                 tempRect.left = min(childInsets.left, tempRect.left)
                 tempRect.top = min(childInsets.top, tempRect.top)
                 tempRect.right = min(childInsets.right, tempRect.right)
                 tempRect.bottom = min(childInsets.bottom, tempRect.bottom)
             }
 
-            // Now return a new WindowInsets, using the consumed window insets
-            WindowInsetsCompat.Builder(applied)
+            // Return the combined result
+            WindowInsetsCompat.Builder(originalInsets)
                 .setInsets(
                     WindowInsetsCompat.Type.systemBars(),
                     Insets.of(tempRect.left, tempRect.top, tempRect.right, tempRect.bottom)

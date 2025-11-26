@@ -136,7 +136,9 @@ internal class R2EpubPageFragment : Fragment() {
                             Timber.d("Left page finished, now loading right page: $rightResourceUrl")
                             isLoadingRight = true
                             // setupWebView for webViewRight was already called in onCreateView
-                            webViewRight?.loadUrl(rightResourceUrl.toString())
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                webViewRight?.loadUrl(rightResourceUrl.toString())
+                            }
                         }
                     }
                 }
@@ -236,9 +238,7 @@ internal class R2EpubPageFragment : Fragment() {
             Timber.e("WebView not available: $webViewError")
             // Show error view instead of crashing
             val errorView = inflater.inflate(
-                R.layout.readium_navigator_error_webview,
-                container,
-                false
+                R.layout.readium_navigator_error_webview, container, false
             )
             errorView.findViewById<android.widget.TextView>(R.id.error_message)?.text = webViewError
             return errorView
@@ -294,7 +294,9 @@ internal class R2EpubPageFragment : Fragment() {
                 isLoading = true
                 _isLoaded.value = false
                 Timber.d("Loading left page: $url")
-                it.loadUrl(url.toString())
+                viewLifecycleOwner.lifecycleScope.launch {
+                    it.loadUrl(url.toString())
+                }
             }
         }
 
@@ -328,6 +330,8 @@ internal class R2EpubPageFragment : Fragment() {
         webView.setPadding(0, 0, 0, 0)
         webView.webViewClient = webViewClient
         webView.addJavascriptInterface(webView, "Android")
+        webView.settings.allowFileAccess = true
+        webView.settings.allowContentAccess = true
         if (fixedLayout) {
             webView.setBackgroundColor(Color.WHITE)
             webView.settings.textZoom = 100
@@ -386,11 +390,10 @@ internal class R2EpubPageFragment : Fragment() {
 
         val lifecycleOwner = viewLifecycleOwner
         lifecycleOwner.lifecycleScope.launch {
-            viewModel.isScrollEnabled.flowWithLifecycle(lifecycleOwner.lifecycle)
-                .collectLatest { enabled ->
-                    webView?.scrollModeFlow?.value = enabled
-                    webViewRight?.scrollModeFlow?.value = enabled
-                }
+            viewModel.isScrollEnabled.flowWithLifecycle(lifecycleOwner.lifecycle).collectLatest { enabled ->
+                webView?.scrollModeFlow?.value = enabled
+                webViewRight?.scrollModeFlow?.value = enabled
+            }
         }
     }
 
@@ -446,9 +449,7 @@ internal class R2EpubPageFragment : Fragment() {
 
                 pendingLocator?.let { locator ->
                     loadLocator(
-                        webView,
-                        requireNotNull(navigator).overflow.value.readingProgression,
-                        locator
+                        webView, requireNotNull(navigator).overflow.value.readingProgression, locator
                     )
                 }.also { pendingLocator = null }
             }
@@ -463,8 +464,7 @@ internal class R2EpubPageFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                val webView =
-                    getWebView(locator.href) ?: requireNotNull(this@R2EpubPageFragment.webView)
+                val webView = getWebView(locator.href) ?: requireNotNull(this@R2EpubPageFragment.webView)
                 val epubNavigator = requireNotNull(navigator)
                 loadLocator(webView, epubNavigator.overflow.value.readingProgression, locator)
                 webView.listener?.onProgressionChanged()

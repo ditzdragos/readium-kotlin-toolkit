@@ -168,10 +168,6 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
     private val uiScope = CoroutineScope(Dispatchers.Main)
 
-    init {
-        setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-    }
-
     /** Computes the current progression in the resource. */
     val progression: Double
         get() =
