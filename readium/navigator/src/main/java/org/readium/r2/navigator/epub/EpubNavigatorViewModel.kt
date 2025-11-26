@@ -271,6 +271,13 @@ internal class EpubNavigatorViewModel(
         get() = settings.value.readingProgression
 
     /**
+     * Effective vertical text.
+     */
+    val verticalText: Boolean
+        get() =
+            settings.value.verticalText
+
+    /**
      * Indicates whether the dual page mode is enabled.
      */
     val dualPageMode: DualPage

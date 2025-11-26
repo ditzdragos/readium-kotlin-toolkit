@@ -8,6 +8,22 @@ caution.
 
 <!-- ## [Unreleased] -->
 
+## [3.1.2]
+
+### Fixed
+
+* Fixed [16 KB page sizes](https://developer.android.com/guide/practices/page-sizes) support (contributed
+  by [@gustavaa](https://github.com/readium/kotlin-toolkit/pull/710)).
+
+#### Navigator
+
+* Fixed vertical text scrolling in EPUB for right-to-left reading progression (contributed
+  by [@shovel-kun](https://github.com/readium/kotlin-toolkit/pull/656)).
+* Fixed notifying the current location when using vertical text scrolling in EPUB (contributed
+  by [@shovel-kun](https://github.com/readium/kotlin-toolkit/pull/656)).
+* Fixed drawing EPUB decorators with vertical text (contributed
+  by [@shovel-kun](https://github.com/readium/kotlin-toolkit/pull/671)).
+
 ## [3.1.1]
 
 ### Fixed
@@ -825,8 +841,8 @@ breaking changes in this latest major release.
       viewer.
 * Customize EPUB vertical padding by overriding the `r2.navigator.epub.vertical_padding` dimension.
     *
-    Follow [Android's convention for alternative resources](https://developer.android.com/guide/topics/resources/providing-resources#AlternativeResources)
-    to specify different paddings for landscape (`values-land`) or large screens.
+  Follow [Android's convention for alternative resources](https://developer.android.com/guide/topics/resources/providing-resources#AlternativeResources)
+  to specify different paddings for landscape (`values-land`) or large screens.
 
 ### Changed
 
@@ -1208,3 +1224,5 @@ breaking changes in this latest major release.
 [3.1.0]: https://github.com/readium/kotlin-toolkit/compare/3.0.3...3.1.0
 
 [3.1.1]: https://github.com/readium/kotlin-toolkit/compare/3.1.0...3.1.1
+
+[3.1.2]: https://github.com/readium/kotlin-toolkit/compare/3.1.1...3.1.2
