@@ -330,8 +330,6 @@ internal class R2EpubPageFragment : Fragment() {
         webView.setPadding(0, 0, 0, 0)
         webView.webViewClient = webViewClient
         webView.addJavascriptInterface(webView, "Android")
-        webView.settings.allowFileAccess = true
-        webView.settings.allowContentAccess = true
         if (fixedLayout) {
             webView.setBackgroundColor(Color.WHITE)
             webView.settings.textZoom = 100
