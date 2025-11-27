@@ -21,6 +21,11 @@ public sealed class LcpError(
     override val cause: Error? = null,
 ) : Error {
 
+    override fun toString(): String {
+        val causeString = cause?.toString()?.let { " (cause: $it)" } ?: ""
+        return "${this::class.simpleName}: $message$causeString"
+    }
+
     public object MissingPassphrase :
         LcpError("Passphrase is not available.")
 
