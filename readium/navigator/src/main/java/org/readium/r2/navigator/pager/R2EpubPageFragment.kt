@@ -402,33 +402,33 @@ internal class R2EpubPageFragment : Fragment() {
         super.onDestroyView()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { destroyWebViewSilently(webView) }
+        runCatching { destroyWebViewSilently(webViewRight) }
+    }
+
     override fun onDetach() {
         super.onDetach()
-
-        // Clean up WebView resources
-        runCatching { cleanWebViewResources(webView) }
-        runCatching { cleanWebViewResources(webViewRight) }
-
-        // Clear references
-        webView = null
-        webViewRight = null
-
-        // Clear any pending actions
+        runCatching { destroyWebViewSilently(webView) }
+        runCatching { destroyWebViewSilently(webViewRight) }
         pendingPageFinished.clear()
     }
 
-    /**
-     * Cleans up WebView resources to prevent memory leaks
-     */
-    private fun cleanWebViewResources(webView: R2WebView?) {
+    private fun destroyWebViewSilently(webView: R2WebView?) {
         webView?.let { wv ->
-            // Clear all listeners
-            wv.listener = null
-            wv.webViewClient = object : WebViewClientCompat() {}
-            wv.setOnLongClickListener(null)
-            wv.setOnTouchListener(null)
-
-            (wv.parent as? ViewGroup)?.removeView(wv)
+            runCatching { wv.stopLoading() }
+            runCatching { wv.loadUrl("about:blank") }
+            runCatching { wv.clearHistory() }
+            runCatching { (wv.parent as? ViewGroup)?.removeView(wv) }
+            runCatching { wv.removeAllViews() }
+            runCatching {
+                wv.listener = null
+                wv.webViewClient = object : WebViewClientCompat() {}
+                wv.setOnLongClickListener(null)
+                wv.setOnTouchListener(null)
+            }
+            runCatching { wv.destroy() }
         }
     }
 
