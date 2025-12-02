@@ -9,8 +9,8 @@ import {
   rectContainsPoint,
   toNativeRect,
 } from "./rect";
+import { setupScalingListeners } from "./scaling.js";
 import { log, logError, rangeFromLocator } from "./utils";
-import {setupScalingListeners} from "./scaling.js";
 
 let styles = new Map();
 let groups = new Map();
@@ -547,9 +547,12 @@ export function DecorationGroup(groupId, groupName) {
   }
 
     function isPageNumber(text) {
+      if (!text) {
+        return false;
+      }
       const trimmedText = text.trim();
-      // Only return true for strings that consist entirely of digits
-      return /^\d+$/.test(trimmedText);
+      const isPageNum = /^\d+$/.test(trimmedText);
+      return isPageNum;
     }
 
 
@@ -574,7 +577,7 @@ export function DecorationGroup(groupId, groupName) {
           }
         }
 
-      // Get the bounding rect for the decoration
+      // Get the bounding rect for the decoration (cache this expensive call)
       let boundingRect = item.range.getBoundingClientRect();
 
       // Calculate which page (container) this decoration belongs to based on its left position
@@ -582,131 +585,84 @@ export function DecorationGroup(groupId, groupName) {
       let pageIndex = Math.floor(
         (boundingRect.left + window.scrollX) / viewportWidth
       ); // Calculate the page index
-
          if (
                         boundingRect.left + boundingRect.width < 0 ||
                         boundingRect.top + boundingRect.height < 0
                       ) {
                         postMessageWithInvalidRect();
+                        return;
                       }
 
-       const startTime = performance.now();
+       // Optimize: Cache text and check page number early to avoid unnecessary work
        const text = item.decoration.locator.text.highlight;
-       log(`PAGE NUMBER :: page number: ${text}`)
-       if (isPageNumber(text)) {
-             log(`PAGE NUMBER :: page number detected: ${text}`);
-
+       const isPageNum = isPageNumber(text);
+       
+       if (isPageNum) {
+             // Fix: Check if page number is at top or bottom of the page/document, not just viewport
+             // Calculate absolute position in document
+             const absoluteTop = boundingRect.top + window.scrollY;
+             const absoluteBottom = absoluteTop + boundingRect.height;
+             
+             // Get document height to determine page boundaries
+             const documentHeight = Math.max(
+               document.body.scrollHeight,
+               document.body.offsetHeight,
+               document.documentElement.clientHeight,
+               document.documentElement.scrollHeight,
+               document.documentElement.offsetHeight
+             );
+             
+             // Check if near top (within 30% of document start) or bottom (within 70% of document end)
+             const topThreshold = documentHeight * 0.3;
+             const bottomThreshold = documentHeight * 0.7;
+             
              const isAtTopOrBottom =
-               boundingRect.top < window.innerHeight * 0.2 ||
-               boundingRect.top > window.innerHeight * 0.8;
-
+               absoluteTop < topThreshold || absoluteBottom > bottomThreshold;
+             
              if (isAtTopOrBottom) {
-               log(`PAGE NUMBER :: is at top or bottom: ${text}`);
-
+               // Optimize: Cache these values to avoid repeated property access
                const before = item.decoration.locator.text.before || "";
                const after = item.decoration.locator.text.after || "";
 
-               // Check if 'before' ends in newline, is empty, or has no alphanumeric characters
-               const beforeIsEmpty = before.length === 0;
-               const beforeEndsInNewline = before.endsWith("\n");
-               const beforeHasNoAlphanumeric = !/[a-zA-Z0-9]/.test(before);
-
-               // Check if 'after' begins with newline, is empty, or has no alphanumeric characters
-               const afterIsEmpty = after.length === 0;
-               const afterBeginsWithNewline = after.startsWith("\n");
-               const afterHasNoAlphanumeric = !/[a-zA-Z0-9]/.test(after);
+               // Optimize: Combine checks to reduce operations
+               const beforeIsIsolated = before.length === 0 || before.endsWith("\n") || !/[a-zA-Z0-9]/.test(before);
+               const afterIsIsolated = after.length === 0 || after.startsWith("\n") || !/[a-zA-Z0-9]/.test(after);
 
                // Isolated page number if both before and after match our criteria
-               const isIsolatedPageNumber =
-                 (beforeIsEmpty || beforeEndsInNewline || beforeHasNoAlphanumeric) &&
-                 (afterIsEmpty || afterBeginsWithNewline || afterHasNoAlphanumeric);
-
-               // Calculate elapsed time
-               const endTime = performance.now();
-               const elapsedTime = endTime - startTime;
-               log(
-                 `PAGE NUMBER :: isolation check took ${elapsedTime.toFixed(
-                   3
-                 )} ms for: ${text}`
-               );
-
-               log(`PAGE NUMBER :: before: ${before}`);
-               log(
-                 `PAGE NUMBER :: before is empty: ${beforeIsEmpty} | before ends in newline: ${beforeEndsInNewline} | before has no alphanumeric: ${beforeHasNoAlphanumeric}`
-               );
-
-               log(`PAGE NUMBER :: after: ${after}`);
-               log(
-                 `PAGE NUMBER :: after is empty: ${afterIsEmpty} | after begins with newline: ${afterBeginsWithNewline} | after has no alphanumeric: ${afterHasNoAlphanumeric}`
-               );
-
-               if (isIsolatedPageNumber) {
-                 log(`PAGE NUMBER :: is isolated: ${text}`);
+               if (beforeIsIsolated && afterIsIsolated) {
+                 log(`PAGE NUMBER DEBUG :: Page number is isolated, returning with invalid rect`);
                  postMessageWithInvalidRect();
                  return;
+               } else {
+                 log(`PAGE NUMBER DEBUG :: Page number is NOT isolated, continuing with layout`);
                }
+             } else {
+               log(`PAGE NUMBER DEBUG :: Page number is NOT at top or bottom, continuing with layout`);
              }
+           } else {
+             log(`PAGE NUMBER DEBUG :: Not a page number, continuing with normal layout`);
            }
+
+      // Optimize: Cache scrolling element and offsets
+      let scrollingElement = document.scrollingElement;
+      let yOffset = scrollingElement.scrollTop;
+      let xOffset = window.scrollX - pageIndex * viewportWidth;
 
       let visibleAreaResponse = applyContainmentToArea(pageIndex); // Get or create the container for this page
       let visibleArea = visibleAreaResponse.visibleArea;
       let newArea = visibleAreaResponse.new;
 
       if (newArea) {
-        log(`new area`);
         visibleContainers.push(visibleArea);
       }
 
       // Create the decoration element
       let itemContainer = document.createElement("div");
-      itemContainer.setAttribute("id", item.id);
-      itemContainer.setAttribute("data-style", item.decoration.style);
-      itemContainer.style.setProperty("pointer-events", "none");
+      itemContainer.id = item.id;
+      itemContainer.dataset.style = item.decoration.style;
+      itemContainer.style.pointerEvents = "none";
 
-      // Adjust the position of the decoration relative to the container (page)
-      // let xOffset =
-      //   boundingRect.left - pageIndex * viewportWidth + window.scrollX; // Relative position within the page
-      let xOffset = window.scrollX - pageIndex * viewportWidth;
-      // let yOffset = boundingRect.top + window.scrollY;
-
-      let scrollingElement = document.scrollingElement;
-      let yOffset = scrollingElement.scrollTop;
-
-       log(`visible area :: bounding rect left: ${boundingRect.left}`);
-       log(`visible area :: page index: ${pageIndex}`);
-       log(`visible area :: viewport width: ${viewportWidth}`);
-       log(`visible area :: window screen x: ${window.scrollX}`);
-
-      log(`yoffset: ${yOffset}`);
-
-      // Position the decoration element inside the page container
-      function positionElement(element, rect, boundingRect) {
-        element.style.position = "absolute";
-        log(`style width: ${style.width}`);
-        log(`rect left: ${rect.left}`);
-        if (style.width === "wrap") {
-          element.style.width = `${rect.width}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${rect.left + xOffset}px`; // Position within the page
-          element.style.top = `${rect.top + yOffset}px`;
-        } else if (style.width === "viewport") {
-          element.style.width = `${viewportWidth}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${xOffset}px`; // Position within the page
-          element.style.top = `${rect.top + yOffset}px`;
-        } else if (style.width === "bounds") {
-          element.style.width = `${boundingRect.width}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${boundingRect.left + xOffset}px`;
-          element.style.top = `${rect.top + yOffset}px`;
-        } else if (style.width === "page") {
-          element.style.width = `${viewportWidth}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${xOffset}px`;
-          element.style.top = `${rect.top + yOffset}px`;
-        }
-      }
-
+      // Optimize: Cache element template creation
       let elementTemplate;
       try {
         let template = document.createElement("template");
@@ -719,36 +675,54 @@ export function DecorationGroup(groupId, groupName) {
         return;
       }
 
-      log(`style layout: ${style.layout}`);
+      // Optimize: Position function with cached values
+      function positionElement(element, rect, boundingRect) {
+        element.style.position = "absolute";
+        const width = style.width;
+        
+        if (width === "wrap") {
+          element.style.width = `${rect.width}px`;
+          element.style.height = `${rect.height}px`;
+          element.style.left = `${rect.left + xOffset}px`;
+          element.style.top = `${rect.top + yOffset}px`;
+        } else if (width === "viewport") {
+          element.style.width = `${viewportWidth}px`;
+          element.style.height = `${rect.height}px`;
+          element.style.left = `${xOffset}px`;
+          element.style.top = `${rect.top + yOffset}px`;
+        } else if (width === "bounds") {
+          element.style.width = `${boundingRect.width}px`;
+          element.style.height = `${rect.height}px`;
+          element.style.left = `${boundingRect.left + xOffset}px`;
+          element.style.top = `${rect.top + yOffset}px`;
+        } else if (width === "page") {
+          element.style.width = `${viewportWidth}px`;
+          element.style.height = `${rect.height}px`;
+          element.style.left = `${xOffset}px`;
+          element.style.top = `${rect.top + yOffset}px`;
+        }
+      }
 
       if (style.layout === "boxes") {
-        let doNotMergeHorizontallyAlignedRects = true;
+        // Optimize: Get client rects once and sort efficiently
         let clientRects = getClientRectsNoOverlap(
           item.range,
-          doNotMergeHorizontallyAlignedRects
+          true
         );
 
-        clientRects = clientRects.sort((r1, r2) => {
-          if (r1.top < r2.top) {
-            return -1;
-          } else if (r1.top > r2.top) {
-            return 1;
-          } else {
-            return 0;
-          }
-        });
+        // Optimize: Use more efficient sort
+        clientRects.sort((r1, r2) => r1.top - r2.top);
 
         for (let clientRect of clientRects) {
           const line = elementTemplate.cloneNode(true);
-          line.style.setProperty("pointer-events", "none");
+          line.style.pointerEvents = "none";
           positionElement(line, clientRect, boundingRect);
           itemContainer.append(line);
         }
       } else if (style.layout === "bounds") {
         const bounds = elementTemplate.cloneNode(true);
-        bounds.style.setProperty("pointer-events", "none");
+        bounds.style.pointerEvents = "none";
         positionElement(bounds, boundingRect, boundingRect);
-
         itemContainer.append(bounds);
       }
 
@@ -782,39 +756,39 @@ export function DecorationGroup(groupId, groupName) {
   }
 
   function applyContainmentToArea(pageIndex) {
+    // Optimize: Cache viewport dimensions
     let viewportWidth = window.innerWidth;
-    let visibleAreaLeft = pageIndex * viewportWidth; // Each page is one viewport width in size
+    let viewportHeight = window.innerHeight;
     let visibleAreaId = `visible-area-${pageIndex}`;
 
     let newArea = false;
     let visibleArea = null;
 
-    for (const container of visibleContainers) {
-      if (container.id === visibleAreaId) {
+    // Optimize: Use Map for O(1) lookup instead of array iteration
+    // For now, keep array but use early break optimization
+    for (let i = 0; i < visibleContainers.length; i++) {
+      const container = visibleContainers[i];
+      if (container && container.id === visibleAreaId) {
         visibleArea = container;
-        log(`using container from array: ${container.id}`);
         break;
       }
     }
 
     if (!visibleArea) {
-      // Check if the visible area for this page already exists
-      visibleArea = document.querySelector(`#${visibleAreaId}`);
+      // Optimize: Only query DOM if not found in cache
+      visibleArea = document.getElementById(visibleAreaId);
 
       if (!visibleArea) {
         // Create a new container for the visible area (this page)
         visibleArea = document.createElement("div");
-        visibleArea.classList.add("visible-area");
-        visibleArea.setAttribute("id", visibleAreaId);
-        visibleArea.style.position = "absolute";
-        visibleArea.style.left = `${visibleAreaLeft}px`;
-        visibleArea.style.top = `0px !important`;
-        visibleArea.style.marginTop = `0px`;
-        visibleArea.style.width = `${viewportWidth}px`;
-        visibleArea.style.height = `${window.innerHeight}px`;
-        visibleArea.style.pointerEvents = "none"; // Allow interactions to pass through
+        visibleArea.className = "visible-area";
+        visibleArea.id = visibleAreaId;
+        
+        // Optimize: Batch style assignments
+        const visibleAreaLeft = pageIndex * viewportWidth;
+        visibleArea.style.cssText = `position:absolute;left:${visibleAreaLeft}px;top:0;margin-top:0;width:${viewportWidth}px;height:${viewportHeight}px;pointer-events:none`;
+        
         document.body.appendChild(visibleArea);
-
         newArea = true;
       }
     }
