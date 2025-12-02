@@ -548,15 +548,20 @@ export function DecorationGroup(groupId, groupName) {
 
     function isPageNumber(text) {
       if (!text) {
+        log(`PAGE NUMBER DEBUG :: isPageNumber received null/undefined/empty text`);
         return false;
       }
       const trimmedText = text.trim();
       const isPageNum = /^\d+$/.test(trimmedText);
+      log(`PAGE NUMBER DEBUG :: isPageNumber("${text}") -> trimmed: "${trimmedText}" -> result: ${isPageNum}`);
+      // Only return true for strings that consist entirely of digits
       return isPageNum;
     }
 
 
   function layoutEnhanced(item, postMessage) {
+      log(`PAGE NUMBER DEBUG :: layoutEnhanced called for decoration id: ${item.decoration.id}, group: ${groupName}`);
+
       let style = styles.get(item.decoration.style);
       if (!style) {
         logError(
@@ -579,30 +584,39 @@ export function DecorationGroup(groupId, groupName) {
 
       // Get the bounding rect for the decoration (cache this expensive call)
       let boundingRect = item.range.getBoundingClientRect();
+      log(`PAGE NUMBER DEBUG :: boundingRect: top=${boundingRect.top}, left=${boundingRect.left}, width=${boundingRect.width}, height=${boundingRect.height}`);
 
       // Calculate which page (container) this decoration belongs to based on its left position
       let viewportWidth = window.innerWidth;
       let pageIndex = Math.floor(
         (boundingRect.left + window.scrollX) / viewportWidth
       ); // Calculate the page index
+      log(`PAGE NUMBER DEBUG :: pageIndex: ${pageIndex}, viewportWidth: ${viewportWidth}, scrollX: ${window.scrollX}`);
+
          if (
                         boundingRect.left + boundingRect.width < 0 ||
                         boundingRect.top + boundingRect.height < 0
                       ) {
+                        log(`PAGE NUMBER DEBUG :: decoration is off-screen, returning early`);
                         postMessageWithInvalidRect();
                         return;
                       }
 
        // Optimize: Cache text and check page number early to avoid unnecessary work
        const text = item.decoration.locator.text.highlight;
+       log(`PAGE NUMBER DEBUG :: text.highlight: "${text}"`);
        const isPageNum = isPageNumber(text);
        
        if (isPageNum) {
+             log(`PAGE NUMBER DEBUG :: Page number detected: "${text}"`);
+
              // Fix: Check if page number is at top or bottom of the page/document, not just viewport
              // Calculate absolute position in document
              const absoluteTop = boundingRect.top + window.scrollY;
              const absoluteBottom = absoluteTop + boundingRect.height;
              
+             log(`PAGE NUMBER DEBUG :: absoluteTop: ${absoluteTop}, absoluteBottom: ${absoluteBottom}, scrollY: ${window.scrollY}`);
+
              // Get document height to determine page boundaries
              const documentHeight = Math.max(
                document.body.scrollHeight,
@@ -612,24 +626,36 @@ export function DecorationGroup(groupId, groupName) {
                document.documentElement.offsetHeight
              );
              
+             log(`PAGE NUMBER DEBUG :: documentHeight: ${documentHeight}`);
+
              // Check if near top (within 30% of document start) or bottom (within 70% of document end)
              const topThreshold = documentHeight * 0.3;
              const bottomThreshold = documentHeight * 0.7;
              
+             log(`PAGE NUMBER DEBUG :: topThreshold: ${topThreshold}, bottomThreshold: ${bottomThreshold}`);
+
              const isAtTopOrBottom =
                absoluteTop < topThreshold || absoluteBottom > bottomThreshold;
              
+             log(`PAGE NUMBER DEBUG :: isAtTopOrBottom: ${isAtTopOrBottom} (absoluteTop < topThreshold: ${absoluteTop < topThreshold}, absoluteBottom > bottomThreshold: ${absoluteBottom > bottomThreshold})`);
+
              if (isAtTopOrBottom) {
+               log(`PAGE NUMBER DEBUG :: Page number is at top or bottom, checking isolation`);
+
                // Optimize: Cache these values to avoid repeated property access
                const before = item.decoration.locator.text.before || "";
                const after = item.decoration.locator.text.after || "";
+
+               log(`PAGE NUMBER DEBUG :: before: "${before}", after: "${after}"`);
 
                // Optimize: Combine checks to reduce operations
                const beforeIsIsolated = before.length === 0 || before.endsWith("\n") || !/[a-zA-Z0-9]/.test(before);
                const afterIsIsolated = after.length === 0 || after.startsWith("\n") || !/[a-zA-Z0-9]/.test(after);
 
+               log(`PAGE NUMBER DEBUG :: beforeIsIsolated: ${beforeIsIsolated}, afterIsIsolated: ${afterIsIsolated}`);
+
                // Isolated page number if both before and after match our criteria
-               if (beforeIsIsolated && afterIsIsolated) {
+               if (beforeIsIsolated ||  afterIsIsolated) {
                  log(`PAGE NUMBER DEBUG :: Page number is isolated, returning with invalid rect`);
                  postMessageWithInvalidRect();
                  return;
