@@ -610,7 +610,6 @@ export function DecorationGroup(groupId, groupName) {
        if (isPageNum) {
              log(`PAGE NUMBER DEBUG :: Page number detected: "${text}"`);
 
-             // Fix: Check if page number is at top or bottom of the page/document, not just viewport
              // Calculate absolute position in document
              const absoluteTop = boundingRect.top + window.scrollY;
              const absoluteBottom = absoluteTop + boundingRect.height;
@@ -626,18 +625,60 @@ export function DecorationGroup(groupId, groupName) {
                document.documentElement.offsetHeight
              );
              
-             log(`PAGE NUMBER DEBUG :: documentHeight: ${documentHeight}`);
+             // Get actual content height by checking the last few elements
+             // This helps when document height includes extra padding/margins
+             let actualContentHeight = documentHeight;
+             try {
+               // More efficient: check last child and its siblings instead of all elements
+               const body = document.body;
+               if (body && body.lastElementChild) {
+                 const lastElementRect = body.lastElementChild.getBoundingClientRect();
+                 const lastElementBottom = lastElementRect.bottom + window.scrollY;
+                 // Also check a few previous siblings to be safe
+                 let maxBottom = lastElementBottom;
+                 let sibling = body.lastElementChild.previousElementSibling;
+                 for (let i = 0; i < 3 && sibling; i++) {
+                   const rect = sibling.getBoundingClientRect();
+                   const bottom = rect.bottom + window.scrollY;
+                   if (bottom > maxBottom) maxBottom = bottom;
+                   sibling = sibling.previousElementSibling;
+                 }
+                 actualContentHeight = Math.min(maxBottom + 50, documentHeight); // Add small buffer
+               }
+             } catch (e) {
+               // Fallback to documentHeight if calculation fails
+               log(`PAGE NUMBER DEBUG :: Error calculating actual content height: ${e.message}`);
+             }
+             
+             log(`PAGE NUMBER DEBUG :: documentHeight: ${documentHeight}, actualContentHeight: ${actualContentHeight}`);
 
-             // Check if near top (within 30% of document start) or bottom (within 70% of document end)
+             // Check if near top (within 30% of document start)
+             // Use documentHeight for top since it's usually accurate
              const topThreshold = documentHeight * 0.3;
-             const bottomThreshold = documentHeight * 0.7;
+             const isAtTop = absoluteTop < topThreshold;
              
-             log(`PAGE NUMBER DEBUG :: topThreshold: ${topThreshold}, bottomThreshold: ${bottomThreshold}`);
+             // For bottom detection, use actualContentHeight as the primary reference
+             // since documentHeight may include extra padding/margins
+             // 1. Check if within bottom 25% of actual content (more conservative)
+             // 2. Check if within reasonable distance from actual content end (300px)
+             const bottomThresholdPercentage = actualContentHeight * 0.75; // Bottom 25% of actual content
+             const bottomThresholdDistance = actualContentHeight - 300; // Within 300px of actual content end
+             const distanceFromContentEnd = actualContentHeight - absoluteBottom;
+             const isNearContentEnd = distanceFromContentEnd < 300; // Within 300px of actual content end
+             
+             // Use the more lenient threshold based on actual content height
+             const bottomThreshold = Math.min(bottomThresholdPercentage, bottomThresholdDistance);
+             const isAtBottomByThreshold = absoluteBottom > bottomThreshold;
+             // Also check if very close to content end (within 150px) as a safety net
+             const isAtBottom = isAtBottomByThreshold || (distanceFromContentEnd < 150);
+             
+             log(`PAGE NUMBER DEBUG :: topThreshold: ${topThreshold}, bottomThreshold: ${bottomThreshold} (based on actualContentHeight)`);
+             log(`PAGE NUMBER DEBUG :: distanceFromContentEnd: ${distanceFromContentEnd}, isNearContentEnd: ${isNearContentEnd}`);
+             log(`PAGE NUMBER DEBUG :: isAtTop: ${isAtTop}, isAtBottom: ${isAtBottom} (byThreshold: ${isAtBottomByThreshold}, byDistance: ${distanceFromContentEnd < 150})`);
 
-             const isAtTopOrBottom =
-               absoluteTop < topThreshold || absoluteBottom > bottomThreshold;
+             const isAtTopOrBottom = isAtTop || isAtBottom;
              
-             log(`PAGE NUMBER DEBUG :: isAtTopOrBottom: ${isAtTopOrBottom} (absoluteTop < topThreshold: ${absoluteTop < topThreshold}, absoluteBottom > bottomThreshold: ${absoluteBottom > bottomThreshold})`);
+             log(`PAGE NUMBER DEBUG :: isAtTopOrBottom: ${isAtTopOrBottom}`);
 
              if (isAtTopOrBottom) {
                log(`PAGE NUMBER DEBUG :: Page number is at top or bottom, checking isolation`);
