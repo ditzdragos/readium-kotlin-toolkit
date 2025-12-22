@@ -87,43 +87,60 @@ function mergeTouchingRects(
   tolerance,
   doNotMergeHorizontallyAlignedRects
 ) {
+  // Use a more efficient approach: track merged indices to avoid redundant checks
+  const merged = new Set();
+  const newRects = [];
+  
   for (let i = 0; i < rects.length; i++) {
+    if (merged.has(i)) continue;
+    
+    let currentRect = rects[i];
+    
+    // Try to merge with remaining rects
     for (let j = i + 1; j < rects.length; j++) {
-      const rect1 = rects[i];
+      if (merged.has(j)) continue;
+      
       const rect2 = rects[j];
-      if (rect1 === rect2) {
+      if (currentRect === rect2) {
         log("mergeTouchingRects rect1 === rect2 ??!");
         continue;
       }
+      
       const rectsLineUpVertically =
-        almostEqual(rect1.top, rect2.top, tolerance) &&
-        almostEqual(rect1.bottom, rect2.bottom, tolerance);
+        almostEqual(currentRect.top, rect2.top, tolerance) &&
+        almostEqual(currentRect.bottom, rect2.bottom, tolerance);
       const rectsLineUpHorizontally =
-        almostEqual(rect1.left, rect2.left, tolerance) &&
-        almostEqual(rect1.right, rect2.right, tolerance);
+        almostEqual(currentRect.left, rect2.left, tolerance) &&
+        almostEqual(currentRect.right, rect2.right, tolerance);
       const horizontalAllowed = !doNotMergeHorizontallyAlignedRects;
       const aligned =
         (rectsLineUpHorizontally && horizontalAllowed) ||
         (rectsLineUpVertically && !rectsLineUpHorizontally);
-      const canMerge = aligned && rectsTouchOrOverlap(rect1, rect2, tolerance);
+      const canMerge = aligned && rectsTouchOrOverlap(currentRect, rect2, tolerance);
+      
       if (canMerge) {
         log(
           `CLIENT RECT: merging two into one, VERTICAL: ${rectsLineUpVertically} HORIZONTAL: ${rectsLineUpHorizontally} (${doNotMergeHorizontallyAlignedRects})`
         );
-        const newRects = rects.filter((rect) => {
-          return rect !== rect1 && rect !== rect2;
-        });
-        const replacementClientRect = getBoundingRect(rect1, rect2);
-        newRects.push(replacementClientRect);
-        return mergeTouchingRects(
-          newRects,
-          tolerance,
-          doNotMergeHorizontallyAlignedRects
-        );
+        merged.add(j);
+        currentRect = getBoundingRect(currentRect, rect2);
       }
     }
+    
+    merged.add(i);
+    newRects.push(currentRect);
   }
-  return rects;
+  
+  // If we merged anything, recursively check for more merges
+  if (newRects.length < rects.length) {
+    return mergeTouchingRects(
+      newRects,
+      tolerance,
+      doNotMergeHorizontallyAlignedRects
+    );
+  }
+  
+  return newRects;
 }
 
 function getBoundingRect(rect1, rect2) {

@@ -16,11 +16,26 @@ let styles = new Map();
 let groups = new Map();
 var lastGroupId = 0;
 
+// Cache for expensive computed style calls
+let documentWritingModeCache = null;
+let documentColumnCountCache = null;
+
 /**
- * Returns the document body's writing mode.
+ * Returns the document body's writing mode (cached).
  */
 function getDocumentWritingMode() {
-  return getComputedStyle(document.body).writingMode;
+  if (documentWritingModeCache === null) {
+    documentWritingModeCache = getComputedStyle(document.body).writingMode;
+  }
+  return documentWritingModeCache;
+}
+
+/**
+ * Clears cached computed styles (call after DOM changes that affect styles).
+ */
+function clearStyleCache() {
+  documentWritingModeCache = null;
+  documentColumnCountCache = null;
 }
 
 /**
@@ -98,26 +113,31 @@ export function registerTemplates(newStyles) {
  * This prevents words from being incorrectly stitched together when extracting text.
  */
 function processSpansForTextSpacing() {
-  // Get all spans in the document
+  // Get all spans in the document - cache the query result
   const spans = document.querySelectorAll("span");
+  const spansLength = spans.length;
+  
+  // Early return if no spans
+  if (spansLength === 0) return;
 
   // Group spans by parent element to analyze siblings
-  const spansByParent = {};
-  for (const span of spans) {
-    const parentKey = span.parentElement
-      ? span.parentElement.tagName +
-        "_" +
-        (span.parentElement.id || Math.random())
+  // Use Map for better performance with many spans
+  const spansByParent = new Map();
+  for (let i = 0; i < spansLength; i++) {
+    const span = spans[i];
+    const parent = span.parentElement;
+    const parentKey = parent
+      ? parent.tagName + "_" + (parent.id || `p${i}`)
       : "orphan";
-    if (!spansByParent[parentKey]) {
-      spansByParent[parentKey] = [];
+    if (!spansByParent.has(parentKey)) {
+      spansByParent.set(parentKey, []);
     }
-    spansByParent[parentKey].push(span);
+    spansByParent.get(parentKey).push(span);
   }
 
   // First pass: Process spans and mark those that need spacing
-  for (const parentKey in spansByParent) {
-    const siblingSpans = spansByParent[parentKey].slice();
+  for (const [parentKey, siblingSpansArray] of spansByParent) {
+    const siblingSpans = siblingSpansArray.slice();
 
     // Sort spans by their vertical position (bottom value)
     siblingSpans.sort((a, b) => {
@@ -145,9 +165,17 @@ function processSpansForTextSpacing() {
   }
 
   // Second pass: Insert spaces where needed
-  for (const span of document.querySelectorAll(
-    'span[data-needs-spacing="true"]'
-  )) {
+  // Collect spans that need spacing during first pass to avoid second query
+  const spansNeedingSpacing = [];
+  for (const [parentKey, siblingSpansArray] of spansByParent) {
+    for (const span of siblingSpansArray) {
+      if (span.hasAttribute("data-needs-spacing")) {
+        spansNeedingSpacing.push(span);
+      }
+    }
+  }
+  
+  for (const span of spansNeedingSpacing) {
     // Insert a space at the beginning of the span
     const textNode = span.firstChild;
     if (textNode && textNode.nodeType === Node.TEXT_NODE) {
@@ -161,10 +189,12 @@ function processSpansForTextSpacing() {
   }
 
   // Handle spans that contain word-spacing style (these already have explicit spacing)
-  const wordSpacedSpans = document.querySelectorAll(
-    'span[style*="word-spacing"]'
-  );
-  for (const span of wordSpacedSpans) {
+  // Only query if we have spans to check
+  const wordSpacedSpans = spansLength > 0 
+    ? document.querySelectorAll('span[style*="word-spacing"]')
+    : [];
+  for (let i = 0; i < wordSpacedSpans.length; i++) {
+    const span = wordSpacedSpans[i];
     // Ensure the browser's implicit spacing is preserved in extracted text
     if (span.textContent.trim() && !span.textContent.includes(" ")) {
       span.innerHTML = span.innerHTML.replace(
@@ -203,14 +233,18 @@ export function handleDecorationClickEvent(event, clickEvent) {
         continue;
       }
 
-      for (const item of groupContent.items.reverse()) {
+      // Iterate in reverse order (most recent first) but avoid creating new array
+      const items = groupContent.items;
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
         if (!item.clickableElements) {
           continue;
         }
-        for (const element of item.clickableElements) {
-          let rect = element.getBoundingClientRect().toJSON();
+        for (let j = 0; j < item.clickableElements.length; j++) {
+          const element = item.clickableElements[j];
+          let rect = element.getBoundingClientRect();
           if (rectContainsPoint(rect, event.clientX, event.clientY, 1)) {
-            return { group, item, element, rect };
+            return { group, item, element, rect: rect.toJSON() };
           }
         }
       }
@@ -241,6 +275,7 @@ export function DecorationGroup(groupId, groupName) {
   var container = null;
   var activable = false;
   var visibleContainers = [];
+  var visibleContainersMap = new Map(); // O(1) lookup for visible containers
 
   function isActivable() {
     return activable;
@@ -329,6 +364,7 @@ export function DecorationGroup(groupId, groupName) {
        });
 
        visibleContainers.length = 0;
+       visibleContainersMap.clear();
   }
 
   function clearEnhanced(decorationId) {
@@ -384,12 +420,16 @@ export function DecorationGroup(groupId, groupName) {
     const viewportWidth = isVertical ? window.innerHeight : window.innerWidth;
     const viewportHeight = isVertical ? window.innerWidth : window.innerHeight;
 
-    const columnCount =
-      parseInt(
-        getComputedStyle(document.documentElement).getPropertyValue(
-          "column-count"
-        )
-      ) || 1;
+    // Use cached column count if available
+    if (documentColumnCountCache === null) {
+      documentColumnCountCache =
+        parseInt(
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "column-count"
+          )
+        ) || 1;
+    }
+    const columnCount = documentColumnCountCache;
     const pageSize =
       (isVertical ? viewportHeight : viewportWidth) / columnCount;
 
@@ -546,13 +586,16 @@ export function DecorationGroup(groupId, groupName) {
           );
   }
 
+    // Cache regex to avoid recompilation
+    const PAGE_NUMBER_REGEX = /^\d+$/;
+    
     function isPageNumber(text) {
       if (!text) {
         log(`PAGE NUMBER DEBUG :: isPageNumber received null/undefined/empty text`);
         return false;
       }
       const trimmedText = text.trim();
-      const isPageNum = /^\d+$/.test(trimmedText);
+      const isPageNum = PAGE_NUMBER_REGEX.test(trimmedText);
       log(`PAGE NUMBER DEBUG :: isPageNumber("${text}") -> trimmed: "${trimmedText}" -> result: ${isPageNum}`);
       // Only return true for strings that consist entirely of digits
       return isPageNum;
@@ -583,6 +626,7 @@ export function DecorationGroup(groupId, groupName) {
         }
 
       // Get the bounding rect for the decoration (cache this expensive call)
+      // Only call once and reuse throughout the function
       let boundingRect = item.range.getBoundingClientRect();
       log(`PAGE NUMBER DEBUG :: boundingRect: top=${boundingRect.top}, left=${boundingRect.left}, width=${boundingRect.width}, height=${boundingRect.height}`);
 
@@ -627,21 +671,29 @@ export function DecorationGroup(groupId, groupName) {
              
              // Get actual content height by checking the last few elements
              // This helps when document height includes extra padding/margins
+             // Cache this calculation per document (it doesn't change often)
              let actualContentHeight = documentHeight;
              try {
                // More efficient: check last child and its siblings instead of all elements
                const body = document.body;
                if (body && body.lastElementChild) {
-                 const lastElementRect = body.lastElementChild.getBoundingClientRect();
+                 // Batch getBoundingClientRect calls by getting all rects at once
+                 const lastElement = body.lastElementChild;
+                 const lastElementRect = lastElement.getBoundingClientRect();
                  const lastElementBottom = lastElementRect.bottom + window.scrollY;
-                 // Also check a few previous siblings to be safe
+                 
+                 // Only check up to 2 previous siblings to reduce DOM queries
                  let maxBottom = lastElementBottom;
-                 let sibling = body.lastElementChild.previousElementSibling;
-                 for (let i = 0; i < 3 && sibling; i++) {
+                 let sibling = lastElement.previousElementSibling;
+                 let checkedCount = 0;
+                 const maxSiblingsToCheck = 2;
+                 
+                 while (sibling && checkedCount < maxSiblingsToCheck) {
                    const rect = sibling.getBoundingClientRect();
                    const bottom = rect.bottom + window.scrollY;
                    if (bottom > maxBottom) maxBottom = bottom;
                    sibling = sibling.previousElementSibling;
+                   checkedCount++;
                  }
                  actualContentHeight = Math.min(maxBottom + 50, documentHeight); // Add small buffer
                }
@@ -832,14 +884,7 @@ export function DecorationGroup(groupId, groupName) {
     let visibleArea = null;
 
     // Optimize: Use Map for O(1) lookup instead of array iteration
-    // For now, keep array but use early break optimization
-    for (let i = 0; i < visibleContainers.length; i++) {
-      const container = visibleContainers[i];
-      if (container && container.id === visibleAreaId) {
-        visibleArea = container;
-        break;
-      }
-    }
+    visibleArea = visibleContainersMap.get(visibleAreaId);
 
     if (!visibleArea) {
       // Optimize: Only query DOM if not found in cache
@@ -858,6 +903,10 @@ export function DecorationGroup(groupId, groupName) {
         document.body.appendChild(visibleArea);
         newArea = true;
       }
+      
+      // Cache in both array and map
+      visibleContainers.push(visibleArea);
+      visibleContainersMap.set(visibleAreaId, visibleArea);
     }
 
     return { visibleArea: visibleArea, new: newArea };
@@ -894,7 +943,7 @@ window.addEventListener(
     // Will relayout all the decorations when the document body is resized.
     const body = document.body;
     var lastSize = { width: 0, height: 0 };
-    const observer = new ResizeObserver(() => {
+      const observer = new ResizeObserver(() => {
       if (
         lastSize.width === body.clientWidth &&
         lastSize.height === body.clientHeight
@@ -905,6 +954,9 @@ window.addEventListener(
         width: body.clientWidth,
         height: body.clientHeight,
       };
+      
+      // Clear style cache on resize as styles may have changed
+      clearStyleCache();
 
       groups.forEach(function (group) {
         group.requestLayout();

@@ -61,6 +61,8 @@ window.addEventListener(
   function () {
     const observer = new ResizeObserver(() => {
       requestAnimationFrame(() => {
+        // Clear caches when viewport changes
+        clearUtilsCache();
         onViewportWidthChanged();
         snapCurrentOffset();
       });
@@ -117,12 +119,20 @@ function onViewportWidthChanged() {
   appendVirtualColumnIfNeeded();
 }
 
+// Cache for expensive computed style calls
+let columnCountCache = null;
+let verticalWritingModeCache = null;
+let rtlCache = null;
+
 export function getColumnCountPerScreen() {
-  return parseInt(
-    window
-      .getComputedStyle(document.documentElement)
-      .getPropertyValue("column-count")
-  );
+  if (columnCountCache === null) {
+    columnCountCache = parseInt(
+      window
+        .getComputedStyle(document.documentElement)
+        .getPropertyValue("column-count")
+    );
+  }
+  return columnCountCache;
 }
 
 export function isScrollModeEnabled() {
@@ -135,14 +145,26 @@ export function isScrollModeEnabled() {
 }
 
 export function isRTL() {
-  return document.body.dir.toLowerCase() == "rtl";
+  if (rtlCache === null) {
+    rtlCache = document.body.dir.toLowerCase() == "rtl";
+  }
+  return rtlCache;
 }
 
 export function isVerticalWritingMode() {
-  const writingMode = window
-    .getComputedStyle(document.documentElement)
-    .getPropertyValue("writing-mode");
-  return writingMode.startsWith("vertical");
+  if (verticalWritingModeCache === null) {
+    verticalWritingModeCache = window
+      .getComputedStyle(document.documentElement)
+      .getPropertyValue("writing-mode");
+  }
+  return verticalWritingModeCache.startsWith("vertical");
+}
+
+// Clear caches when document changes
+export function clearUtilsCache() {
+  columnCountCache = null;
+  verticalWritingModeCache = null;
+  rtlCache = null;
 }
 
 // Scroll to the given TagId in document and snap.
@@ -378,8 +400,10 @@ function rangeFromCachedLocator(locator) {
 
 export function rangeFromLocator(locator) {
   try {
-//    log("=========================")
-    log("rangeFromLocator: locator", JSON.stringify(locator));
+    // Reduce logging in production - only log in debug mode
+    if (DEBUG_MODE) {
+      log("rangeFromLocator: locator", JSON.stringify(locator));
+    }
     let locations = locator.locations;
     let text = locator.text;
     if (text && text.highlight) {
@@ -387,10 +411,14 @@ export function rangeFromLocator(locator) {
       if (locations && locations.cssSelector) {
         try {
           const range = rangeFromCachedLocator(locator);
-//            log("rangeFromLocator: found range from cached locator", range);
+          if (DEBUG_MODE) {
+            log("rangeFromLocator: found range from cached locator", range);
+          }
           return range;
         } catch {
-          log("failed getting the range from css selector");
+          if (DEBUG_MODE) {
+            log("failed getting the range from css selector");
+          }
           // root = document.querySelector(locations.cssSelector);
         }
       }
@@ -405,24 +433,27 @@ export function rangeFromLocator(locator) {
       if (locations && root.textContent.length > 0) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
-//          log("actual start and end:", locations.start, locations.end, root.textContent.length);
           start = Math.max(locations.start-10, 0);
           end = Math.min(locations.end+10, root.textContent.length);
-//          log("adjusted start and end: ",start, end, root.textContent.length);
         }
-       log("rangeFromLocator: Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
+        if (DEBUG_MODE) {
+          log("rangeFromLocator: Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
+          log("rangeFromLocator: Text at adjusted range: ", root.textContent.slice(start, end));
+        }
       }
-
-       log("rangeFromLocator: Text at adjusted range: ", root.textContent.slice(start, end));
 
       let anchor = new TextQuoteAnchor(root, text.highlight, {
         prefix: text.before,
         suffix: text.after,
       });
 
-      log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
+      if (DEBUG_MODE) {
+        log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
+      }
       let result = anchor.toRange({}, start, end);
-      log("rangeFromLocator: found range", result);
+      if (DEBUG_MODE) {
+        log("rangeFromLocator: found range", result);
+      }
       return result;
     }
 
@@ -446,7 +477,9 @@ export function rangeFromLocator(locator) {
         let range = document.createRange();
         range.setStartBefore(element);
         range.setEndAfter(element);
-        log("rangeFromLocator: found element", element);
+        if (DEBUG_MODE) {
+          log("rangeFromLocator: found element", element);
+        }
         return range;
       }
     }
