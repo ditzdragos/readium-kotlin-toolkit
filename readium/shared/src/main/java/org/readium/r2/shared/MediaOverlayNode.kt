@@ -28,7 +28,7 @@ public data class MediaOverlayNode(
     val role: List<String> = listOf(),
 ) : Serializable {
 
-    val audioFile: String?
+    val audioFile: String
         get() = audio?.removeFragment()?.path!!
     val audioTime: String?
         get() = audio?.fragment

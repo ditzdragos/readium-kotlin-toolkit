@@ -5,7 +5,7 @@ import org.readium.r2.shared.publication.Manifest
 import org.readium.r2.shared.publication.Metadata
 import org.readium.r2.shared.publication.Publication
 
-public object RestorationNotSupportedException : Exception(
+public class RestorationNotSupportedException : Exception(
     "Restoration of the navigator fragment after process death is not supported. You must pop it from the back stack or finish the host Activity before `onResume`."
 )
 

@@ -76,8 +76,8 @@ internal object SmilParser {
     }
 
     private fun mediaOverlayFromChildren(text: Url, children: List<MediaOverlayNode>): MediaOverlayNode {
-        require(children.isNotEmpty() && children.mapNotNull { it.audioFile }.distinct().size <= 1)
-        val audioChildren = children.mapNotNull { if (it.audioFile != null) it else null }
+        require(children.isNotEmpty() && children.map { it.audioFile }.distinct().size <= 1)
+        val audioChildren = children.map { it }
         val file = audioChildren.first().audioFile
         val start = audioChildren.first().clip.start ?: ""
         val end = audioChildren.last().clip.end ?: ""

@@ -765,7 +765,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     }
 
     @RequiresApi(Build.VERSION_CODES.M)
-    inner class Callback2Wrapper(
+    class Callback2Wrapper(
         val callback: ActionMode.Callback,
         val callback2: ActionMode.Callback2?,
     ) : ActionMode.Callback by callback, ActionMode.Callback2() {

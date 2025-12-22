@@ -213,6 +213,7 @@ public class HtmlResourceContentIterator internal constructor(
                     it.copy(locator = it.locator.update())
                 }
             )
+
             is AudioElement -> copy(locator = locator.update())
             is VideoElement -> copy(locator = locator.update())
             is ImageElement -> copy(locator = locator.update())
@@ -358,6 +359,7 @@ public class HtmlResourceContentIterator internal constructor(
                                         attributes = emptyList()
                                     )
                                 )
+
                                 "video" -> elements.add(
                                     VideoElement(
                                         locator = elementLocator,
@@ -365,7 +367,6 @@ public class HtmlResourceContentIterator internal constructor(
                                         attributes = emptyList()
                                     )
                                 )
-                                else -> {}
                             }
                         }
                     }
@@ -388,12 +389,10 @@ public class HtmlResourceContentIterator internal constructor(
                 val text = Parser.unescapeEntities(node.wholeText, false)
                 rawTextAcc += text
                 appendNormalisedText(text)
-            } else if (node is Element) {
-                if (node.isBlock) {
-                    assert(breadcrumbs.last().element == node)
-                    flushText()
-                    breadcrumbs.removeAt(breadcrumbs.lastIndex)
-                }
+            } else if (node is Element && node.isBlock) {
+                assert(breadcrumbs.last().element == node)
+                flushText()
+                breadcrumbs.removeAt(breadcrumbs.lastIndex)
             }
         }
 
@@ -443,6 +442,16 @@ public class HtmlResourceContentIterator internal constructor(
         }
 
         private fun flushSegment() {
+            // Early return if textAcc is empty to avoid unnecessary operations
+            if (textAcc.isEmpty()) {
+                if (rawTextAcc != "") {
+                    wholeRawTextAcc = (wholeRawTextAcc ?: "") + rawTextAcc
+                    elementRawTextAcc += rawTextAcc
+                }
+                rawTextAcc = ""
+                return
+            }
+
             var text = textAcc.toString()
             val trimmedText = text.trim()
 
@@ -507,10 +516,11 @@ private fun Locator.Text.Companion.trimmingText(text: String, before: String?): 
     )
 }
 
-private val Node.language: String? get() =
-    attr("xml:lang").takeUnless { it.isBlank() }
-        ?: attr("lang").takeUnless { it.isBlank() }
-        ?: parent()?.language
+private val Node.language: String?
+    get() =
+        attr("xml:lang").takeUnless { it.isBlank() }
+            ?: attr("lang").takeUnless { it.isBlank() }
+            ?: parent()?.language
 
 private fun Node.srcRelativeToHref(baseUrl: Url): Url? =
     attr("src")
@@ -534,6 +544,9 @@ private fun StringBuilder.appendNormalisedWhitespace(
     string: String,
     stripLeading: Boolean,
 ) {
+    // Early return for empty strings
+    if (string.isEmpty()) return
+
     var lastWasWhite = false
     var reachedNonWhite = false
     val len = string.length

@@ -4,29 +4,31 @@
 //  available in the top-level LICENSE file of the project.
 //
 
-import { isScrollModeEnabled } from "./utils";
 import { getCssSelector } from "css-selector-generator";
+import { isScrollModeEnabled } from "./utils";
 
 // See. https://github.com/JayPanoz/architecture/tree/touch-handling/misc/touch-handling
+// Use Set for O(1) lookup instead of array indexOf
+const INTERACTIVE_TAGS = new Set([
+  "a",
+  "audio",
+  "button",
+  "canvas",
+  "details",
+  "input",
+  "label",
+  "option",
+  "select",
+  "submit",
+  "textarea",
+  "video",
+]);
+
 export function nearestInteractiveElement(element) {
   if (element == null) {
     return null;
   }
-  var interactiveTags = [
-    "a",
-    "audio",
-    "button",
-    "canvas",
-    "details",
-    "input",
-    "label",
-    "option",
-    "select",
-    "submit",
-    "textarea",
-    "video",
-  ];
-  if (interactiveTags.indexOf(element.nodeName.toLowerCase()) != -1) {
+  if (INTERACTIVE_TAGS.has(element.nodeName.toLowerCase())) {
     return element.outerHTML;
   }
 
@@ -88,23 +90,35 @@ function isElementVisible(element) {
   }
 }
 
+// Cache computed styles to avoid repeated expensive calls
+const styleCache = new WeakMap();
+
 function shouldIgnoreElement(element) {
-  const elStyle = getComputedStyle(element);
-  if (elStyle) {
-    const display = elStyle.getPropertyValue("display");
-    if (display != "block") {
-      return true;
+  // Check cache first
+  let cachedStyle = styleCache.get(element);
+  if (!cachedStyle) {
+    const elStyle = getComputedStyle(element);
+    if (!elStyle) {
+      return false;
     }
-    // Cannot be relied upon, because web browser engine reports invisible when out of view in
-    // scrolled columns!
-    // const visibility = elStyle.getPropertyValue("visibility");
-    // if (visibility === "hidden") {
-    //     return false;
-    // }
-    const opacity = elStyle.getPropertyValue("opacity");
-    if (opacity === "0") {
-      return true;
-    }
+    cachedStyle = {
+      display: elStyle.getPropertyValue("display"),
+      opacity: elStyle.getPropertyValue("opacity")
+    };
+    styleCache.set(element, cachedStyle);
+  }
+  
+  if (cachedStyle.display != "block") {
+    return true;
+  }
+  // Cannot be relied upon, because web browser engine reports invisible when out of view in
+  // scrolled columns!
+  // const visibility = elStyle.getPropertyValue("visibility");
+  // if (visibility === "hidden") {
+  //     return false;
+  // }
+  if (cachedStyle.opacity === "0") {
+    return true;
   }
 
   return false;

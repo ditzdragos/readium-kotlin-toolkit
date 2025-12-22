@@ -205,7 +205,7 @@ public class PdfNavigatorFragment<S : Configurable.Settings, P : Configurable.Pr
         super.onResume()
 
         if (publication == dummyPublication) {
-            throw RestorationNotSupportedException
+            throw RestorationNotSupportedException()
         }
     }
 
@@ -267,5 +267,6 @@ public class PdfNavigatorFragment<S : Configurable.Settings, P : Configurable.Pr
     }
 }
 
-private val Locator.Locations.pageIndex: Int get() =
-    (page ?: position ?: 1) - 1
+private val Locator.Locations.pageIndex: Int
+    get() =
+        (page ?: position ?: 1) - 1

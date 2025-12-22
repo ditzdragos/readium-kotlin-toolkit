@@ -149,7 +149,7 @@ public class ImageNavigatorFragment private constructor(
         super.onResume()
 
         if (publication == dummyPublication) {
-            throw RestorationNotSupportedException
+            throw RestorationNotSupportedException()
         }
     }
 
