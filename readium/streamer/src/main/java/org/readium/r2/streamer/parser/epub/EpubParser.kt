@@ -39,6 +39,7 @@ import org.readium.r2.shared.util.resource.TransformingContainer
 import org.readium.r2.shared.util.use
 import org.readium.r2.shared.util.xml.ElementNode
 import org.readium.r2.streamer.parser.PublicationParser
+import timber.log.Timber
 
 /**
  * Parses a Publication from an EPUB publication.
@@ -191,15 +192,42 @@ public class EpubParser(
         val displayOptionsXml =
             container.readDecodeXmlOrNull("META-INF/com.apple.ibooks.display-options.xml")
                 ?: container.readDecodeXmlOrNull("META-INF/com.kobobooks.display-options.xml")
+                ?: return emptyMap()
 
-        return displayOptionsXml?.getFirst("platform", "")
-            ?.get("option", "")
-            ?.mapNotNull { element ->
+        // The iBooks / Kobo display options files are often XHTML documents with a default XML namespace
+        // (eg. xmlns="http://www.w3.org/1999/xhtml"). Queries without a namespace prefix won't
+        // match those nodes, so we try both direct namespace queries and namespace-agnostic queries.
+        // https://readium.org/architecture/streamer/parser/metadata#epub-2x-10
+
+        Timber.d("Display options XML: ${displayOptionsXml}")
+        val platform = findPlatform(displayOptionsXml)
+            ?: return emptyMap()
+
+        return platform.getAll()
+            .filter { it.name == "option" }
+            .mapNotNull { element ->
                 val optName = element.getAttr("name")
                 val optVal = element.text
                 if (optName != null && optVal != null) Pair(optName, optVal) else null
             }
-            ?.toMap().orEmpty()
+            .toMap()
+    }
+
+    private fun findPlatform(displayOptionsXml: ElementNode): ElementNode? {
+        // First try direct namespace queries (empty namespace)
+        val platformsWithNamespace = displayOptionsXml.get("platform", "")
+        val platform = platformsWithNamespace.firstOrNull { it.getAttr("name") == "*" }
+            ?: platformsWithNamespace.firstOrNull()
+        Timber.d("Platform namespace: ${platformsWithNamespace}")
+        Timber.d("Platform: ${platform}")
+        if (platform != null) {
+            return platform
+        }
+
+        // Fallback to namespace-agnostic queries (match by local name only)
+        val allPlatforms = displayOptionsXml.getAll().filter { it.name == "platform" }
+        return allPlatforms.firstOrNull { it.getAttr("name") == "*" }
+            ?: allPlatforms.firstOrNull()
     }
 
     public suspend inline fun <R> Readable.readDecodeOrElse(
