@@ -1303,14 +1303,6 @@ public class EpubNavigatorFragment public constructor(
     private fun cleanupResources() {
         Timber.d("Cleaning up navigator resources")
         try {
-            // Clean up fragments in adapter
-            r2PagerAdapter?.mFragments?.forEach { _, fragment ->
-                if (fragment is R2EpubPageFragment) {
-                    fragment.webView?.removeAllViews()
-                    fragment.webView?.destroy()
-                }
-            }
-
             // Clear adapter references
             if (::resourcePager.isInitialized) {
                 resourcePager.adapter = null

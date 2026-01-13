@@ -402,34 +402,9 @@ internal class R2EpubPageFragment : Fragment() {
         super.onDestroyView()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        runCatching { destroyWebViewSilently(webView) }
-        runCatching { destroyWebViewSilently(webViewRight) }
-    }
-
     override fun onDetach() {
         super.onDetach()
-        runCatching { destroyWebViewSilently(webView) }
-        runCatching { destroyWebViewSilently(webViewRight) }
         pendingPageFinished.clear()
-    }
-
-    private fun destroyWebViewSilently(webView: R2WebView?) {
-        webView?.let { wv ->
-            runCatching { wv.stopLoading() }
-            runCatching { wv.loadUrl("about:blank") }
-            runCatching { wv.clearHistory() }
-            runCatching { (wv.parent as? ViewGroup)?.removeView(wv) }
-            runCatching { wv.removeAllViews() }
-            runCatching {
-                wv.listener = null
-                wv.webViewClient = object : WebViewClientCompat() {}
-                wv.setOnLongClickListener(null)
-                wv.setOnTouchListener(null)
-            }
-            runCatching { wv.destroy() }
-        }
     }
 
     internal val paddingTop: Int get() = containerView.paddingTop
