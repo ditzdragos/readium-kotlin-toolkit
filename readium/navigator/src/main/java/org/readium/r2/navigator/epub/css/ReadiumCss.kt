@@ -52,57 +52,45 @@ internal data class ReadiumCss(
     private fun injectStyles(content: StringBuilder) {
         val hasStyles = content.hasStyles()
 
-        val headBeforeIndex = content.indexForOpeningTag("head")
-        content.insert(
-            headBeforeIndex,
-            "\n" + buildList {
-                addAll(fontsInjectableLinks)
-
-                add(stylesheetLink(beforeCss))
-
-//                // Fix Readium CSS issue with the positioning of <audio> elements.
-//                // https://github.com/readium/readium-css/issues/94
-//                // https://github.com/readium/r2-navigator-kotlin/issues/193
-//                add("<style>audio[controls] { width: revert; height: revert; }</style>")
-
-                // Fix broken pagination when a book contains `overflow-x: hidden`.
-                // https://github.com/readium/kotlin-toolkit/issues/292
-                // Inspired by https://github.com/readium/readium-css/issues/119#issuecomment-1302348238
-                add(
-                    """
+        // Pre-build strings to avoid multiple allocations
+        val headBeforeContent = buildString {
+            append("\n")
+            fontsInjectableLinks.forEach { append(it).append("\n") }
+            append(stylesheetLink(beforeCss)).append("\n")
+            append(
+                """
                 <style>
                     :root[style], :root { overflow: visible !important; }
                     :root[style] > body, :root > body { overflow: visible !important; }
                 </style>
-                    """.trimMargin()
-                )
+                """.trimMargin()
+            ).append("\n")
+            append(DROP_CAPS_STYLE).append("\n")
+            if (!hasStyles) {
+                append(stylesheetLink(defaultCss)).append("\n")
+            }
+        }
 
-                // Fix for drop caps styles
-                add(DROP_CAPS_STYLE)
+        val headBeforeIndex = content.indexForOpeningTag("head")
+        content.insert(headBeforeIndex, headBeforeContent)
 
-                if (!hasStyles) {
-                    add(stylesheetLink(defaultCss))
-                }
-            }.joinToString("\n") + "\n"
-        )
-
-        val endHeadIndex = content.indexForClosingTag("head")
-        content.insert(
-            endHeadIndex,
-            "\n" + buildList {
-                add(stylesheetLink(afterCss))
-
-                if (fontsInjectableCss.isNotEmpty()) {
-                    add(
-                        """
+        // Pre-build end head content
+        val endHeadContent = buildString {
+            append("\n")
+            append(stylesheetLink(afterCss)).append("\n")
+            if (fontsInjectableCss.isNotEmpty()) {
+                append(
+                    """
                     <style type="text/css">
                     ${fontsInjectableCss.joinToString("\n")}
                     </style>
-                        """.trimIndent()
-                    )
-                }
-            }.joinToString("\n") + "\n"
-        )
+                    """.trimIndent()
+                ).append("\n")
+            }
+        }
+
+        val endHeadIndex = content.indexForClosingTag("head")
+        content.insert(endHeadIndex, endHeadContent)
     }
 
     private val stylesheetsFolder by lazy {
@@ -165,13 +153,13 @@ internal data class ReadiumCss(
      */
     private fun CharSequence.hasStyles(): Boolean {
         return indexOf("<link ", 0, true) != -1 ||
-                indexOf(" style=", 0, true) != -1 ||
-                Regex(
-                    "<style.*?>",
-                    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-                ).containsMatchIn(
-                    this
-                )
+            indexOf(" style=", 0, true) != -1 ||
+            Regex(
+                "<style.*?>",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            ).containsMatchIn(
+                this
+            )
     }
 
     private fun stylesheetLink(href: Url): String =
@@ -205,8 +193,19 @@ internal data class ReadiumCss(
             Layout.HtmlDir.Rtl -> "rtl"
         } ?: return
 
-        // Removes any dir attributes in html/body.
-        content.replace(0, content.length, content.replace(dirRegex, "$1"))
+        // Removes any dir attributes in html/body using a more memory-efficient approach
+        // Convert to string once, do all replacements, then update StringBuilder
+        // This is more efficient than the previous approach which did replace(0, length, replace(...))
+        val contentString = content.toString()
+        val cleanedContent = dirRegex.replace(contentString) { matchResult ->
+            matchResult.groupValues[1] // Replace with just the tag, removing dir attribute
+        }
+
+        // Only update if content changed to avoid unnecessary operations
+        if (cleanedContent != contentString) {
+            content.setLength(0)
+            content.append(cleanedContent)
+        }
 
         val injectable = " dir=\"$dir\""
         content.insert(content.indexForTagAttributes("html"), injectable)
@@ -248,10 +247,10 @@ internal data class ReadiumCss(
 
     private fun CharSequence.indexForOpeningTag(tag: String): Int =
         (
-                Regex("""<$tag.*?>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                    .find(this, 0)
-                    ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
-                ).range.last + 1
+            Regex("""<$tag.*?>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(this, 0)
+                ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
+            ).range.last + 1
 
     private fun CharSequence.indexForClosingTag(tag: String): Int =
         indexOf("</$tag>", 0, true)
@@ -260,10 +259,10 @@ internal data class ReadiumCss(
 
     private fun CharSequence.indexForTagAttributes(tag: String): Int =
         (
-                indexOf("<$tag", 0, true)
-                    .takeIf { it != -1 }
-                    ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
-                ) + tag.length + 1
+            indexOf("<$tag", 0, true)
+                .takeIf { it != -1 }
+                ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
+            ) + tag.length + 1
 }
 
 private val dirRegex = Regex(

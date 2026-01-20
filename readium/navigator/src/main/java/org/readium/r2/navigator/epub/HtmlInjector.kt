@@ -79,9 +79,14 @@ internal fun Resource.injectHtml(
         if (headEndIndex == -1) {
             Timber.e("</head> closing tag not found in resource with href: $sourceUrl")
         } else {
-            content = StringBuilder(content)
-                .insert(headEndIndex, "\n" + injectables.joinToString("\n") + "\n")
-                .toString()
+            // Pre-build injectable string to avoid multiple allocations
+            val injectableContent = "\n" + injectables.joinToString("\n") + "\n"
+            // Use StringBuilder efficiently - insert directly without creating intermediate strings
+            val sb = StringBuilder(content.length + injectableContent.length)
+            sb.append(content, 0, headEndIndex)
+            sb.append(injectableContent)
+            sb.append(content, headEndIndex, content.length)
+            content = sb.toString()
         }
 
         Try.success(content.toByteArray())
