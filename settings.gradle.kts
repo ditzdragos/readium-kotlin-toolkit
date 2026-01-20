@@ -85,9 +85,9 @@ project(":readium:navigators:common")
 // project(":readium:adapters:exoplayer:audio")
 //     .name = "readium-adapter-exoplayer-audio"
 
-include(":readium:opds")
-project(":readium:opds")
-    .name = "readium-opds"
+// include(":readium:opds")
+// project(":readium:opds")
+//     .name = "readium-opds"
 
 include(":readium:shared")
 project(":readium:shared")
