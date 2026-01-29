@@ -6,6 +6,7 @@
 
 // Base script used by both reflowable and fixed layout resources.
 
+import "./polyfills";
 import "./gestures";
 import "./keyboard";
 import {
