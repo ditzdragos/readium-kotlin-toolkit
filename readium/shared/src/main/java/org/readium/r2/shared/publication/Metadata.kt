@@ -174,7 +174,7 @@ public data class Metadata(
     /**
      * Serializes a [Metadata] to its RWPM JSON representation.
      */
-    override fun toJSON(): JSONObject = JSONObject(otherMetadata).apply {
+    override fun toJSON(): JSONObject = JSONObject(otherMetadata.toMutableMap()).apply {
         put("identifier", identifier)
         put("@type", type)
         putIfNotEmpty("conformsTo", conformsTo.map { it.uri })
