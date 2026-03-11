@@ -9,6 +9,7 @@
 
 package org.readium.r2.lcp.license
 
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
 import org.readium.r2.lcp.BuildConfig.DEBUG
@@ -52,8 +53,6 @@ private val supportedProfiles = listOf(
 internal typealias Context = Either<LcpClient.Context, LcpError.LicenseStatus>
 
 internal typealias Observer = (ValidatedDocuments?, Exception?) -> Unit
-
-private var observers: MutableList<Pair<Observer, ObserverPolicy>> = mutableListOf()
 
 internal enum class ObserverPolicy {
     Once,
@@ -127,6 +126,7 @@ internal class LicenseValidation(
     val context: android.content.Context,
     val onLicenseValidated: (LicenseDocument) -> Unit,
 ) {
+    private val observers = CopyOnWriteArrayList<Pair<Observer, ObserverPolicy>>()
 
     var state: State = State.start
         set(newValue) {
@@ -351,12 +351,9 @@ internal class LicenseValidation(
 
     private fun notifyObservers(documents: ValidatedDocuments?, error: Exception?) {
         for (observer in observers) {
-//            Timber.d("observers $observers")
             observer.first(documents, error)
         }
-//        Timber.d("observers $observers")
-        observers = (observers.filter { it.second != ObserverPolicy.Once }).toMutableList()
-//        Timber.d("observers $observers")
+        observers.removeAll { it.second == ObserverPolicy.Once }
     }
 
     private fun validateLicense(data: ByteArray) {
@@ -525,7 +522,7 @@ internal class LicenseValidation(
             if (notified && policy != ObserverPolicy.Always) {
                 return
             }
-            observers.add(Pair(observer, policy))
+            licenseValidation.observers.add(Pair(observer, policy))
         }
     }
 }
