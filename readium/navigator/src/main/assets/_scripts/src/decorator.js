@@ -15,10 +15,43 @@ import { log, logError, rangeFromLocator } from "./utils";
 let styles = new Map();
 let groups = new Map();
 var lastGroupId = 0;
+const PAGE_NUMBER_DEBUG = false;
+const PAGE_NUMBER_REGEX = /^\d+$/;
+
+const ENTITY_MAP = {
+  "&rsquo;": "'",
+  "&lsquo;": "'",
+  "&rdquo;": '"',
+  "&ldquo;": '"',
+  "&ndash;": "–",
+  "&mdash;": "—",
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+};
+const ENTITY_PATTERN = new RegExp(Object.keys(ENTITY_MAP).join("|"), "gi");
+
+const LIGATURE_MAP = {
+  "\uFB00": "ff",
+  "\uFB01": "fi",
+  "\uFB02": "fl",
+  "\uFB03": "ffi",
+  "\uFB04": "ffl",
+  "\uFB05": "st",
+  "\uFB06": "st",
+  "\u0132": "IJ",
+  "\u0133": "ij",
+  "\u0152": "OE",
+  "\u0153": "oe",
+};
+const LIGATURE_PATTERN = new RegExp(Object.keys(LIGATURE_MAP).join("|"), "g");
 
 // Cache for expensive computed style calls
 let documentWritingModeCache = null;
 let documentColumnCountCache = null;
+let viewportListenersAttached = false;
+let relayoutScheduled = false;
 
 /**
  * Returns the document body's writing mode (cached).
@@ -36,6 +69,58 @@ function getDocumentWritingMode() {
 function clearStyleCache() {
   documentWritingModeCache = null;
   documentColumnCountCache = null;
+}
+
+function pageNumberLog(...args) {
+  if (PAGE_NUMBER_DEBUG) {
+    log(...args);
+  }
+}
+
+function safeRatio(a, b) {
+  if (a === 0 && b === 0) {
+    return 1;
+  }
+  if (a === 0 || b === 0) {
+    return 0;
+  }
+  return a < b ? a / b : b / a;
+}
+
+function requestGroupsLayout() {
+  if (relayoutScheduled) {
+    return;
+  }
+  relayoutScheduled = true;
+
+  requestAnimationFrame(() => {
+    relayoutScheduled = false;
+    clearStyleCache();
+    groups.forEach(function (group) {
+      group.requestLayout();
+    });
+  });
+}
+
+function setupViewportRelayoutListeners() {
+  if (viewportListenersAttached) {
+    return;
+  }
+  viewportListenersAttached = true;
+
+  const onViewportChanged = () => requestGroupsLayout();
+
+  window.addEventListener("readium:viewport-changed", onViewportChanged);
+  window.addEventListener("orientationchange", onViewportChanged, {
+    passive: true,
+  });
+  window.addEventListener("resize", onViewportChanged, { passive: true });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", onViewportChanged, {
+      passive: true,
+    });
+  }
 }
 
 /**
@@ -79,6 +164,26 @@ export function registerTemplates(newStyles) {
   `;
   document.head.appendChild(containStyle);
 
+  let imgStyle = document.createElement("style");
+  imgStyle.innerHTML = `
+    img {
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(imgStyle);
+
+  // Decode common entities before further text normalization.
+  document.body.innerHTML = document.body.innerHTML.replace(
+    ENTITY_PATTERN,
+    (match) => ENTITY_MAP[match.toLowerCase()]
+  );
+
+  // Replace common Unicode ligatures.
+  document.body.innerHTML = document.body.innerHTML.replace(
+    LIGATURE_PATTERN,
+    (match) => LIGATURE_MAP[match]
+  );
+
   // Add newlines before <div> and <p> tags to preserve line breaks if a new line is not present
   document.body.innerHTML = document.body.innerHTML.replace(
     /([^\n])<(div|p)/g,
@@ -98,14 +203,12 @@ export function registerTemplates(newStyles) {
     "$&\n"
   );
 
-  // Replace Unicode ligature 'ff' (U+FB00) with regular 'ff'
-  document.body.innerHTML = document.body.innerHTML.replace(/\ufb00/g, "ff");
-
   // Process span elements to ensure proper text spacing
   processSpansForTextSpacing();
 
   // Setup scaling listeners after initial DOM modifications
   setupScalingListeners();
+  setupViewportRelayoutListeners();
 }
 
 /**
@@ -116,19 +219,18 @@ function processSpansForTextSpacing() {
   // Get all spans in the document - cache the query result
   const spans = document.querySelectorAll("span");
   const spansLength = spans.length;
-  
+
   // Early return if no spans
-  if (spansLength === 0) return;
+  if (spansLength === 0) {
+    return;
+  }
 
   // Group spans by parent element to analyze siblings
-  // Use Map for better performance with many spans
   const spansByParent = new Map();
   for (let i = 0; i < spansLength; i++) {
     const span = spans[i];
     const parent = span.parentElement;
-    const parentKey = parent
-      ? parent.tagName + "_" + (parent.id || `p${i}`)
-      : "orphan";
+    const parentKey = parent || span;
     if (!spansByParent.has(parentKey)) {
       spansByParent.set(parentKey, []);
     }
@@ -136,71 +238,35 @@ function processSpansForTextSpacing() {
   }
 
   // First pass: Process spans and mark those that need spacing
-  for (const [parentKey, siblingSpansArray] of spansByParent) {
-    const siblingSpans = siblingSpansArray.slice();
-
-    // Sort spans by their vertical position (bottom value)
-    siblingSpans.sort((a, b) => {
-      const aBottom = parseFloat(a.style.bottom || "0");
-      const bBottom = parseFloat(b.style.bottom || "0");
-      return bBottom - aBottom; // Sort from top to bottom (larger bottom value is higher)
-    });
-
-    // Analyze bottom distances between adjacent siblings
+  const spansNeedingSpacing = [];
+  for (const siblingSpans of spansByParent.values()) {
     for (let i = 1; i < siblingSpans.length; i++) {
       const currentSpan = siblingSpans[i];
       const previousSpan = siblingSpans[i - 1];
 
       const currentBottom = parseFloat(currentSpan.style.bottom || "0");
       const previousBottom = parseFloat(previousSpan.style.bottom || "0");
+      const currentLeft = parseFloat(currentSpan.style.left || "0");
+      const previousLeft = parseFloat(previousSpan.style.left || "0");
 
-      // Calculate vertical distance between spans
-      const bottomDifference = Math.abs(previousBottom - currentBottom);
+      const bottomDifference = safeRatio(previousBottom, currentBottom);
+      const leftDifference = safeRatio(previousLeft, currentLeft);
 
-      // If there's a significant vertical gap, mark for spacing
-      if (bottomDifference > 30) {
-        previousSpan.setAttribute("data-needs-spacing", "true");
+      if (
+        bottomDifference < 0.87 ||
+        leftDifference > 0.99 ||
+        leftDifference < 0.1
+      ) {
+        spansNeedingSpacing.push(currentSpan);
       }
     }
   }
 
   // Second pass: Insert spaces where needed
-  // Collect spans that need spacing during first pass to avoid second query
-  const spansNeedingSpacing = [];
-  for (const [parentKey, siblingSpansArray] of spansByParent) {
-    for (const span of siblingSpansArray) {
-      if (span.hasAttribute("data-needs-spacing")) {
-        spansNeedingSpacing.push(span);
-      }
-    }
-  }
-  
-  for (const span of spansNeedingSpacing) {
-    // Insert a space at the beginning of the span
-    const textNode = span.firstChild;
-    if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-      textNode.textContent = " " + textNode.textContent;
-    } else {
-      span.insertBefore(document.createTextNode(" "), span.firstChild);
-    }
-
-    // Remove the marker attribute
-    span.removeAttribute("data-needs-spacing");
-  }
-
-  // Handle spans that contain word-spacing style (these already have explicit spacing)
-  // Only query if we have spans to check
-  const wordSpacedSpans = spansLength > 0 
-    ? document.querySelectorAll('span[style*="word-spacing"]')
-    : [];
-  for (let i = 0; i < wordSpacedSpans.length; i++) {
-    const span = wordSpacedSpans[i];
-    // Ensure the browser's implicit spacing is preserved in extracted text
-    if (span.textContent.trim() && !span.textContent.includes(" ")) {
-      span.innerHTML = span.innerHTML.replace(
-        /(<[^>]+>)([^\s<]+)(<[^>]+>|$)/g,
-        "$1$2 $3"
-      );
+  for (let i = 0; i < spansNeedingSpacing.length; i++) {
+    const span = spansNeedingSpacing[i];
+    if (span.parentElement) {
+      span.parentElement.insertBefore(document.createTextNode(" "), span);
     }
   }
 }
@@ -271,7 +337,6 @@ export function handleDecorationClickEvent(event, clickEvent) {
  */
 export function DecorationGroup(groupId, groupName) {
   var items = [];
-  var lastItemId = 0;
   var container = null;
   var activable = false;
   var visibleContainers = [];
@@ -283,6 +348,17 @@ export function DecorationGroup(groupId, groupName) {
 
   function setActivable() {
     activable = true;
+  }
+
+  function emitHighlightRect(item, rect, ocrLayout = false) {
+    Android.onHighlightRect(
+      JSON.stringify({
+        id: item.decoration.id,
+        group: groupName,
+        rect: rect,
+        ocrLayout: ocrLayout,
+      })
+    );
   }
 
   /**
@@ -297,10 +373,10 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    log("adding decoration",groupName, JSON.stringify(decoration));
-    let item = { id, decoration, range };
+    log("adding decoration", groupName, JSON.stringify(decoration));
+    let item = { id, decoration, range, enhanced: false };
     items.push(item);
-    layout(item);
+    layout(item, true);
   }
 
   function addEnhanced(decoration) {
@@ -312,7 +388,7 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    let item = { id, decoration, range };
+    let item = { id, decoration, range, enhanced: true };
     items.push(item);
     layoutEnhanced(item, true);
   }
@@ -340,10 +416,10 @@ export function DecorationGroup(groupId, groupName) {
    */
   function update(decoration, enhanced) {
     remove(decoration.id);
-    if(enhanced){
-        addEnhanced(decoration);
-    }else{
-        add(decoration);
+    if (enhanced) {
+      addEnhanced(decoration);
+    } else {
+      add(decoration);
     }
   }
 
@@ -356,15 +432,14 @@ export function DecorationGroup(groupId, groupName) {
   }
 
   function clearAllEnhanced() {
-    log("clearing all enhanced ",groupName, items);
-      visibleContainers.forEach((container) => {
-         log(`clearing container: ${container.id}`);
-         container.remove();
-         container = null;
-       });
+    log("clearing all enhanced ", groupName, items);
+    visibleContainers.forEach((container) => {
+      log(`clearing container: ${container.id}`);
+      container.remove();
+    });
 
-       visibleContainers.length = 0;
-       visibleContainersMap.clear();
+    visibleContainers.length = 0;
+    visibleContainersMap.clear();
   }
 
   function clearEnhanced(decorationId) {
@@ -377,8 +452,11 @@ export function DecorationGroup(groupId, groupName) {
       }
     });
 
-    // Optionally, remove the item from the items array if you want to stop tracking it
-    items = items.filter((item) => item.decoration.id !== decorationId);
+    for (let index = items.length - 1; index >= 0; index--) {
+      if (items[index].decoration.id === decorationId) {
+        items.splice(index, 1);
+      }
+    }
   }
 
   /**
@@ -387,21 +465,27 @@ export function DecorationGroup(groupId, groupName) {
    * To be called after reflowing the resource, for example.
    */
   function requestLayout() {
-    log("requesting layout ",groupName, items.length);
+    log("requesting layout ", groupName, items.length);
     clearContainer();
     clearAllEnhanced();
-    items.forEach((item) => layoutEnhanced(item));
+    items.forEach((item) => {
+      if (item.enhanced) {
+        layoutEnhanced(item, false);
+      } else {
+        layout(item, false);
+      }
+    });
   }
 
   /**
    * Layouts a single Decoration item.
    */
-  function layout(item) {
+  function layout(item, postMessage = true) {
     let groupContainer = requireContainer();
 
     let style = styles.get(item.decoration.style);
     if (!style) {
-      logError("Unknown decoration style: ",item.decoration.style);
+      logError(`Unknown decoration style: ${item.decoration.style}`);
       return;
     }
 
@@ -415,7 +499,7 @@ export function DecorationGroup(groupId, groupName) {
       documentWritingMode === "vertical-rl" ||
       documentWritingMode === "vertical-lr";
 
-    const scrollingElement = document.scrollingElement;
+    const scrollingElement = document.scrollingElement || document.documentElement;
     const { scrollLeft: xOffset, scrollTop: yOffset } = scrollingElement;
     const viewportWidth = isVertical ? window.innerHeight : window.innerWidth;
     const viewportHeight = isVertical ? window.innerWidth : window.innerHeight;
@@ -524,7 +608,7 @@ export function DecorationGroup(groupId, groupName) {
       elementTemplate = template.content.firstElementChild;
     } catch (error) {
       logError(
-        "Invalid decoration element ",item.decoration.element,": ",error.message
+        `Invalid decoration element "${item.decoration.element}": ${error.message}`
       );
       return;
     }
@@ -532,7 +616,8 @@ export function DecorationGroup(groupId, groupName) {
     if (style.layout === "boxes") {
       const doNotMergeHorizontallyAlignedRects =
         !documentWritingMode.startsWith("vertical");
-      const startElement = getContainingElement(item.range.startContainer);
+      const startElement =
+        getContainingElement(item.range.startContainer) || document.body;
       // Decorated text may have a different writingMode from document body
       const decoratorWritingMode = getComputedStyle(startElement).writingMode;
 
@@ -564,8 +649,8 @@ export function DecorationGroup(groupId, groupName) {
       positionElement(bounds, boundingRect, boundingRect, documentWritingMode);
 
       itemContainer.append(bounds);
-    }else{
-        log("style layout: ",groupName,style.layout);
+    } else {
+      log("style layout: ", groupName, style.layout);
     }
 
     groupContainer.append(itemContainer);
@@ -577,260 +662,230 @@ export function DecorationGroup(groupId, groupName) {
       item.clickableElements = Array.from(itemContainer.children);
     }
 
-    Android.onHighlightRect(
-            JSON.stringify({
-              id: item.decoration.id,
-              group: groupName,
-              rect: toNativeRect(boundingRect)
-            })
-          );
+    if (postMessage) {
+      emitHighlightRect(item, toNativeRect(boundingRect), false);
+    }
   }
 
-    // Cache regex to avoid recompilation
-    const PAGE_NUMBER_REGEX = /^\d+$/;
-    
-    function isPageNumber(text) {
-      if (!text) {
-        log(`PAGE NUMBER DEBUG :: isPageNumber received null/undefined/empty text`);
-        return false;
-      }
-      const trimmedText = text.trim();
-      const isPageNum = PAGE_NUMBER_REGEX.test(trimmedText);
-      log(`PAGE NUMBER DEBUG :: isPageNumber("${text}") -> trimmed: "${trimmedText}" -> result: ${isPageNum}`);
-      // Only return true for strings that consist entirely of digits
-      return isPageNum;
+  function isPageNumber(text) {
+    return !!text && PAGE_NUMBER_REGEX.test(text.trim());
+  }
+
+  function layoutEnhanced(item, postMessage = true) {
+    const style = styles.get(item.decoration.style);
+    if (!style) {
+      logError(`Unknown decoration style: ${item.decoration.style}`);
+      return;
     }
 
+    function postMessageWithInvalidRect() {
+      if (postMessage) {
+        emitHighlightRect(item, { left: 0, top: 0, width: 0, height: 0 }, false);
+      }
+    }
 
-  function layoutEnhanced(item, postMessage) {
-      log(`PAGE NUMBER DEBUG :: layoutEnhanced called for decoration id: ${item.decoration.id}, group: ${groupName}`);
-
-      let style = styles.get(item.decoration.style);
-      if (!style) {
-        logError(
-              "Unknown decoration style ",item.decoration.style
-            );
+    let boundingRect;
+    let pageIndex;
+    const viewportWidth = Math.max(window.innerWidth || 0, 1);
+    try {
+      boundingRect = item.range.getBoundingClientRect();
+      const userInfo = item.decoration.userInfo || {};
+      const shouldIgnoreOffscreen = userInfo.shoulNotBeIgnored !== true;
+      if (
+        shouldIgnoreOffscreen &&
+        (boundingRect.left + boundingRect.width < 0 ||
+          boundingRect.top + boundingRect.height < 0)
+      ) {
+        postMessageWithInvalidRect();
         return;
       }
-        function postMessageWithInvalidRect() {
-          logError('fallback to invalid rect');
-          if (postMessage) {
-            Android.onHighlightRect(
-                      JSON.stringify({
-                        id: item.decoration.id,
-                        group: groupName,
-                        rect: { left: 0, top: 0, width: 0, height: 0 }
-                      })
-                    );
+
+      pageIndex = Math.floor((boundingRect.left + window.scrollX) / viewportWidth);
+      if (!Number.isFinite(pageIndex)) {
+        postMessageWithInvalidRect();
+        return;
+      }
+      pageIndex = Math.max(0, pageIndex);
+    } catch (error) {
+      logError(`Error calculating page index: ${error.message}`);
+      postMessageWithInvalidRect();
+      return;
+    }
+
+    let startNode = item.range.startContainer;
+    if (startNode && startNode.nodeType === Node.TEXT_NODE) {
+      startNode = startNode.parentElement;
+    }
+
+    const text = item.decoration.locator.text.highlight || "";
+    const startTime = performance.now();
+    if (isPageNumber(text)) {
+      pageNumberLog(`PAGE NUMBER :: page number detected: ${text}`);
+
+      const isAtTopOrBottom =
+        boundingRect.top < window.innerHeight * 0.2 ||
+        boundingRect.top > window.innerHeight * 0.8;
+
+      if (isAtTopOrBottom) {
+        pageNumberLog(`PAGE NUMBER :: is at top or bottom: ${text}`);
+
+        const before = item.decoration.locator.text.before || "";
+        const after = item.decoration.locator.text.after || "";
+
+        const beforeEndsWithPunctuationAndWhitespace = /[.!?;:]\s*$/.test(
+          before
+        );
+        const beforeHasMultipleNewlines = /\n\s*\n/.test(before);
+        const beforeEndsWithSignificantWhitespace = /\s{2,}$/.test(before);
+
+        const beforeIsIsolated =
+          before.length === 0 || before.endsWith("\n") || !/[a-zA-Z0-9]/.test(before);
+        const afterIsIsolated =
+          after.length === 0 || after.startsWith("\n") || !/[a-zA-Z0-9]/.test(after);
+
+        let isDOMIsolated = false;
+        try {
+          let nodeForCheck = item.range.startContainer;
+          if (nodeForCheck.nodeType === Node.TEXT_NODE) {
+            nodeForCheck = nodeForCheck.parentElement;
           }
+
+          const parentText = nodeForCheck.textContent.trim();
+          const isOnlyPageNumber = parentText === text.trim();
+          const parentHasMinimalContent = parentText.length <= 5;
+
+          isDOMIsolated = isOnlyPageNumber || parentHasMinimalContent;
+
+          pageNumberLog(
+            `PAGE NUMBER :: DOM isolation check - parentText: "${parentText}", isOnlyPageNumber: ${isOnlyPageNumber}, isDOMIsolated: ${isDOMIsolated}`
+          );
+        } catch (error) {
+          pageNumberLog(
+            `PAGE NUMBER :: DOM isolation check failed: ${error.message}`
+          );
         }
 
-      // Get the bounding rect for the decoration (cache this expensive call)
-      // Only call once and reuse throughout the function
-      let boundingRect = item.range.getBoundingClientRect();
-      log(`PAGE NUMBER DEBUG :: boundingRect: top=${boundingRect.top}, left=${boundingRect.left}, width=${boundingRect.width}, height=${boundingRect.height}`);
+        const isIsolatedPageNumber = beforeIsIsolated && afterIsIsolated;
+        const isIsolatedWithEnhancements =
+          isIsolatedPageNumber ||
+          (isDOMIsolated && afterIsIsolated) ||
+          (beforeEndsWithPunctuationAndWhitespace &&
+            isDOMIsolated &&
+            after.length === 0) ||
+          (beforeHasMultipleNewlines &&
+            (after.length === 0 || after.startsWith("\n"))) ||
+          (beforeEndsWithSignificantWhitespace &&
+            isDOMIsolated &&
+            after.length === 0);
 
-      // Calculate which page (container) this decoration belongs to based on its left position
-      let viewportWidth = window.innerWidth;
-      let pageIndex = Math.floor(
-        (boundingRect.left + window.scrollX) / viewportWidth
-      ); // Calculate the page index
-      log(`PAGE NUMBER DEBUG :: pageIndex: ${pageIndex}, viewportWidth: ${viewportWidth}, scrollX: ${window.scrollX}`);
-
-         if (
-                        boundingRect.left + boundingRect.width < 0 ||
-                        boundingRect.top + boundingRect.height < 0
-                      ) {
-                        log(`PAGE NUMBER DEBUG :: decoration is off-screen, returning early`);
-                        postMessageWithInvalidRect();
-                        return;
-                      }
-
-       // Optimize: Cache text and check page number early to avoid unnecessary work
-       const text = item.decoration.locator.text.highlight;
-       log(`PAGE NUMBER DEBUG :: text.highlight: "${text}"`);
-       const isPageNum = isPageNumber(text);
-       
-       if (isPageNum) {
-             log(`PAGE NUMBER DEBUG :: Page number detected: "${text}"`);
-
-             // Calculate absolute position in document
-             const absoluteTop = boundingRect.top + window.scrollY;
-             const absoluteBottom = absoluteTop + boundingRect.height;
-             
-             log(`PAGE NUMBER DEBUG :: absoluteTop: ${absoluteTop}, absoluteBottom: ${absoluteBottom}, scrollY: ${window.scrollY}`);
-
-             // Get document height to determine page boundaries
-             const documentHeight = Math.max(
-               document.body.scrollHeight,
-               document.body.offsetHeight,
-               document.documentElement.clientHeight,
-               document.documentElement.scrollHeight,
-               document.documentElement.offsetHeight
-             );
-             
-             // Get actual content height by checking the last few elements
-             // This helps when document height includes extra padding/margins
-             // Cache this calculation per document (it doesn't change often)
-             let actualContentHeight = documentHeight;
-             try {
-               // More efficient: check last child and its siblings instead of all elements
-               const body = document.body;
-               if (body && body.lastElementChild) {
-                 // Batch getBoundingClientRect calls by getting all rects at once
-                 const lastElement = body.lastElementChild;
-                 const lastElementRect = lastElement.getBoundingClientRect();
-                 const lastElementBottom = lastElementRect.bottom + window.scrollY;
-                 
-                 // Only check up to 2 previous siblings to reduce DOM queries
-                 let maxBottom = lastElementBottom;
-                 let sibling = lastElement.previousElementSibling;
-                 let checkedCount = 0;
-                 const maxSiblingsToCheck = 2;
-                 
-                 while (sibling && checkedCount < maxSiblingsToCheck) {
-                   const rect = sibling.getBoundingClientRect();
-                   const bottom = rect.bottom + window.scrollY;
-                   if (bottom > maxBottom) maxBottom = bottom;
-                   sibling = sibling.previousElementSibling;
-                   checkedCount++;
-                 }
-                 actualContentHeight = Math.min(maxBottom + 50, documentHeight); // Add small buffer
-               }
-             } catch (e) {
-               // Fallback to documentHeight if calculation fails
-               log(`PAGE NUMBER DEBUG :: Error calculating actual content height: ${e.message}`);
-             }
-             
-             log(`PAGE NUMBER DEBUG :: documentHeight: ${documentHeight}, actualContentHeight: ${actualContentHeight}`);
-
-             // Check if near top (within 30% of document start)
-             // Use documentHeight for top since it's usually accurate
-             const topThreshold = documentHeight * 0.3;
-             const isAtTop = absoluteTop < topThreshold;
-             
-             // For bottom detection, use actualContentHeight as the primary reference
-             // since documentHeight may include extra padding/margins
-             // 1. Check if within bottom 25% of actual content (more conservative)
-             // 2. Check if within reasonable distance from actual content end (300px)
-             const bottomThresholdPercentage = actualContentHeight * 0.75; // Bottom 25% of actual content
-             const bottomThresholdDistance = actualContentHeight - 300; // Within 300px of actual content end
-             const distanceFromContentEnd = actualContentHeight - absoluteBottom;
-             const isNearContentEnd = distanceFromContentEnd < 300; // Within 300px of actual content end
-             
-             // Use the more lenient threshold based on actual content height
-             const bottomThreshold = Math.min(bottomThresholdPercentage, bottomThresholdDistance);
-             const isAtBottomByThreshold = absoluteBottom > bottomThreshold;
-             // Also check if very close to content end (within 150px) as a safety net
-             const isAtBottom = isAtBottomByThreshold || (distanceFromContentEnd < 150);
-             
-             log(`PAGE NUMBER DEBUG :: topThreshold: ${topThreshold}, bottomThreshold: ${bottomThreshold} (based on actualContentHeight)`);
-             log(`PAGE NUMBER DEBUG :: distanceFromContentEnd: ${distanceFromContentEnd}, isNearContentEnd: ${isNearContentEnd}`);
-             log(`PAGE NUMBER DEBUG :: isAtTop: ${isAtTop}, isAtBottom: ${isAtBottom} (byThreshold: ${isAtBottomByThreshold}, byDistance: ${distanceFromContentEnd < 150})`);
-
-             const isAtTopOrBottom = isAtTop || isAtBottom;
-             
-             log(`PAGE NUMBER DEBUG :: isAtTopOrBottom: ${isAtTopOrBottom}`);
-
-             if (isAtTopOrBottom) {
-               log(`PAGE NUMBER DEBUG :: Page number is at top or bottom, checking isolation`);
-
-               // Optimize: Cache these values to avoid repeated property access
-               const before = item.decoration.locator.text.before || "";
-               const after = item.decoration.locator.text.after || "";
-
-               log(`PAGE NUMBER DEBUG :: before: "${before}", after: "${after}"`);
-
-               // Optimize: Combine checks to reduce operations
-               const beforeIsIsolated = before.length === 0 || before.endsWith("\n") || !/[a-zA-Z0-9]/.test(before);
-               const afterIsIsolated = after.length === 0 || after.startsWith("\n") || !/[a-zA-Z0-9]/.test(after);
-
-               log(`PAGE NUMBER DEBUG :: beforeIsIsolated: ${beforeIsIsolated}, afterIsIsolated: ${afterIsIsolated}`);
-
-               // Isolated page number if both before and after match our criteria
-               if (beforeIsIsolated ||  afterIsIsolated) {
-                 log(`PAGE NUMBER DEBUG :: Page number is isolated, returning with invalid rect`);
-                 postMessageWithInvalidRect();
-                 return;
-               } else {
-                 log(`PAGE NUMBER DEBUG :: Page number is NOT isolated, continuing with layout`);
-               }
-             } else {
-               log(`PAGE NUMBER DEBUG :: Page number is NOT at top or bottom, continuing with layout`);
-             }
-           } else {
-             log(`PAGE NUMBER DEBUG :: Not a page number, continuing with normal layout`);
-           }
-
-      // Optimize: Cache scrolling element and offsets
-      let scrollingElement = document.scrollingElement;
-      let yOffset = scrollingElement.scrollTop;
-      let xOffset = window.scrollX - pageIndex * viewportWidth;
-
-      let visibleAreaResponse = applyContainmentToArea(pageIndex); // Get or create the container for this page
-      let visibleArea = visibleAreaResponse.visibleArea;
-      let newArea = visibleAreaResponse.new;
-
-      if (newArea) {
-        visibleContainers.push(visibleArea);
-      }
-
-      // Create the decoration element
-      let itemContainer = document.createElement("div");
-      itemContainer.id = item.id;
-      itemContainer.dataset.style = item.decoration.style;
-      itemContainer.style.pointerEvents = "none";
-
-      // Optimize: Cache element template creation
-      let elementTemplate;
-      try {
-        let template = document.createElement("template");
-        template.innerHTML = item.decoration.element.trim();
-        elementTemplate = template.content.firstElementChild;
-      } catch (error) {
-       logError(
-              `Invalid decoration element "${item.decoration.element}": ${error.message}`
-            );
-        return;
-      }
-
-      // Optimize: Position function with cached values
-      function positionElement(element, rect, boundingRect) {
-        element.style.position = "absolute";
-        const width = style.width;
-        
-        if (width === "wrap") {
-          element.style.width = `${rect.width}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${rect.left + xOffset}px`;
-          element.style.top = `${rect.top + yOffset}px`;
-        } else if (width === "viewport") {
-          element.style.width = `${viewportWidth}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${xOffset}px`;
-          element.style.top = `${rect.top + yOffset}px`;
-        } else if (width === "bounds") {
-          element.style.width = `${boundingRect.width}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${boundingRect.left + xOffset}px`;
-          element.style.top = `${rect.top + yOffset}px`;
-        } else if (width === "page") {
-          element.style.width = `${viewportWidth}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${xOffset}px`;
-          element.style.top = `${rect.top + yOffset}px`;
-        }
-      }
-
-      if (style.layout === "boxes") {
-        // Optimize: Get client rects once and sort efficiently
-        let clientRects = getClientRectsNoOverlap(
-          item.range,
-          true
+        const endTime = performance.now();
+        const elapsedTime = endTime - startTime;
+        pageNumberLog(
+          `PAGE NUMBER :: isolation check took ${elapsedTime.toFixed(
+            3
+          )} ms for: ${text}`
         );
 
-        // Optimize: Use more efficient sort
-        clientRects.sort((r1, r2) => r1.top - r2.top);
+        pageNumberLog(`PAGE NUMBER :: before: "${before}"`);
+        pageNumberLog(
+          `PAGE NUMBER :: before is empty: ${before.length === 0} | before ends in newline: ${before.endsWith(
+            "\n"
+          )} | before has no alphanumeric: ${!/[a-zA-Z0-9]/.test(before)}`
+        );
+        pageNumberLog(
+          `PAGE NUMBER :: before ends with punctuation+whitespace: ${beforeEndsWithPunctuationAndWhitespace} | has multiple newlines: ${beforeHasMultipleNewlines} | ends with significant whitespace: ${beforeEndsWithSignificantWhitespace}`
+        );
+
+        pageNumberLog(`PAGE NUMBER :: after: "${after}"`);
+        pageNumberLog(
+          `PAGE NUMBER :: after is empty: ${after.length === 0} | after begins with newline: ${after.startsWith(
+            "\n"
+          )} | after has no alphanumeric: ${!/[a-zA-Z0-9]/.test(after)}`
+        );
+        pageNumberLog(
+          `PAGE NUMBER :: original isolated: ${isIsolatedPageNumber} | with enhancements: ${isIsolatedWithEnhancements}`
+        );
+
+        if (isIsolatedWithEnhancements) {
+          pageNumberLog(`PAGE NUMBER :: is isolated: ${text}`);
+          postMessageWithInvalidRect();
+          return;
+        }
+      }
+    }
+
+    const scrollingElement = document.scrollingElement || document.documentElement;
+    const yOffset = scrollingElement.scrollTop;
+    const xOffset = window.scrollX - pageIndex * viewportWidth;
+    const visibleArea = applyContainmentToArea(pageIndex).visibleArea;
+
+    let itemContainer = document.createElement("div");
+    itemContainer.id = item.id;
+    itemContainer.dataset.style = item.decoration.style;
+    itemContainer.style.pointerEvents = "none";
+
+    let computedWidth;
+    let computedHeight;
+    let ocrLayout = false;
+    if (startNode && typeof startNode.closest === "function") {
+      const textOverlayElement = startNode.closest(".text-overlay");
+      if (textOverlayElement) {
+        ocrLayout = true;
+        const computedStyle = window.getComputedStyle(textOverlayElement);
+        computedWidth = computedStyle.width;
+        computedHeight = computedStyle.height;
+      }
+    }
+
+    let elementTemplate;
+    try {
+      let template = document.createElement("template");
+      template.innerHTML = item.decoration.element.trim();
+      elementTemplate = template.content.firstElementChild;
+    } catch (error) {
+      logError(
+        `Invalid decoration element "${item.decoration.element}": ${error.message}`
+      );
+      return;
+    }
+
+    function positionElement(element, rect, elementBoundingRect) {
+      element.style.position = "absolute";
+      const width = style.width;
+
+      if (width === "wrap") {
+        if (computedWidth !== undefined && computedHeight !== undefined) {
+          element.style.width = `${computedWidth}`;
+          element.style.height = `${computedHeight}`;
+        } else {
+          element.style.width = `${rect.width}px`;
+          element.style.height = `${rect.height}px`;
+        }
+        element.style.left = `${rect.left + xOffset}px`;
+        element.style.top = `${rect.top + yOffset}px`;
+      } else if (width === "viewport") {
+        element.style.width = `${viewportWidth}px`;
+        element.style.height = `${rect.height}px`;
+        element.style.left = `${xOffset}px`;
+        element.style.top = `${rect.top + yOffset}px`;
+      } else if (width === "bounds") {
+        element.style.width = `${elementBoundingRect.width}px`;
+        element.style.height = `${rect.height}px`;
+        element.style.left = `${elementBoundingRect.left + xOffset}px`;
+        element.style.top = `${rect.top + yOffset}px`;
+      } else if (width === "page") {
+        element.style.width = `${viewportWidth}px`;
+        element.style.height = `${rect.height}px`;
+        element.style.left = `${xOffset}px`;
+        element.style.top = `${rect.top + yOffset}px`;
+      }
+    }
+
+    try {
+      if (style.layout === "boxes") {
+        const clientRects = getClientRectsNoOverlap(item.range, true).sort(
+          (rectA, rectB) => rectA.top - rectB.top
+        );
 
         for (let clientRect of clientRects) {
           const line = elementTemplate.cloneNode(true);
@@ -844,19 +899,17 @@ export function DecorationGroup(groupId, groupName) {
         positionElement(bounds, boundingRect, boundingRect);
         itemContainer.append(bounds);
       }
+    } catch (error) {
+      logError(`Error calculating position: ${error.message}`);
+      postMessageWithInvalidRect();
+      return;
+    }
 
-      // Add the decoration to the corresponding visible area container (page)
-      visibleArea.append(itemContainer);
-      item.container = itemContainer;
+    visibleArea.append(itemContainer);
+    item.container = itemContainer;
 
     if (postMessage) {
-    Android.onHighlightRect(
-        JSON.stringify({
-          id: item.decoration.id,
-          group: groupName,
-          rect: toNativeRect(boundingRect)
-        })
-      );
+      emitHighlightRect(item, toNativeRect(boundingRect), ocrLayout);
     }
   }
 
@@ -898,12 +951,12 @@ export function DecorationGroup(groupId, groupName) {
         
         // Optimize: Batch style assignments
         const visibleAreaLeft = pageIndex * viewportWidth;
-        visibleArea.style.cssText = `position:absolute;left:${visibleAreaLeft}px;top:0;margin-top:0;width:${viewportWidth}px;height:${viewportHeight}px;pointer-events:none`;
-        
+        visibleArea.style.cssText = `position:absolute;left:${visibleAreaLeft}px;top:0px;margin-top:0px;width:${viewportWidth}px;height:${viewportHeight}px;pointer-events:none;z-index:999`;
+
         document.body.appendChild(visibleArea);
         newArea = true;
       }
-      
+
       // Cache in both array and map
       visibleContainers.push(visibleArea);
       visibleContainersMap.set(visibleAreaId, visibleArea);
@@ -943,7 +996,7 @@ window.addEventListener(
     // Will relayout all the decorations when the document body is resized.
     const body = document.body;
     var lastSize = { width: 0, height: 0 };
-      const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver(() => {
       if (
         lastSize.width === body.clientWidth &&
         lastSize.height === body.clientHeight
@@ -954,13 +1007,7 @@ window.addEventListener(
         width: body.clientWidth,
         height: body.clientHeight,
       };
-      
-      // Clear style cache on resize as styles may have changed
-      clearStyleCache();
-
-      groups.forEach(function (group) {
-        group.requestLayout();
-      });
+      requestGroupsLayout();
     });
     observer.observe(body);
   },

@@ -40,6 +40,21 @@ function debounce(func, wait, immediate) {
 
 // Cache for viewport meta tag query
 let cachedViewportMeta = null;
+let scalingListenersAttached = false;
+
+function emitViewportChangedEvent() {
+    try {
+        window.dispatchEvent(new CustomEvent("readium:viewport-changed", {
+            detail: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                scale: window.r2CurrentScale ?? 1.0,
+            },
+        }));
+    } catch (error) {
+        debugWarn("[R2Scale] Failed to dispatch viewport changed event", error);
+    }
+}
 
 /**
  * Applies initial scaling and centering to fixed-layout content.
@@ -87,6 +102,7 @@ export function applyInitialScaling() {
     // Fallback if meta tag is missing or invalid - crucial for FXL without viewport
     if (!contentWidth || !contentHeight) {
         debugLog('[R2Scale] No valid meta viewport dimensions found, using body scroll dimensions as fallback.');
+        window.r2ScalingInProgress = false;
         return;
     }
 
@@ -208,6 +224,7 @@ export function applyInitialScaling() {
     window.r2LastJSViewport = { width: viewportWidth, height: viewportHeight };
 
     debugLog(`[R2Scale] Universal scaling applied: ${contentWidth}x${contentHeight} (${dimensionMethod}) scaled to ${scale.toFixed(3)}`);
+    emitViewportChangedEvent();
 }
 
 /**
@@ -281,6 +298,7 @@ export function updateScaling() {
     window.r2CurrentScale = scale; // Update stored scale
     // Update the stored viewport dimensions
     window.r2LastJSViewport = { width: viewportWidth, height: viewportHeight };
+    emitViewportChangedEvent();
 }
 
 /**
@@ -295,5 +313,29 @@ export function setupScalingListeners() {
        applyInitialScaling();
     } else {
         debugLog("[R2Scale] No viewport meta tag found. Assuming reflowable content, scaling setup skipped.");
+    }
+
+    if (scalingListenersAttached) {
+        return;
+    }
+    scalingListenersAttached = true;
+
+    const onViewportChanged = debounce(function () {
+        if (!document.querySelector('meta[name="viewport"]')) {
+            return;
+        }
+
+        if (window.r2ScalingApplied) {
+            updateScaling();
+        } else {
+            applyInitialScaling();
+        }
+    }, 120);
+
+    window.addEventListener("resize", onViewportChanged, { passive: true });
+    window.addEventListener("orientationchange", onViewportChanged, { passive: true });
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", onViewportChanged, { passive: true });
     }
 }

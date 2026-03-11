@@ -78,6 +78,9 @@ public interface DecorableNavigator : Navigator {
         public fun onDecorationActivated(event: OnActivatedEvent): Boolean
 
         public fun onDecorationRect(group: String, rect: RectF): Boolean = false
+
+        public fun onDecorationRect(event: OnDecorationRectEvent): Boolean =
+            onDecorationRect(group = event.group, rect = event.rect)
     }
 
     /**
@@ -95,6 +98,19 @@ public interface DecorableNavigator : Navigator {
         val group: String,
         val rect: RectF? = null,
         val point: PointF? = null,
+    )
+
+    /**
+     * Holds metadata about a decoration rect layout event.
+     *
+     * @param group Name of the decoration group.
+     * @param rect Frame of the decoration rect in navigator view coordinates.
+     * @param ocrLayout Whether this rect was produced from an OCR text overlay layout.
+     */
+    public data class OnDecorationRectEvent(
+        val group: String,
+        val rect: RectF,
+        val ocrLayout: Boolean = false,
     )
 }
 

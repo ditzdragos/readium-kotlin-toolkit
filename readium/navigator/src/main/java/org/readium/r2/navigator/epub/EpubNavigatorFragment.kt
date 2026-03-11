@@ -835,9 +835,16 @@ public class EpubNavigatorFragment public constructor(
             id = id, group = group, rect = rect.adjustedToViewport(), point = point.adjustedToViewport()
         )
 
-        override fun onHighlightRect(id: DecorationId, group: String, rect: RectF): Boolean {
+        override fun onHighlightRect(
+            id: DecorationId,
+            group: String,
+            rect: RectF,
+            ocrLayout: Boolean,
+        ): Boolean {
             return viewModel.onHighlightRect(
-                group = group, rect = rect.adjustedToViewport()
+                group = group,
+                rect = rect.adjustedToViewport(),
+                ocrLayout = ocrLayout
             )
         }
 

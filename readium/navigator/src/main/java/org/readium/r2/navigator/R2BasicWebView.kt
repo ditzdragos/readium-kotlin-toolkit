@@ -112,6 +112,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         ): Boolean = false
 
         fun onHighlightRect(id: DecorationId, group: String, rect: RectF): Boolean = false
+
+        fun onHighlightRect(id: DecorationId, group: String, rect: RectF, ocrLayout: Boolean): Boolean =
+            onHighlightRect(id, group, rect)
         fun onProgressionChanged() {}
         fun goForward(animated: Boolean = false): Boolean = false
         fun goBackward(animated: Boolean = false): Boolean = false
@@ -424,11 +427,12 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         val id = obj?.optNullableString("id")
         val group = obj?.optNullableString("group")
         val rect = obj?.optRectF("rect")
+        val ocrLayout = obj?.optBoolean("ocrLayout") ?: false
         if (id == null || rect == null || group == null) {
             Timber.e("Invalid JSON for onHighlightRect: $eventJson")
             return false
         }
-        return listener?.onHighlightRect(id, group, rect) == true
+        return listener?.onHighlightRect(id, group, rect, ocrLayout) == true
     }
 
     /** Produced by gestures.js */

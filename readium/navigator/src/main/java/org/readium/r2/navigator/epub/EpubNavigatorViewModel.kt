@@ -420,9 +420,14 @@ internal class EpubNavigatorViewModel(
         return false
     }
 
-    fun onHighlightRect(group: String, rect: RectF): Boolean {
+    fun onHighlightRect(group: String, rect: RectF, ocrLayout: Boolean = false): Boolean {
+        val event = DecorableNavigator.OnDecorationRectEvent(
+            group = group,
+            rect = rect,
+            ocrLayout = ocrLayout
+        )
         decorationListeners[group]?.forEach { listener ->
-            listener.onDecorationRect(group, rect)
+            listener.onDecorationRect(event)
         }
         return true
     }
