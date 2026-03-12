@@ -131,6 +131,7 @@ public data class HtmlDecorationTemplate(
         ): HtmlDecorationTemplate {
             val className = createUniqueClassName(if (asHighlight) "highlight" else "underline")
             val padding = Padding(left = 1, right = 1)
+            val zIndex = if (asHighlight) 1 else 2
 
             return HtmlDecorationTemplate(
                 layout = Layout.BOXES,
@@ -154,6 +155,7 @@ public data class HtmlDecorationTemplate(
                 border-radius: ${cornerRadius}px;
                 box-sizing: border-box;
                 border: 0 solid var(--underline-color);
+                z-index: ${zIndex};
             }
             
             /* Horizontal (default) */
