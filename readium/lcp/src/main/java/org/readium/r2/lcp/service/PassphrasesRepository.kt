@@ -9,22 +9,24 @@
 
 package org.readium.r2.lcp.service
 
-import org.readium.r2.lcp.persistence.LcpDao
-import org.readium.r2.lcp.persistence.Passphrase
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
-internal class PassphrasesRepository(private val lcpDao: LcpDao) {
+internal class PassphrasesRepository {
 
-    suspend fun passphrase(licenseId: String): String? {
-        return lcpDao.passphrase(licenseId)
-    }
+    private val mutex = Mutex()
+    private val passphrasesByLicense = mutableMapOf<String, String>()
+    private val passphrasesByUser = mutableMapOf<String, MutableSet<String>>()
+    private val allPassphrases = linkedSetOf<String>()
 
-    suspend fun passphrases(userId: String): List<String> {
-        return lcpDao.passphrases(userId)
-    }
+    suspend fun passphrase(licenseId: String): String? =
+        mutex.withLock { passphrasesByLicense[licenseId] }
 
-    suspend fun allPassphrases(): List<String> {
-        return lcpDao.allPassphrases()
-    }
+    suspend fun passphrases(userId: String): List<String> =
+        mutex.withLock { passphrasesByUser[userId]?.toList().orEmpty() }
+
+    suspend fun allPassphrases(): List<String> =
+        mutex.withLock { allPassphrases.toList() }
 
     suspend fun addPassphrase(
         passphraseHash: String,
@@ -32,12 +34,12 @@ internal class PassphrasesRepository(private val lcpDao: LcpDao) {
         provider: String,
         userId: String?,
     ) {
-        val transaction = Passphrase(
-            licenseId = licenseId,
-            provider = provider,
-            userId = userId,
-            passphrase = passphraseHash
-        )
-        lcpDao.addPassphrase(transaction)
+        mutex.withLock {
+            passphrasesByLicense[licenseId] = passphraseHash
+            if (userId != null) {
+                passphrasesByUser.getOrPut(userId) { linkedSetOf() }.add(passphraseHash)
+            }
+            allPassphrases.add(passphraseHash)
+        }
     }
 }

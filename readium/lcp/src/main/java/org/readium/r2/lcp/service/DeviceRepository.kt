@@ -9,24 +9,15 @@
 
 package org.readium.r2.lcp.service
 
-import org.readium.r2.lcp.LcpError
-import org.readium.r2.lcp.LcpException
 import org.readium.r2.lcp.license.model.LicenseDocument
-import org.readium.r2.lcp.persistence.LcpDao
 
-internal class DeviceRepository(private val lcpDao: LcpDao) {
+internal class DeviceRepository(private val licenses: LicensesRepository) {
 
     suspend fun isDeviceRegistered(license: LicenseDocument): Boolean {
-        if (lcpDao.exists(license.id) == null) {
-            throw LcpException(LcpError.Runtime("The LCP License doesn't exist in the database"))
-        }
-        return lcpDao.isDeviceRegistered(license.id)
+        return licenses.isDeviceRegistered(license.id)
     }
 
     suspend fun registerDevice(license: LicenseDocument) {
-        if (lcpDao.exists(license.id) == null) {
-            throw LcpException(LcpError.Runtime("The LCP License doesn't exist in the database"))
-        }
-        lcpDao.registerDevice(license.id)
+        licenses.registerDevice(license.id)
     }
 }

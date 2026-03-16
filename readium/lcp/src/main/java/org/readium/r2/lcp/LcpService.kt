@@ -10,10 +10,10 @@
 package org.readium.r2.lcp
 
 import android.content.Context
+import android.os.Build
 import java.io.File
 import org.readium.r2.lcp.auth.LcpDialogAuthentication
 import org.readium.r2.lcp.license.model.LicenseDocument
-import org.readium.r2.lcp.persistence.LcpDatabase
 import org.readium.r2.lcp.service.CRLService
 import org.readium.r2.lcp.service.DeviceRepository
 import org.readium.r2.lcp.service.DeviceService
@@ -147,10 +147,11 @@ public interface LcpService {
                 return null
             }
 
-            val db = LcpDatabase.getDatabase(context).lcpDao()
-            val deviceRepository = DeviceRepository(db)
-            val passphraseRepository = PassphrasesRepository(db)
-            val licenseRepository = LicensesRepository(db)
+            clearLegacyPersistence(context)
+
+            val licenseRepository = LicensesRepository()
+            val deviceRepository = DeviceRepository(licenseRepository)
+            val passphraseRepository = PassphrasesRepository()
             val network = NetworkService()
             val device = DeviceService(
                 deviceName = deviceName,
@@ -169,6 +170,31 @@ public interface LcpService {
                 context = context,
                 assetRetriever = assetRetriever
             )
+        }
+
+        private fun clearLegacyPersistence(context: Context) {
+            val preferences = listOf(
+                "org.readium.r2.settings",
+                "org.readium.r2.lcp",
+                "org.readium.r2.lcp.validation"
+            )
+
+            preferences.forEach { name ->
+                runCatching {
+                    context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().apply()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        context.deleteSharedPreferences(name)
+                    }
+                }.onFailure { throwable ->
+                    Timber.w(throwable, "Failed to clear legacy LCP preferences: $name")
+                }
+            }
+
+            runCatching {
+                context.deleteDatabase("lcpdatabase")
+            }.onFailure { throwable ->
+                Timber.w(throwable, "Failed to delete legacy LCP database")
+            }
         }
     }
 }

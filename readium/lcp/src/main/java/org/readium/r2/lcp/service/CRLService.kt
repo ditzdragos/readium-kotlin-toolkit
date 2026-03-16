@@ -10,7 +10,6 @@
 package org.readium.r2.lcp.service
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.os.Build
 import java.util.*
 import kotlin.time.ExperimentalTime
@@ -25,10 +24,10 @@ import timber.log.Timber
 @OptIn(ExperimentalTime::class)
 internal class CRLService(val network: NetworkService, val context: Context) {
 
-    private val preferences: SharedPreferences = context.getSharedPreferences(
-        "org.readium.r2.lcp",
-        Context.MODE_PRIVATE
-    )
+    @Volatile
+    private var localCrl: String? = null
+    @Volatile
+    private var localCrlDate: DateTime? = null
 
     companion object {
         const val expiration = 7
@@ -68,15 +67,15 @@ internal class CRLService(val network: NetworkService, val context: Context) {
 
     // Returns (CRL, expired)
     private fun readLocal(): Pair<String?, Boolean> {
-        val crl = preferences.getString(crlKey, null)
-        val date = preferences.getString(dateKey, null)?.let { DateTime(it) }
+        val crl = localCrl
+        val date = localCrlDate
         val expired = date?.let { daysSince(date) >= expiration } ?: true
         return Pair(crl, expired)
     }
 
     private fun saveLocal(crl: String): String {
-        preferences.edit().putString(crlKey, crl).apply()
-        preferences.edit().putString(dateKey, DateTime().toString()).apply()
+        localCrl = crl
+        localCrlDate = DateTime()
         return crl
     }
 
