@@ -240,7 +240,7 @@ internal class LicenseValidation(
         }
         state<State.retrievePassphrase> {
             on<Event.retrievedPassphrase> {
-                if (DEBUG) Timber.d("State.validateIntegrity(license, status, it.passphrase)")
+                if (DEBUG) Timber.d("State.validateIntegrity(license, status, passphrase)")
                 transitionTo(State.validateIntegrity(license, status, it.passphrase))
             }
             on<Event.failed> {
