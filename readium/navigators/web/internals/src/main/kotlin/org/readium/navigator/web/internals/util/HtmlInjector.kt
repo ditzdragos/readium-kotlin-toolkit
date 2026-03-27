@@ -28,13 +28,41 @@ public fun String.inject(
     sourceUrl: AbsoluteUrl?,
     injectables: List<String>,
 ): String {
+    val injectableContent = "\n" + injectables.joinToString("\n") + "\n"
     val headEndIndex = this.indexOf("</head>", 0, true)
-    return if (headEndIndex == -1) {
-        Timber.e("</head> closing tag not found in resource with href: $sourceUrl")
-        this
-    } else {
+    if (headEndIndex != -1) {
         StringBuilder(this)
-            .insert(headEndIndex, "\n" + injectables.joinToString("\n") + "\n")
+            .insert(headEndIndex, injectableContent)
             .toString()
+    } else {
+        val headBlock = "<head>$injectableContent</head>"
+        val htmlOpenIndex = indexOf("<html", 0, true)
+        if (htmlOpenIndex != -1) {
+            val htmlOpenEndIndex = indexOf(">", htmlOpenIndex)
+            if (htmlOpenEndIndex != -1) {
+                val insertionPoint = htmlOpenEndIndex + 1
+                return StringBuilder(length + headBlock.length + 1)
+                    .append(this, 0, insertionPoint)
+                    .append('\n')
+                    .append(headBlock)
+                    .append(this, insertionPoint, length)
+                    .toString()
+            }
+        }
+
+        val bodyOpenIndex = indexOf("<body", 0, true)
+        if (bodyOpenIndex != -1) {
+            return StringBuilder(length + headBlock.length + 1)
+                .append(this, 0, bodyOpenIndex)
+                .append(headBlock)
+                .append('\n')
+                .append(this, bodyOpenIndex, length)
+                .toString()
+        }
+
+        Timber.e(
+            "</head> closing tag not found in resource with href: $sourceUrl. Injecting scripts at document start."
+        )
+        injectableContent + this
     }
 }
