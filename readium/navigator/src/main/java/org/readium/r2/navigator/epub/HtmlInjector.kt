@@ -75,22 +75,58 @@ internal fun Resource.injectHtml(
             )
         }
 
-        val headEndIndex = content.indexOf("</head>", 0, true)
-        if (headEndIndex == -1) {
-            Timber.e("</head> closing tag not found in resource with href: $sourceUrl")
-        } else {
-            // Pre-build injectable string to avoid multiple allocations
-            val injectableContent = "\n" + injectables.joinToString("\n") + "\n"
-            // Use StringBuilder efficiently - insert directly without creating intermediate strings
-            val sb = StringBuilder(content.length + injectableContent.length)
-            sb.append(content, 0, headEndIndex)
-            sb.append(injectableContent)
-            sb.append(content, headEndIndex, content.length)
-            content = sb.toString()
-        }
+        val injectableContent = "\n" + injectables.joinToString("\n") + "\n"
+        content = content.injectReadiumContent(injectableContent, sourceUrl)
 
         Try.success(content.toByteArray())
     }
 
 private fun script(src: Url): String =
     """<script type="text/javascript" src="$src"></script>"""
+
+internal fun String.injectReadiumContent(
+    injectableContent: String,
+    sourceUrl: AbsoluteUrl?,
+): String {
+    val headEndIndex = indexOf("</head>", 0, true)
+    if (headEndIndex != -1) {
+        return StringBuilder(length + injectableContent.length)
+            .append(this, 0, headEndIndex)
+            .append(injectableContent)
+            .append(this, headEndIndex, length)
+            .toString()
+    }
+
+    // Some EPUB resources (especially fixed-layout pages) can omit a closing </head>.
+    // In that case, create a head block so Readium scripts are still injected.
+    val headBlock = "<head>$injectableContent</head>"
+
+    val htmlOpenIndex = indexOf("<html", 0, true)
+    if (htmlOpenIndex != -1) {
+        val htmlOpenEndIndex = indexOf(">", htmlOpenIndex)
+        if (htmlOpenEndIndex != -1) {
+            val insertionPoint = htmlOpenEndIndex + 1
+            return StringBuilder(length + headBlock.length + 1)
+                .append(this, 0, insertionPoint)
+                .append('\n')
+                .append(headBlock)
+                .append(this, insertionPoint, length)
+                .toString()
+        }
+    }
+
+    val bodyOpenIndex = indexOf("<body", 0, true)
+    if (bodyOpenIndex != -1) {
+        return StringBuilder(length + headBlock.length + 1)
+            .append(this, 0, bodyOpenIndex)
+            .append(headBlock)
+            .append('\n')
+            .append(this, bodyOpenIndex, length)
+            .toString()
+    }
+
+    Timber.e(
+        "</head> closing tag not found in resource with href: $sourceUrl. Injecting scripts at document start."
+    )
+    return injectableContent + this
+}
