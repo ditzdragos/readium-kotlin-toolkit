@@ -608,6 +608,82 @@ export function logError(message) {
 }
 
 /**
+ * Calculates corrected viewport coordinates for OCR text-overlay elements.
+ *
+ * Returns null when the range is not inside an OCR overlay.
+ */
+export function getOCRCorrectedRect(range) {
+  if (!range) {
+    return null;
+  }
+
+  let startNode = range.startContainer;
+  if (!startNode) {
+    return null;
+  }
+  if (startNode.nodeType === Node.TEXT_NODE) {
+    startNode = startNode.parentElement;
+  }
+  if (!startNode || typeof startNode.closest !== "function") {
+    return null;
+  }
+
+  const textOverlayElement = startNode.closest(".text-overlay");
+  if (!textOverlayElement) {
+    return null;
+  }
+
+  const ocrContainer = textOverlayElement.closest(".ocr-container");
+  if (!ocrContainer) {
+    return null;
+  }
+
+  const img = ocrContainer.querySelector("img");
+  const containerRect = img
+    ? img.getBoundingClientRect()
+    : ocrContainer.getBoundingClientRect();
+
+  const styleTop = textOverlayElement.style.top;
+  const styleLeft = textOverlayElement.style.left;
+  const styleWidth = textOverlayElement.style.width;
+  const styleHeight = textOverlayElement.style.height;
+
+  if (
+    styleTop &&
+    styleLeft &&
+    styleTop.includes("%") &&
+    styleLeft.includes("%") &&
+    styleWidth &&
+    styleHeight &&
+    styleWidth.includes("%") &&
+    styleHeight.includes("%")
+  ) {
+    const topPercent = parseFloat(styleTop) / 100;
+    const leftPercent = parseFloat(styleLeft) / 100;
+    const widthPercent = parseFloat(styleWidth) / 100;
+    const heightPercent = parseFloat(styleHeight) / 100;
+
+    const scaledTop = containerRect.top + containerRect.height * topPercent;
+    const scaledLeft = containerRect.left + containerRect.width * leftPercent;
+    const scaledWidth = containerRect.width * widthPercent;
+    const scaledHeight = containerRect.height * heightPercent;
+
+    return {
+      left: scaledLeft,
+      top: scaledTop,
+      right: scaledLeft + scaledWidth,
+      bottom: scaledTop + scaledHeight,
+      width: scaledWidth,
+      height: scaledHeight,
+      x: scaledLeft,
+      y: scaledTop,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Gets the bounding rect of a range from a locator.
  * @param {Object} locator - The locator object.
  * @returns {DOMRect | null} - The bounding rect of the range, or null if not found.
@@ -615,6 +691,10 @@ export function logError(message) {
 export function getRectFromLocator(locator) {
   let range = rangeFromLocator(locator);
   if (range) {
+    const ocrRect = getOCRCorrectedRect(range);
+    if (ocrRect) {
+      return toNativeRect(ocrRect);
+    }
     return toNativeRect(range.getBoundingClientRect());
   }
   return null;

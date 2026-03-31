@@ -10,7 +10,7 @@ import {
   toNativeRect,
 } from "./rect";
 import { setupScalingListeners } from "./scaling.js";
-import { log, logError, rangeFromLocator } from "./utils";
+import { getOCRCorrectedRect, log, logError, rangeFromLocator } from "./utils";
 
 let styles = new Map();
 let groups = new Map();
@@ -128,6 +128,46 @@ function setupViewportRelayoutListeners() {
  */
 function getContainingElement(node) {
   return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+}
+
+function rotationDegreesFromTransform(transform) {
+  if (!transform || transform === "none") {
+    return undefined;
+  }
+
+  const rotateMatch = transform.match(/rotate\(([-\d.]+)deg\)/);
+  if (rotateMatch) {
+    const angle = parseFloat(rotateMatch[1]);
+    return Number.isFinite(angle) ? angle : undefined;
+  }
+
+  try {
+    const matrix = new DOMMatrixReadOnly(transform);
+    const angle = (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+    if (Number.isFinite(angle) && Math.abs(angle) > 0.01) {
+      return angle;
+    }
+  } catch (error) {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function getClosestRotationDegrees(node, boundaryElement = null) {
+  let element = getContainingElement(node);
+  while (element) {
+    const style = window.getComputedStyle(element);
+    const angle = rotationDegreesFromTransform(style.transform);
+    if (angle !== undefined) {
+      return angle;
+    }
+    if (boundaryElement && element === boundaryElement) {
+      break;
+    }
+    element = element.parentElement;
+  }
+  return undefined;
 }
 
 /**
@@ -824,16 +864,47 @@ export function DecorationGroup(groupId, groupName) {
     itemContainer.dataset.style = item.decoration.style;
     itemContainer.style.pointerEvents = "none";
 
-    let computedWidth;
-    let computedHeight;
+    const ocrRect = getOCRCorrectedRect(item.range);
     let ocrLayout = false;
-    if (startNode && typeof startNode.closest === "function") {
-      const textOverlayElement = startNode.closest(".text-overlay");
+    let computedLeft = undefined;
+    let computedTop = undefined;
+    let computedWidth = undefined;
+    let computedHeight = undefined;
+    let rotationAngle = undefined;
+
+    if (ocrRect) {
+      ocrLayout = true;
+      computedLeft = ocrRect.left;
+      computedTop = ocrRect.top;
+      computedWidth = `${ocrRect.width}px`;
+      computedHeight = `${ocrRect.height}px`;
+
+      let overlayStartNode = item.range.startContainer;
+      if (overlayStartNode && overlayStartNode.nodeType === Node.TEXT_NODE) {
+        overlayStartNode = overlayStartNode.parentElement;
+      }
+      const textOverlayElement = overlayStartNode?.closest(".text-overlay");
       if (textOverlayElement) {
-        ocrLayout = true;
+        const closestAngle = getClosestRotationDegrees(
+          overlayStartNode,
+          textOverlayElement
+        );
+        if (closestAngle !== undefined) {
+          rotationAngle = closestAngle;
+        }
+
         const computedStyle = window.getComputedStyle(textOverlayElement);
-        computedWidth = computedStyle.width;
-        computedHeight = computedStyle.height;
+        const transform = computedStyle.transform;
+        if (rotationAngle === undefined && transform && transform !== "none") {
+          const inlineAngle = rotationDegreesFromTransform(
+            textOverlayElement.style.transform
+          );
+          if (inlineAngle !== undefined) {
+            rotationAngle = inlineAngle;
+          } else {
+            rotationAngle = rotationDegreesFromTransform(transform);
+          }
+        }
       }
     }
 
@@ -849,36 +920,92 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    function positionElement(element, rect, elementBoundingRect) {
-      element.style.position = "absolute";
+    function positionElement(
+      element,
+      rect,
+      elementBoundingRect,
+      useOverlayPosition = false
+    ) {
+      element.style.position = useOverlayPosition ? "fixed" : "absolute";
       const width = style.width;
 
+      const leftPos =
+        useOverlayPosition && computedLeft !== undefined
+          ? computedLeft
+          : rect.left;
+      const topPos =
+        useOverlayPosition && computedTop !== undefined ? computedTop : rect.top;
+      const finalXOffset = useOverlayPosition ? 0 : xOffset;
+      const finalYOffset = useOverlayPosition ? 0 : yOffset;
+
       if (width === "wrap") {
-        if (computedWidth !== undefined && computedHeight !== undefined) {
+        if (
+          useOverlayPosition &&
+          computedWidth !== undefined &&
+          computedHeight !== undefined
+        ) {
           element.style.width = `${computedWidth}`;
           element.style.height = `${computedHeight}`;
         } else {
           element.style.width = `${rect.width}px`;
           element.style.height = `${rect.height}px`;
         }
-        element.style.left = `${rect.left + xOffset}px`;
-        element.style.top = `${rect.top + yOffset}px`;
+
+        element.style.left = `${leftPos + finalXOffset}px`;
+        element.style.top = `${topPos + finalYOffset}px`;
       } else if (width === "viewport") {
         element.style.width = `${viewportWidth}px`;
         element.style.height = `${rect.height}px`;
-        element.style.left = `${xOffset}px`;
-        element.style.top = `${rect.top + yOffset}px`;
+        element.style.left = `${finalXOffset}px`;
+        element.style.top = `${topPos + finalYOffset}px`;
       } else if (width === "bounds") {
         element.style.width = `${elementBoundingRect.width}px`;
         element.style.height = `${rect.height}px`;
-        element.style.left = `${elementBoundingRect.left + xOffset}px`;
-        element.style.top = `${rect.top + yOffset}px`;
+        element.style.left = `${elementBoundingRect.left + finalXOffset}px`;
+        element.style.top = `${topPos + finalYOffset}px`;
       } else if (width === "page") {
         element.style.width = `${viewportWidth}px`;
         element.style.height = `${rect.height}px`;
-        element.style.left = `${xOffset}px`;
-        element.style.top = `${rect.top + yOffset}px`;
+        element.style.left = `${finalXOffset}px`;
+        element.style.top = `${topPos + finalYOffset}px`;
       }
+
+      if (rotationAngle !== undefined) {
+        const supportsIndependentRotate =
+          typeof CSS !== "undefined" &&
+          typeof CSS.supports === "function" &&
+          CSS.supports("rotate", "1deg");
+
+        if (supportsIndependentRotate) {
+          // Keep any existing template transform/animation (eg moving-container),
+          // and compose rotation through the independent rotate property.
+          element.style.rotate = `${rotationAngle}deg`;
+          element.style.transformOrigin = "center";
+          return element;
+        }
+
+        // Fallback for engines without CSS rotate support:
+        // wrap the element so template transforms stay on child while wrapper rotates.
+        const wrapper = document.createElement("div");
+        wrapper.style.position = element.style.position;
+        wrapper.style.left = element.style.left;
+        wrapper.style.top = element.style.top;
+        wrapper.style.width = element.style.width;
+        wrapper.style.height = element.style.height;
+        wrapper.style.pointerEvents = "none";
+        wrapper.style.transform = `rotate(${rotationAngle}deg)`;
+        wrapper.style.transformOrigin = "center";
+
+        element.style.position = "absolute";
+        element.style.left = "0px";
+        element.style.top = "0px";
+        element.style.width = "100%";
+        element.style.height = "100%";
+        wrapper.append(element);
+        return wrapper;
+      }
+
+      return element;
     }
 
     try {
@@ -886,18 +1013,29 @@ export function DecorationGroup(groupId, groupName) {
         const clientRects = getClientRectsNoOverlap(item.range, true).sort(
           (rectA, rectB) => rectA.top - rectB.top
         );
+        const useOverlay = clientRects.length === 1 && ocrLayout;
 
         for (let clientRect of clientRects) {
           const line = elementTemplate.cloneNode(true);
           line.style.pointerEvents = "none";
-          positionElement(line, clientRect, boundingRect);
-          itemContainer.append(line);
+          const positionedLine = positionElement(
+            line,
+            clientRect,
+            boundingRect,
+            useOverlay
+          );
+          itemContainer.append(positionedLine);
         }
       } else if (style.layout === "bounds") {
         const bounds = elementTemplate.cloneNode(true);
         bounds.style.pointerEvents = "none";
-        positionElement(bounds, boundingRect, boundingRect);
-        itemContainer.append(bounds);
+        const positionedBounds = positionElement(
+          bounds,
+          boundingRect,
+          boundingRect,
+          ocrLayout
+        );
+        itemContainer.append(positionedBounds);
       }
     } catch (error) {
       logError(`Error calculating position: ${error.message}`);

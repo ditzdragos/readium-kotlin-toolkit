@@ -69,7 +69,7 @@ public fun DecorationChange.javascript(
             toJSON(decoration)?.let { "group.addEnhanced($it);" }
 
         is DecorationChange.Moved ->
-            null // Not supported for now
+            "group.requestLayout();"
 
         is DecorationChange.Removed ->
             "group.clearEnhanced('$id');"
