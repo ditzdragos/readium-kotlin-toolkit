@@ -728,6 +728,23 @@ public class EpubNavigatorFragment public constructor(
         RectF(left, top + topOffset, right, bottom)
     } ?: this
 
+    private fun RectF.adjustedToNavigator(webView: View): RectF {
+        val navigatorLocation = IntArray(2)
+        val webViewLocation = IntArray(2)
+        publicationView.getLocationOnScreen(navigatorLocation)
+        webView.getLocationOnScreen(webViewLocation)
+
+        val offsetX = (webViewLocation[0] - navigatorLocation[0]).toFloat()
+        val offsetY = (webViewLocation[1] - navigatorLocation[1]).toFloat()
+
+        return RectF(
+            left + offsetX,
+            top + offsetY,
+            right + offsetX,
+            bottom + offsetY
+        )
+    }
+
     // DecorableNavigator
 
     override fun <T : Decoration.Style> supportsDecorationStyle(style: KClass<T>): Boolean =
@@ -836,6 +853,7 @@ public class EpubNavigatorFragment public constructor(
         )
 
         override fun onHighlightRect(
+            webView: R2BasicWebView,
             id: DecorationId,
             group: String,
             rect: RectF,
@@ -843,7 +861,7 @@ public class EpubNavigatorFragment public constructor(
         ): Boolean {
             return viewModel.onHighlightRect(
                 group = group,
-                rect = rect.adjustedToViewport(),
+                rect = rect.adjustedToNavigator(webView),
                 ocrLayout = ocrLayout
             )
         }
@@ -1198,41 +1216,19 @@ public class EpubNavigatorFragment public constructor(
         }
     }
 
-    /**
-     * Adjusts the given RectF based on viewport padding and applies horizontal offset
-     * if it's the right page in a fixed-layout dual-page view.
-     */
-    private fun adjustRectForLayout(rect: RectF, locatorHref: Url): RectF {
-        val adjustedRect = rect.adjustedToViewport()
-        Timber.d("RectF after adjustedToViewport for $locatorHref: $adjustedRect")
-
-        // Check if we are in fixed layout, dual page mode, and the locator is for the right page
-        if (viewModel.layout == EpubLayout.FIXED && viewModel.dualPageMode == DualPage.ON) {
-            val pageResource = adapter.getResource(resourcePager.currentItem)
-            if (pageResource is PageResource.EpubFxl && locatorHref == pageResource.rightLink?.url()) {
-                // Calculate the horizontal offset (width of the left page's view area)
-                val horizontalOffset = resourcePager.width / 2f
-                Timber.d("Applying RectF horizontal offset for right page $locatorHref: $horizontalOffset")
-                // Apply the offset
-                adjustedRect.offset(horizontalOffset, 0f)
-                Timber.d("RectF after horizontal offset for $locatorHref: $adjustedRect")
-            }
-        }
-        return adjustedRect
-    }
-
     @OptIn(ExperimentalCoroutinesApi::class)
     public suspend fun getRectForLocator(locator: Locator): RectF? {
         return suspendCancellableCoroutine { continuation ->
             // Find the fragment containing the locator's href
             val fragment = loadedFragmentForHref(locator.href)
             Timber.d("getRectForLocator for href ${locator.href} found fragment: ${fragment != null}")
+            val webView = fragment?.getWebView(locator.href)
 
-            fragment?.getWebView(locator.href)?.getRectFromLocator(locator) { result ->
+            webView?.getRectFromLocator(locator) { result ->
                 val parsedRect = parseRectFFromJson(result, locator.href)
 
                 if (parsedRect != null) {
-                    val adjustedRect = adjustRectForLayout(parsedRect, locator.href)
+                    val adjustedRect = parsedRect.adjustedToNavigator(webView)
                     continuation.resume(adjustedRect) { cause, _, _ ->
                         Timber.e(
                             cause, "Error resuming continuation in getRectForLocator for ${locator.href}"

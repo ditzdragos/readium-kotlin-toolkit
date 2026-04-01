@@ -435,6 +435,17 @@ internal class R2EpubPageFragment : Fragment() {
     internal val paddingTop: Int get() = containerView.paddingTop
     internal val paddingBottom: Int get() = containerView.paddingBottom
 
+    private fun RectF.adjustedToFragmentCoordinates(webView: View): RectF {
+        val offsetX = webView.x
+        val offsetY = webView.y
+        return RectF(
+            left + offsetX,
+            top + offsetY,
+            right + offsetX,
+            bottom + offsetY
+        )
+    }
+
     private fun onLoadPage() {
         Timber.d("onLoadPage: $resourceUrl $isLoading")
 //        if (!isLoading) return
@@ -534,9 +545,7 @@ internal class R2EpubPageFragment : Fragment() {
                         return@runJavaScript
                     }
 
-                    val rect = json.optRectF("rect")?.run {
-                        RectF(left, top + paddingTop, right, bottom + paddingTop)
-                    }
+                    val rect = json.optRectF("rect")?.adjustedToFragmentCoordinates(webView)
 
                     Timber.d("currentSelection in main webView: $json")
 
@@ -567,9 +576,7 @@ internal class R2EpubPageFragment : Fragment() {
                         return@runJavaScript
                     }
 
-                    val rect = json.optRectF("rect")?.run {
-                        RectF(left, top + paddingTop, right, bottom + paddingTop)
-                    }
+                    val rect = json.optRectF("rect")?.adjustedToFragmentCoordinates(webView)
 
                     Timber.d("currentSelection in right webView: $json")
 
