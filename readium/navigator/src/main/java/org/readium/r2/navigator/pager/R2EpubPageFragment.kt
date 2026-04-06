@@ -29,6 +29,7 @@ import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -124,19 +125,23 @@ internal class R2EpubPageFragment : Fragment() {
                     webView?.onContentReady {
                         Timber.d("Left page finished loading and made visible")
 
+                        // Mark the fragment as loaded before notifying clients. Some callers
+                        // apply decorations synchronously from onPageLoaded(), and those
+                        // LoadedResource scripts are otherwise dropped because isLoaded is still
+                        // false at that point.
+                        onLoadPage()
+
                         // Call onPageLoaded for left page
                         link?.let {
                             webView?.listener?.onPageLoaded(webView!!, it)
                         }
-
-                        onLoadPage()
 
                         // Now, if the right WebView exists and is for a fixed layout, load it.
                         if (webViewRight != null && rightResourceUrl != null && fixedLayout) {
                             Timber.d("Left page finished, now loading right page: $rightResourceUrl")
                             isLoadingRight = true
                             // setupWebView for webViewRight was already called in onCreateView
-                            viewLifecycleOwner.lifecycleScope.launch {
+                            withViewLifecycleOwner {
                                 webViewRight?.loadUrl(rightResourceUrl.toString())
                             }
                         }
@@ -154,11 +159,13 @@ internal class R2EpubPageFragment : Fragment() {
                     webViewRight?.onContentReady {
                         Timber.d("Right page finished loading and made visible")
 
+                        // Keep the same ordering as the left page for decoration consistency.
+                        onLoadPage()
+
                         // Call onPageLoaded for right page
                         rightLink?.let {
                             webViewRight?.listener?.onPageLoaded(webViewRight!!, it)
                         }
-                        onLoadPage()
                     }
                 }
             }
@@ -294,9 +301,7 @@ internal class R2EpubPageFragment : Fragment() {
                 isLoading = true
                 _isLoaded.value = false
                 Timber.d("Loading left page: $url")
-                viewLifecycleOwner.lifecycleScope.launch {
-                    it.loadUrl(url.toString())
-                }
+                it.loadUrl(url.toString())
             }
         }
 
@@ -362,6 +367,16 @@ internal class R2EpubPageFragment : Fragment() {
         isPageFinished = true
         pendingPageFinished.forEach { it() }
         pendingPageFinished.clear()
+    }
+
+    private inline fun withViewLifecycleOwner(action: (LifecycleOwner) -> Unit) {
+        val lifecycleOwner = viewLifecycleOwnerLiveData.value
+        if (lifecycleOwner == null) {
+            Timber.d("Skipping fragment view action because the view lifecycle is unavailable")
+            return
+        }
+
+        action(lifecycleOwner)
     }
 
     /**
@@ -441,15 +456,17 @@ internal class R2EpubPageFragment : Fragment() {
         _isLoaded.value = true
         if (view == null) return
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                val webView = requireNotNull(webView)
+        withViewLifecycleOwner { lifecycleOwner ->
+            lifecycleOwner.lifecycleScope.launch {
+                lifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
+                    val webView = requireNotNull(webView)
 
-                pendingLocator?.let { locator ->
-                    loadLocator(
-                        webView, requireNotNull(navigator).overflow.value.readingProgression, locator
-                    )
-                }.also { pendingLocator = null }
+                    pendingLocator?.let { locator ->
+                        loadLocator(
+                            webView, requireNotNull(navigator).overflow.value.readingProgression, locator
+                        )
+                    }.also { pendingLocator = null }
+                }
             }
         }
     }
@@ -460,12 +477,14 @@ internal class R2EpubPageFragment : Fragment() {
             return
         }
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                val webView = getWebView(locator.href) ?: requireNotNull(this@R2EpubPageFragment.webView)
-                val epubNavigator = requireNotNull(navigator)
-                loadLocator(webView, epubNavigator.overflow.value.readingProgression, locator)
-                webView.listener?.onProgressionChanged()
+        withViewLifecycleOwner { lifecycleOwner ->
+            lifecycleOwner.lifecycleScope.launch {
+                lifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
+                    val webView = getWebView(locator.href) ?: requireNotNull(this@R2EpubPageFragment.webView)
+                    val epubNavigator = requireNotNull(navigator)
+                    loadLocator(webView, epubNavigator.overflow.value.readingProgression, locator)
+                    webView.listener?.onProgressionChanged()
+                }
             }
         }
     }
