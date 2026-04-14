@@ -493,6 +493,9 @@ public class EpubNavigatorFragment public constructor(
         }
         adapter.listener = PagerAdapterListener()
         resourcePager.adapter = adapter
+        // Pre-render 2 pages on each side so page transitions are instant for graphic novels.
+        // The default of 1 means swiping 2 pages always hits a cold WebView + LCP decrypt.
+        resourcePager.offscreenPageLimit = 2
         resourcePager.direction = overflow.value.readingProgression
         resourcePager.layoutDirection = when (settings.value.readingProgression) {
             ReadingProgression.RTL -> LayoutDirection.RTL
