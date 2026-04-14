@@ -135,16 +135,6 @@ internal class R2EpubPageFragment : Fragment() {
                         link?.let {
                             webView?.listener?.onPageLoaded(webView!!, it)
                         }
-
-                        // Now, if the right WebView exists and is for a fixed layout, load it.
-                        if (webViewRight != null && rightResourceUrl != null && fixedLayout) {
-                            Timber.d("Left page finished, now loading right page: $rightResourceUrl")
-                            isLoadingRight = true
-                            // setupWebView for webViewRight was already called in onCreateView
-                            withViewLifecycleOwner {
-                                webViewRight?.loadUrl(rightResourceUrl.toString())
-                            }
-                        }
                     }
                 }
 
@@ -305,12 +295,15 @@ internal class R2EpubPageFragment : Fragment() {
             }
         }
 
-        // Setup right page, but defer loading until left page is finished (handled in onPageFinished)
+        // Load right page in parallel with the left page. Previously this was deferred until
+        // left's onContentReady, serialising two full LCP-decrypt + image-load cycles end-to-end.
         webViewRight?.let {
             setupWebView(it, rightResourceUrl)
-            // The actual loadUrl for webViewRight will be triggered from onPageFinished
-            // when the left webView completes.
-            // isLoadingRight will be set to true at that point.
+            rightResourceUrl?.let { url ->
+                isLoadingRight = true
+                Timber.d("Loading right page in parallel: $url")
+                it.loadUrl(url.toString())
+            }
         }
 
         // Forward a tap event when the web view is not ready to propagate the taps. This allows
