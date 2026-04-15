@@ -493,9 +493,10 @@ public class EpubNavigatorFragment public constructor(
         }
         adapter.listener = PagerAdapterListener()
         resourcePager.adapter = adapter
-        // Pre-render 2 pages on each side so page transitions are instant for graphic novels.
-        // The default of 1 means swiping 2 pages always hits a cold WebView + LCP decrypt.
-        resourcePager.offscreenPageLimit = 2
+        // Pre-render 1 page on each side (default). offscreenPageLimit=2 caused OOM on memory-
+        // constrained devices (e.g. Chromebook ARC++) because 5 simultaneous pages × full image
+        // ByteArrays would fill the heap to 99MB and trigger the lowmemorykiller.
+        resourcePager.offscreenPageLimit = 1
         resourcePager.direction = overflow.value.readingProgression
         resourcePager.layoutDirection = when (settings.value.readingProgression) {
             ReadingProgression.RTL -> LayoutDirection.RTL
