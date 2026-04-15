@@ -21,6 +21,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -183,6 +184,17 @@ internal class R2EpubPageFragment : Fragment() {
         override fun shouldInterceptRequest(
             view: WebView, request: WebResourceRequest
         ): WebResourceResponse? = (view as? R2BasicWebView)?.shouldInterceptRequest(view, request)
+
+        // On Chromebook (and other devices under memory pressure) the WebView renderer runs as a
+        // separate sandboxed process and can be killed independently. Without this override the
+        // default implementation returns false, which causes the framework to throw a
+        // RuntimeException and kill the entire app. Returning true signals that we handled the
+        // crash gracefully; we reload the page so the user stays in the reader.
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            Timber.e("WebView renderer process gone (crashed=${detail.didCrash()}), reloading page")
+            view.reload()
+            return true
+        }
     }
 
     internal fun setFontSize(fontSize: Double) {
