@@ -113,6 +113,13 @@ import timber.log.Timber
  */
 public typealias JavascriptInterfaceFactory = (resource: Link) -> Any?
 
+internal fun isNavigatorViewUsableForAsyncCallback(
+    hasView: Boolean,
+    isAdded: Boolean,
+    isRemoving: Boolean,
+    isDetached: Boolean,
+): Boolean = hasView && isAdded && !isRemoving && !isDetached
+
 /**
  * Navigator for EPUB publications.
  *
@@ -1202,12 +1209,21 @@ public class EpubNavigatorFragment public constructor(
      * Adjusts the given RectF based on viewport padding and applies horizontal offset
      * if it's the right page in a fixed-layout dual-page view.
      */
-    private fun adjustRectForLayout(rect: RectF, locatorHref: Url): RectF {
+    private fun adjustRectForLayout(rect: RectF, locatorHref: Url): RectF? {
+        if (!hasUsableViewForAsyncCallback()) {
+            Timber.d("Skipping RectF adjustment because navigator view is unavailable for $locatorHref")
+            return null
+        }
+
         val adjustedRect = rect.adjustedToViewport()
         Timber.d("RectF after adjustedToViewport for $locatorHref: $adjustedRect")
 
         // Check if we are in fixed layout, dual page mode, and the locator is for the right page
-        if (viewModel.layout == EpubLayout.FIXED && viewModel.dualPageMode == DualPage.ON) {
+        if (
+            ::resourcePager.isInitialized &&
+            viewModel.layout == EpubLayout.FIXED &&
+            viewModel.dualPageMode == DualPage.ON
+        ) {
             val pageResource = adapter.getResource(resourcePager.currentItem)
             if (pageResource is PageResource.EpubFxl && locatorHref == pageResource.rightLink?.url()) {
                 // Calculate the horizontal offset (width of the left page's view area)
@@ -1221,41 +1237,65 @@ public class EpubNavigatorFragment public constructor(
         return adjustedRect
     }
 
+    private fun hasUsableViewForAsyncCallback(): Boolean =
+        isNavigatorViewUsableForAsyncCallback(
+            hasView = view != null,
+            isAdded = isAdded,
+            isRemoving = isRemoving,
+            isDetached = isDetached,
+        )
+
     @OptIn(ExperimentalCoroutinesApi::class)
     public suspend fun getRectForLocator(locator: Locator): RectF? {
         return suspendCancellableCoroutine { continuation ->
+            fun resumeRect(rect: RectF, reason: String) {
+                if (!continuation.isActive) {
+                    Timber.d("Ignoring getRectForLocator result for ${locator.href}: $reason")
+                    return
+                }
+
+                continuation.resume(rect) { cause, _, _ ->
+                    Timber.e(
+                        cause, "Error resuming continuation in getRectForLocator for ${locator.href}: $reason"
+                    )
+                    continuation.cancel(cause)
+                }
+            }
+
+            fun resumeDefaultRect(reason: String) {
+                resumeRect(RectF(-1f, -1f, -1f, -1f), reason)
+            }
+
+            if (!hasUsableViewForAsyncCallback()) {
+                resumeDefaultRect("navigator view unavailable before WebView lookup")
+                return@suspendCancellableCoroutine
+            }
+
             // Find the fragment containing the locator's href
             val fragment = loadedFragmentForHref(locator.href)
             Timber.d("getRectForLocator for href ${locator.href} found fragment: ${fragment != null}")
 
-            fragment?.getWebView(locator.href)?.getRectFromLocator(locator) { result ->
+            fragment?.getWebView(locator.href)?.getRectFromLocator(locator) callback@{ result ->
+                if (!hasUsableViewForAsyncCallback()) {
+                    resumeDefaultRect("navigator view unavailable after WebView result")
+                    return@callback
+                }
+
                 val parsedRect = parseRectFFromJson(result, locator.href)
 
                 if (parsedRect != null) {
                     val adjustedRect = adjustRectForLayout(parsedRect, locator.href)
-                    continuation.resume(adjustedRect) { cause, _, _ ->
-                        Timber.e(
-                            cause, "Error resuming continuation in getRectForLocator for ${locator.href}"
-                        )
-                        continuation.cancel(cause)
+                    if (adjustedRect != null) {
+                        resumeRect(adjustedRect, "rect adjusted successfully")
+                    } else {
+                        resumeDefaultRect("navigator view unavailable while adjusting RectF")
                     }
                 } else {
                     // Parsing failed or rect data was invalid
-                    continuation.resume(RectF(-1f, -1f, -1f, -1f)) { cause, _, _ ->
-                        Timber.e(
-                            cause,
-                            "Error resuming continuation with defaultRect after parsing failure for ${locator.href}"
-                        )
-                        continuation.cancel(cause)
-                    }
+                    resumeDefaultRect("parsing failure")
                 }
             } ?: run {
-                continuation.resume(RectF(-1f, -1f, -1f, -1f)) { cause, _, _ ->
-                    Timber.e(
-                        cause, "Error resuming continuation with defaultRect when WebView not found for ${locator.href}"
-                    )
-                    continuation.cancel(cause)
-                }
+                resumeDefaultRect("WebView not found")
             }
         }
     }
