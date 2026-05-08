@@ -13,6 +13,37 @@ package org.readium.r2.navigator.pager
 internal object WebViewScripts {
 
     /**
+     * Cancels HTML5 drag events at the document level so chapter text cannot
+     * be dragged out of the reader into other apps. Selection, the action-mode
+     * menu, and copy still work because we only block `dragstart`/`drag`/`drop`.
+     *
+     * Idempotent — installs once per WebView document via a window flag.
+     */
+    val disableTextDragScript: String = """
+        (function() {
+            if (window.__r2DragDisabled) { return; }
+            window.__r2DragDisabled = true;
+
+            var block = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            };
+            document.addEventListener('dragstart', block, true);
+            document.addEventListener('drag', block, true);
+            document.addEventListener('drop', block, true);
+
+            var style = document.createElement('style');
+            style.textContent =
+                '*, *::before, *::after {' +
+                '  -webkit-user-drag: none !important;' +
+                '  user-drag: none !important;' +
+                '}';
+            (document.head || document.documentElement).appendChild(style);
+        })();
+    """.trimIndent()
+
+    /**
      * Returns JavaScript to center fixed-layout content in the WebView.
      * @param viewportWidth The actual width of the WebView from Android
      * @param viewportHeight The actual height of the WebView from Android

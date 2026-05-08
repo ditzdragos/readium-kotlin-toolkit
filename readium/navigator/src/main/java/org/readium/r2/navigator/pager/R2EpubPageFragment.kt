@@ -111,6 +111,7 @@ internal class R2EpubPageFragment : Fragment() {
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
             if (view == null) return
+            view.evaluateJavascript(WebViewScripts.disableTextDragScript, null)
             // Handle loading state based on which web view finished loading
             when (view) {
                 webView -> {
