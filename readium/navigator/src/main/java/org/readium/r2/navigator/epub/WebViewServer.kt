@@ -53,6 +53,36 @@ internal class WebViewServer(
             Url.fromDecodedPath(path)?.let { assetsBaseHref.resolve(it) }
     }
 
+    // Resources are cheap to *describe* but expensive to *build* — each construction
+    // re-wraps in LcpDecryptor + BufferingResource and allocates a fresh
+    // CachingRangeTailResource (empty cache). One page swipe fans out to 6–12 WebView
+    // requests; this LRU keeps the same Resource alive across that fan-out so the
+    // 256 KB buffer (Task 3) and decryption state are reused, not rebuilt per chunk.
+    //
+    // Bounded to 32 entries (~2–3 pages of assets). Evictions call close() on the
+    // displaced Resource so file handles and decryption state are released.
+    private val resourceCache: LinkedHashMap<Url, Resource> =
+        object : LinkedHashMap<Url, Resource>(32, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Url, Resource>?): Boolean {
+                if (size > 32) {
+                    runCatching { eldest?.value?.close() }
+                    return true
+                }
+                return false
+            }
+        }
+
+    @Synchronized
+    private fun cachedResource(url: Url, build: () -> Resource): Resource =
+        resourceCache.getOrPut(url, build)
+
+    internal fun clearResourceCache() {
+        synchronized(this) {
+            resourceCache.values.forEach { runCatching { it.close() } }
+            resourceCache.clear()
+        }
+    }
+
     /**
      * Serves the requests of the navigator web views.
      *
@@ -94,17 +124,48 @@ internal class WebViewServer(
 
         // Drop anchor because it is meant to be interpreted by the client.
         val urlWithoutAnchor = href.removeFragment()
+        val isHtml = link.mediaType?.isHtml == true
 
+        val resource = if (isHtml) {
+            // HTML injects request-scoped ReadiumCss; can't cache across requests.
+            buildResource(link, urlWithoutAnchor, css)
+        } else {
+            cachedResource(urlWithoutAnchor) { buildResource(link, urlWithoutAnchor, css) }
+        }
+
+        val headers = mutableMapOf("Accept-Ranges" to "bytes")
+        if (!isHtml) headers["Cache-Control"] = "max-age=86400, immutable"
+
+        return if (range == null) {
+            val body = if (isHtml) BufferedInputStream(resource.asInputStream(), 65536)
+                else resource.asInputStream()
+            WebResourceResponse(
+                link.mediaType?.toString(), null, 200, "OK", headers,
+                body
+            )
+        } else {
+            val stream = resource.asInputStream()
+            val length = stream.available()
+            val longRange = range.toLongRange(length.toLong())
+            headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/$length"
+            WebResourceResponse(
+                link.mediaType?.toString(), null, 206, "Partial Content", headers,
+                stream
+            )
+        }
+    }
+
+    private fun buildResource(link: Link, url: Url, css: ReadiumCss): Resource {
         var resource = publication
-            .get(urlWithoutAnchor)
+            .get(url)
             ?.fallback {
-                onResourceLoadFailed(urlWithoutAnchor, it)
+                onResourceLoadFailed(url, it)
                 errorResource()
             } ?: run {
             val error = ReadError.Decoding(
-                "Resource not found at $urlWithoutAnchor in publication."
+                "Resource not found at $url in publication."
             )
-            onResourceLoadFailed(urlWithoutAnchor, error)
+            onResourceLoadFailed(url, error)
             errorResource()
         }
 
@@ -120,10 +181,6 @@ internal class WebViewServer(
                 )
             }
 
-        val headers = mutableMapOf(
-            "Accept-Ranges" to "bytes"
-        )
-
         // For non-HTML resources, wrap in BufferingResource so WebView's 8 KB chunked
         // reads get satisfied from an in-memory 256 KB buffer instead of issuing one
         // underlying resource.read() (and one LCP decrypt) per WebView chunk. 256 KB is
@@ -131,28 +188,10 @@ internal class WebViewServer(
         // (critical on Chromebook ARC++), large enough that the LCP decrypt cost
         // amortises across ~32 WebView chunks. Do NOT switch to a full-buffer
         // ByteArrayInputStream — that path OOMs on Chromebook.
-        val isHtml = link.mediaType?.isHtml == true
-        val servedResource = if (isHtml) resource else resource.buffered(bufferSize = 256 * 1024)
-        if (!isHtml) {
-            headers["Cache-Control"] = "max-age=86400, immutable"
-        }
-
-        return if (range == null) {
-            val body = if (isHtml) BufferedInputStream(resource.asInputStream(), 65536)
-                else servedResource.asInputStream()
-            WebResourceResponse(
-                link.mediaType?.toString(), null, 200, "OK", headers,
-                body
-            )
+        return if (link.mediaType?.isHtml == true) {
+            resource
         } else {
-            val stream = servedResource.asInputStream()
-            val length = stream.available()
-            val longRange = range.toLongRange(length.toLong())
-            headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/$length"
-            WebResourceResponse(
-                link.mediaType?.toString(), null, 206, "Partial Content", headers,
-                stream
-            )
+            resource.buffered(bufferSize = 256 * 1024)
         }
     }
     private fun errorResource(): Resource =

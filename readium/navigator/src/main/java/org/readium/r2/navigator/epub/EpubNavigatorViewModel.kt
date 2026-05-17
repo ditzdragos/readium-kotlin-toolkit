@@ -242,6 +242,11 @@ internal class EpubNavigatorViewModel(
             ?.copy(href = Href(href))
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        server.clearResourceCache()
+    }
+
     fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
         server.shouldInterceptRequest(request, css.value)
 
