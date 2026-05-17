@@ -19,7 +19,7 @@ internal class CachingReadable(
     private var contentLength: Long? = null
 
     override suspend fun length(): Try<Long, ReadError> {
-        contentLength?.let { Try.success(it) }
+        contentLength?.let { return Try.success(it) }
 
         return source.length()
             .onSuccess { contentLength = it }
@@ -59,7 +59,9 @@ internal class CachingReadable(
         }
     }
 
-    override fun close() {}
+    override fun close() {
+        source.close()
+    }
 }
 
 internal class CachingContainer(
