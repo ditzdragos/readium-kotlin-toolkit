@@ -474,21 +474,24 @@ public class EpubNavigatorFragment public constructor(
 
             // VL-8 stopgap for VL-1 (ViewPager1 keeps adjacent pages RESUMED):
             // pause JS timers on offscreen pages so their setInterval/requestAnimationFrame
-            // do not run while invisible. Always resume the just-selected page first so the
-            // process-wide pause behaviour on pre-API-31 doesn't strand the active page.
+            // do not run while invisible.
+            //
+            // pauseTimers/resumeTimers is process-wide on pre-API-31 (all WebViews share
+            // one JS thread; the LAST call wins). To keep the active page running, we
+            // pause every offscreen page first, then resume the active one LAST so the
+            // process-wide state ends in RESUMED.
             val adapter = r2PagerAdapter
             if (adapter != null) {
-                for (i in 0 until adapter.count) {
-                    val fragment = adapter.mFragments.get(adapter.getItemId(i))
-                        as? R2EpubPageFragment ?: continue
-                    if (i == position) {
-                        fragment.webView?.resumeTimers()
-                        fragment.webViewRight?.resumeTimers()
-                    } else {
+                val activeId = adapter.getItemId(position)
+                adapter.mFragments.forEach { id, fragment ->
+                    if (id != activeId && fragment is R2EpubPageFragment) {
                         fragment.webView?.pauseTimers()
                         fragment.webViewRight?.pauseTimers()
                     }
                 }
+                val activeFragment = adapter.mFragments.get(activeId) as? R2EpubPageFragment
+                activeFragment?.webView?.resumeTimers()
+                activeFragment?.webViewRight?.resumeTimers()
             }
         }
     }
