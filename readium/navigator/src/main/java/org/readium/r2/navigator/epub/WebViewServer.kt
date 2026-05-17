@@ -14,9 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
 import java.io.BufferedInputStream
-import java.io.ByteArrayInputStream
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -33,6 +31,7 @@ import org.readium.r2.shared.util.http.HttpHeaders
 import org.readium.r2.shared.util.http.HttpRange
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.StringResource
+import org.readium.r2.shared.util.resource.buffered
 import org.readium.r2.shared.util.resource.fallback
 
 /**
@@ -125,54 +124,34 @@ internal class WebViewServer(
             "Accept-Ranges" to "bytes"
         )
 
-        // For non-HTML resources (images, fonts, CSS, JS), pre-read all bytes into memory
-        // before returning to WebView. This replaces ~250 individual runBlocking calls inside
-        // ReadableInputStreamAdapter (one per 8KB chunk) — each carrying coroutine dispatch
-        // overhead — with a single runBlocking for the full resource. For LCP-encrypted graphic
-        // novel images this reduced page load times from 10-15s to < 2s.
+        // For non-HTML resources, wrap in BufferingResource so WebView's 8 KB chunked
+        // reads get satisfied from an in-memory 256 KB buffer instead of issuing one
+        // underlying resource.read() (and one LCP decrypt) per WebView chunk. 256 KB is
+        // the trade-off: small enough that peak per-resource memory is bounded
+        // (critical on Chromebook ARC++), large enough that the LCP decrypt cost
+        // amortises across ~32 WebView chunks. Do NOT switch to a full-buffer
+        // ByteArrayInputStream — that path OOMs on Chromebook.
         val isHtml = link.mediaType?.isHtml == true
+        val servedResource = if (isHtml) resource else resource.buffered(bufferSize = 256 * 1024)
         if (!isHtml) {
-            val bytes = runBlocking { resource.read().getOrNull() }
-            if (bytes != null) {
-                // Cache non-HTML resources in WebView's disk cache. Images don't change between
-                // sessions, so serving from cache on back-navigation avoids re-decrypting from ZIP.
-                headers["Cache-Control"] = "max-age=86400, immutable"
-                return if (range != null) {
-                    val longRange = range.toLongRange(bytes.size.toLong())
-                    headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/${bytes.size}"
-                    WebResourceResponse(
-                        link.mediaType?.toString(), null, 206, "Partial Content", headers,
-                        ByteArrayInputStream(
-                            bytes,
-                            longRange.first.toInt(),
-                            (longRange.last - longRange.first + 1).toInt()
-                        )
-                    )
-                } else {
-                    WebResourceResponse(
-                        link.mediaType?.toString(), null, 200, "OK", headers,
-                        ByteArrayInputStream(bytes)
-                    )
-                }
-            }
+            headers["Cache-Control"] = "max-age=86400, immutable"
         }
 
-        // Fallback path (HTML or failed pre-read): stream with a large buffer to reduce
-        // the number of runBlocking calls in ReadableInputStreamAdapter.
         return if (range == null) {
+            val body = if (isHtml) BufferedInputStream(resource.asInputStream(), 65536)
+                else servedResource.asInputStream()
             WebResourceResponse(
                 link.mediaType?.toString(), null, 200, "OK", headers,
-                BufferedInputStream(resource.asInputStream(), 65536)
+                body
             )
         } else {
-            val stream = resource.asInputStream()
+            val stream = servedResource.asInputStream()
             val length = stream.available()
             val longRange = range.toLongRange(length.toLong())
             headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/$length"
-            // Weirdly, the WebView will call itself stream.skip to skip to the requested range.
             WebResourceResponse(
                 link.mediaType?.toString(), null, 206, "Partial Content", headers,
-                BufferedInputStream(stream, 65536)
+                stream
             )
         }
     }
