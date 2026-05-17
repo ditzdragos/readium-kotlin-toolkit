@@ -30,6 +30,7 @@ import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.data.asInputStream
 import org.readium.r2.shared.util.http.HttpHeaders
 import org.readium.r2.shared.util.http.HttpRange
+import org.readium.r2.shared.publication.encryption.encryption
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.StringResource
 import org.readium.r2.shared.util.resource.buffered
@@ -150,6 +151,8 @@ internal class WebViewServer(
         val headers = mutableMapOf("Accept-Ranges" to "bytes")
         if (!isHtml) headers["Cache-Control"] = "max-age=86400, immutable"
 
+        val knownLength: Long? = link.properties.encryption?.originalLength
+
         return if (range == null) {
             val body = if (isHtml) BufferedInputStream(resource.asInputStream(), 65536)
                 else resource.asInputStream()
@@ -159,8 +162,8 @@ internal class WebViewServer(
             )
         } else {
             val stream = resource.asInputStream()
-            val length = stream.available()
-            val longRange = range.toLongRange(length.toLong())
+            val length: Long = knownLength ?: stream.available().toLong()
+            val longRange = range.toLongRange(length)
             headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/$length"
             WebResourceResponse(
                 link.mediaType?.toString(), null, 206, "Partial Content", headers,
