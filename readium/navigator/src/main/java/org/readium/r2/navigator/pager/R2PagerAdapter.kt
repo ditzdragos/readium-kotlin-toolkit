@@ -165,12 +165,14 @@ internal class R2PagerAdapter internal constructor(
         mFragments.forEach { _, fragment ->
             try {
                 if (fragment is R2EpubPageFragment) {
-                    Timber.d("R2PagerAdapter: cleaning up WebView for fragment")
+                    Timber.d("R2PagerAdapter: cleaning up WebViews for fragment")
                     fragment.webView?.removeAllViews()
                     fragment.webView?.destroy()
+                    fragment.webViewRight?.removeAllViews()
+                    fragment.webViewRight?.destroy()
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Error cleaning up fragment WebView")
+                Timber.e(e, "Error cleaning up fragment WebViews")
             }
         }
 

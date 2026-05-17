@@ -426,13 +426,7 @@ public class EpubNavigatorFragment public constructor(
         }
         // We need to null out the adapter explicitly, otherwise the page fragments will leak.
         if (resourcePager.adapter != null) {
-            // Clean up existing fragments first
-            (resourcePager.adapter as? R2PagerAdapter)?.mFragments?.forEach { _, fragment ->
-                if (fragment is R2EpubPageFragment) {
-                    fragment.webView?.removeAllViews()
-                    fragment.webView?.destroy()
-                }
-            }
+            (resourcePager.adapter as? R2PagerAdapter)?.cleanup()
             resourcePager.adapter = null
         }
         parent.removeView(resourcePager)
