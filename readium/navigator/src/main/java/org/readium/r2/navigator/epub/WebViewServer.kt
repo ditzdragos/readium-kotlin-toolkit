@@ -17,6 +17,7 @@ import java.io.BufferedInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
+import timber.log.Timber
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Href
@@ -61,11 +62,21 @@ internal class WebViewServer(
     //
     // Bounded to 32 entries (~2–3 pages of assets). Evictions call close() on the
     // displaced Resource so file handles and decryption state are released.
+    //
+    // Thread-safety: cached Resources include a BufferingResource, which holds a
+    // single mutable buffer slot. Concurrent reads of the same href from two
+    // ReadableInputStreamAdapter instances (e.g. left+right FXL pages showing
+    // the same image, or rapid back-navigation) would race on that buffer.
+    // WebView's normal request pattern is one InputStream consumer per request,
+    // so this is not currently exercised — but if you observe garbled image
+    // reads after this cache lands, wrap cached Resources in a Mutex-protected
+    // facade or cache the pre-buffered chain instead.
     private val resourceCache: LinkedHashMap<Url, Resource> =
         object : LinkedHashMap<Url, Resource>(32, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Url, Resource>?): Boolean {
                 if (size > 32) {
                     runCatching { eldest?.value?.close() }
+                        .onFailure { Timber.w(it, "WebViewServer: failed to close evicted Resource") }
                     return true
                 }
                 return false
@@ -78,7 +89,10 @@ internal class WebViewServer(
 
     internal fun clearResourceCache() {
         synchronized(this) {
-            resourceCache.values.forEach { runCatching { it.close() } }
+            resourceCache.values.forEach { resource ->
+                runCatching { resource.close() }
+                    .onFailure { Timber.w(it, "WebViewServer: failed to close Resource during cache drain") }
+            }
             resourceCache.clear()
         }
     }
