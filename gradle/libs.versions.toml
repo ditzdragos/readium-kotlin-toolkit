@@ -37,7 +37,6 @@ dokka = "1.9.20"
 
 google-material = "1.12.0"
 
-joda-time = "2.14.0"
 #Do not upgrade without fixing unit tests in HtmlResourceContentIteratorTest and regression testing
 #See https://github.com/jhy/jsoup/pull/2283
 jsoup = "1.18.1"
@@ -110,7 +109,6 @@ assertj = { group = "org.assertj", name = "assertj-core", version.ref = "assertj
 desugar_jdk_libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar_jdk_libs" }
 google-material = { group = "com.google.android.material", name = "material", version.ref = "google-material" }
 
-joda-time = { group = "joda-time", name = "joda-time", version.ref = "joda-time" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

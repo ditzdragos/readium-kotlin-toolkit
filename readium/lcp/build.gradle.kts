@@ -29,11 +29,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.dnsoverhttps)
     implementation(libs.timber)
-    implementation("com.mcxiaoke.koi:core:0.5.5") {
-        exclude(module = "support-v4")
-    }
-    implementation(libs.joda.time)
     implementation(libs.androidx.browser)
+    implementation(libs.kotlinx.datetime)
 
     implementation(libs.bundles.room)
     ksp(libs.androidx.room.compiler)
