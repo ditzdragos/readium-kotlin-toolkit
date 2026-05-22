@@ -48,8 +48,15 @@ internal class DeviceService(
         }
 
         val url = link.url(parameters = asQueryParameters).toString()
-        val data = network.fetch(url, NetworkService.Method.POST, asQueryParameters)
-            .getOrNull() ?: return null
+        // id/name are already encoded into `url` above; don't pass them to fetch() again or they
+        // get appended a second time. The explicit text/plain Content-Type overrides the platform
+        // HttpURLConnection default (application/x-www-form-urlencoded) so the LSD server doesn't
+        // reject this body-less POST with 415 Unsupported Media Type.
+        val data = network.fetch(
+            url,
+            NetworkService.Method.POST,
+            headers = mapOf("Content-Type" to "text/plain"),
+        ).getOrNull() ?: return null
 
         repository.registerDevice(license)
         return data
