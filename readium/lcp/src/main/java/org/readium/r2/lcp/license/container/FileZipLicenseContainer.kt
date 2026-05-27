@@ -9,15 +9,23 @@
 
 package org.readium.r2.lcp.license.container
 
-import java.io.ByteArrayInputStream
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import org.readium.r2.lcp.BuildConfig.DEBUG
 import org.readium.r2.lcp.LcpError
 import org.readium.r2.lcp.LcpException
 import org.readium.r2.lcp.license.model.LicenseDocument
 import org.readium.r2.shared.util.Url
+import org.readium.r2.shared.util.zip.FileChannelAdapter
+import org.readium.r2.shared.util.zip.compress.archivers.zip.ZipArchiveEntry
+import org.readium.r2.shared.util.zip.compress.archivers.zip.ZipArchiveEntryPredicate
+import org.readium.r2.shared.util.zip.compress.archivers.zip.ZipArchiveOutputStream
 import timber.log.Timber
+
+private typealias CommonsZipFile = org.readium.r2.shared.util.zip.compress.archivers.zip.ZipFile
 
 /**
  * Access to a License Document stored in a ZIP archive.
@@ -73,22 +81,50 @@ internal class FileZipLicenseContainer(
     }
 
     override fun write(license: LicenseDocument) {
+        val started = System.currentTimeMillis()
+        val source = File(zip)
+        val tmpZip = File("$zip.tmp")
+        val pathInZipString = pathInZIP.toString()
+
         try {
-            val source = File(zip)
-            val tmpZip = File("$zip.tmp")
-            val zipFile = ZipFile(source)
-            try {
-                zipFile.addOrReplaceEntry(
-                    pathInZIP.toString(),
-                    ByteArrayInputStream(license.toByteArray()),
-                    tmpZip
-                )
-            } finally {
-                zipFile.close()
+            FileChannelAdapter(source, "r").use { channel ->
+                CommonsZipFile(channel).use { srcZip ->
+                    BufferedOutputStream(FileOutputStream(tmpZip)).use { fileOut ->
+                        ZipArchiveOutputStream(fileOut).use { outZip ->
+                            srcZip.copyRawEntries(
+                                outZip,
+                                ZipArchiveEntryPredicate { it.name != pathInZipString }
+                            )
+
+                            val newEntry = ZipArchiveEntry(pathInZipString)
+                            newEntry.method = ZipEntry.DEFLATED
+                            outZip.putArchiveEntry(newEntry)
+                            outZip.write(license.toByteArray())
+                            outZip.closeArchiveEntry()
+                        }
+                    }
+                }
             }
             tmpZip.moveTo(source)
+
+            val elapsed = System.currentTimeMillis() - started
+            val sizeMb = source.length() / (1024.0 * 1024.0)
+            Timber.i(
+                "FileZipLicenseContainer.write: injected license into %.2f MB EPUB in %d ms",
+                sizeMb,
+                elapsed
+            )
         } catch (e: Exception) {
+            tryDelete(tmpZip)
             throw LcpException(LcpError.Container.WriteFailed(pathInZIP))
+        }
+    }
+
+    private fun tryDelete(file: File) {
+        try {
+            file.delete()
+        } catch (e: Exception) {
+            Timber.w(e, "Cleanup failed")
         }
     }
 }

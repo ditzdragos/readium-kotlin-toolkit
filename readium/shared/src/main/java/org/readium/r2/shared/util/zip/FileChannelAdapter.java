@@ -19,7 +19,7 @@ public class FileChannelAdapter implements SeekableByteChannel {
 
     private final FileChannel channel;
 
-    FileChannelAdapter(final File file, final String mode) throws FileNotFoundException {
+    public FileChannelAdapter(final File file, final String mode) throws FileNotFoundException {
         channel = new RandomAccessFile(file, mode).getChannel();
     }
 
