@@ -11,6 +11,7 @@ package org.readium.r2.lcp.service
 
 import android.net.Uri
 import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -116,8 +117,8 @@ internal class NetworkService {
             var lastProgress = 0.0
 
             BufferedInputStream(connection.inputStream).use { input ->
-                FileOutputStream(destination).use { output ->
-                    val buf = ByteArray(2048)
+                BufferedOutputStream(FileOutputStream(destination), IO_BUFFER_SIZE).use { output ->
+                    val buf = ByteArray(IO_BUFFER_SIZE)
                     var n: Int
                     while (-1 != input.read(buf).also { n = it }) {
                         coroutineContext.ensureActive()
@@ -130,9 +131,7 @@ internal class NetworkService {
                             val progress = (readLength / expectedLength)
                                 .coerceIn(0.0, 1.0).roundToDecimals(2)
                             if (lastProgress < progress) {
-                                withContext(Dispatchers.Main) {
-                                    onProgress(progress)
-                                }
+                                onProgress(progress)
                             }
                             lastProgress = progress
                         }
@@ -155,3 +154,5 @@ private fun Double.roundToDecimals(decimals: Int): Double {
     repeat(decimals) { multiplier *= 10 }
     return round(this * multiplier) / multiplier
 }
+
+private const val IO_BUFFER_SIZE = 64 * 1024
