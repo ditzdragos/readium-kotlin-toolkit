@@ -10,17 +10,20 @@
 package org.readium.r2.lcp.service
 
 import android.net.Uri
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 import kotlin.math.round
 import kotlin.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Request
+import okio.buffer
+import okio.sink
 import org.readium.r2.lcp.LcpError
 import org.readium.r2.lcp.LcpException
 import org.readium.r2.shared.util.Try
@@ -45,6 +48,16 @@ internal class NetworkService {
         companion object {
             operator fun invoke(value: String) = values().firstOrNull { it.value == value }
         }
+    }
+
+    private val downloadHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
     }
 
     suspend fun fetch(
@@ -101,47 +114,67 @@ internal class NetworkService {
         onProgress: (Double) -> Unit,
     ): MediaType? = withContext(Dispatchers.IO) {
         coroutineContext.ensureActive()
+
+        val request = Request.Builder()
+            .url(url.toString())
+            .header("Accept-Encoding", "identity")
+            .build()
+
+        val started = System.currentTimeMillis()
+
         try {
-            val connection = URL(url.toString()).openConnection() as HttpURLConnection
-            if (connection.responseCode >= 400) {
-                throw LcpException(LcpError.Network(NetworkException(connection.responseCode)))
-            }
-
-            var readLength = 0L
-            val expectedLength =
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    connection.contentLengthLong.toDouble()
-                } else {
-                    connection.contentLength.toDouble()
+            downloadHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw LcpException(LcpError.Network(NetworkException(response.code)))
                 }
-            var lastProgress = 0.0
 
-            BufferedInputStream(connection.inputStream).use { input ->
-                BufferedOutputStream(FileOutputStream(destination), IO_BUFFER_SIZE).use { output ->
-                    val buf = ByteArray(IO_BUFFER_SIZE)
-                    var n: Int
-                    while (-1 != input.read(buf).also { n = it }) {
+                val body = response.body
+                    ?: throw LcpException(LcpError.Network(NetworkException(null)))
+
+                val expectedLength = body.contentLength().toDouble()
+                var readLength = 0L
+                var lastProgress = 0.0
+
+                val source = body.source()
+                destination.sink().buffer().use { sink ->
+                    while (true) {
                         coroutineContext.ensureActive()
-                        output.write(buf, 0, n)
+                        val n = source.read(sink.buffer, DOWNLOAD_READ_BUFFER_BYTES)
+                        if (n == -1L) break
+                        sink.emit()
                         readLength += n
 
                         if (expectedLength > 0) {
-                            // Rounds the progress to avoid notifying too much which my decrease
-                            // performances.
                             val progress = (readLength / expectedLength)
-                                .coerceIn(0.0, 1.0).roundToDecimals(2)
+                                .coerceIn(0.0, 1.0)
+                                .roundToDecimals(2)
                             if (lastProgress < progress) {
                                 onProgress(progress)
+                                lastProgress = progress
                             }
-                            lastProgress = progress
                         }
                     }
                 }
-            }
 
-            connection.contentType
-                ?.let { MediaType(it) }
-                ?: mediaType
+                val elapsedMs = System.currentTimeMillis() - started
+                if (elapsedMs > 0 && readLength > 0) {
+                    val mbps = (readLength.toDouble() / (1024.0 * 1024.0)) /
+                        (elapsedMs.toDouble() / 1000.0)
+                    Timber.i(
+                        "LCP download finished: %.2f MB in %d ms (%.2f MB/s, HTTP %s)",
+                        readLength / (1024.0 * 1024.0),
+                        elapsedMs,
+                        mbps,
+                        response.protocol.toString()
+                    )
+                }
+
+                body.contentType()?.toString()
+                    ?.let { MediaType(it) }
+                    ?: mediaType
+            }
+        } catch (e: LcpException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e)
             throw LcpException(LcpError.Network(e))
@@ -155,4 +188,4 @@ private fun Double.roundToDecimals(decimals: Int): Double {
     return round(this * multiplier) / multiplier
 }
 
-private const val IO_BUFFER_SIZE = 64 * 1024
+private const val DOWNLOAD_READ_BUFFER_BYTES: Long = 64 * 1024
