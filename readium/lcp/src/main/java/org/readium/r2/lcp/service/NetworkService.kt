@@ -120,8 +120,6 @@ internal class NetworkService {
             .header("Accept-Encoding", "identity")
             .build()
 
-        val started = System.currentTimeMillis()
-
         try {
             downloadHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
@@ -154,19 +152,6 @@ internal class NetworkService {
                             }
                         }
                     }
-                }
-
-                val elapsedMs = System.currentTimeMillis() - started
-                if (elapsedMs > 0 && readLength > 0) {
-                    val mbps = (readLength.toDouble() / (1024.0 * 1024.0)) /
-                        (elapsedMs.toDouble() / 1000.0)
-                    Timber.i(
-                        "LCP download finished: %.2f MB in %d ms (%.2f MB/s, HTTP %s)",
-                        readLength / (1024.0 * 1024.0),
-                        elapsedMs,
-                        mbps,
-                        response.protocol.toString()
-                    )
                 }
 
                 body.contentType()?.toString()

@@ -81,7 +81,6 @@ internal class FileZipLicenseContainer(
     }
 
     override fun write(license: LicenseDocument) {
-        val started = System.currentTimeMillis()
         val source = File(zip)
         val tmpZip = File("$zip.tmp")
         val pathInZipString = pathInZIP.toString()
@@ -89,6 +88,7 @@ internal class FileZipLicenseContainer(
         try {
             FileChannelAdapter(source, "r").use { channel ->
                 CommonsZipFile(channel).use { srcZip ->
+                    val originalEntry = srcZip.getEntry(pathInZipString)
                     BufferedOutputStream(FileOutputStream(tmpZip)).use { fileOut ->
                         ZipArchiveOutputStream(fileOut).use { outZip ->
                             srcZip.copyRawEntries(
@@ -98,6 +98,10 @@ internal class FileZipLicenseContainer(
 
                             val newEntry = ZipArchiveEntry(pathInZipString)
                             newEntry.method = ZipEntry.DEFLATED
+                            originalEntry?.let {
+                                newEntry.extra = it.extra
+                                newEntry.comment = it.comment
+                            }
                             outZip.putArchiveEntry(newEntry)
                             outZip.write(license.toByteArray())
                             outZip.closeArchiveEntry()
@@ -106,15 +110,8 @@ internal class FileZipLicenseContainer(
                 }
             }
             tmpZip.moveTo(source)
-
-            val elapsed = System.currentTimeMillis() - started
-            val sizeMb = source.length() / (1024.0 * 1024.0)
-            Timber.i(
-                "FileZipLicenseContainer.write: injected license into %.2f MB EPUB in %d ms",
-                sizeMb,
-                elapsed
-            )
         } catch (e: Exception) {
+            Timber.e(e, "FileZipLicenseContainer.write failed for %s", pathInZIP)
             tryDelete(tmpZip)
             throw LcpException(LcpError.Container.WriteFailed(pathInZIP))
         }

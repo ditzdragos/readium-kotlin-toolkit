@@ -168,13 +168,8 @@ internal class LicensesService(
             onProgress = onProgress
         )
 
-        val sha256Started = System.currentTimeMillis()
         val hashIsCorrect = license.publicationLink.hash
             ?.let { destination.checkSha256(it) }
-        Timber.i(
-            "LCP post-download: SHA-256 verification took %d ms",
-            System.currentTimeMillis() - sha256Started
-        )
 
         if (hashIsCorrect == false) {
             throw LcpException(
@@ -182,7 +177,6 @@ internal class LicensesService(
             )
         }
 
-        val sniffStarted = System.currentTimeMillis()
         val format =
             assetRetriever.sniffFormat(
                 destination,
@@ -211,11 +205,6 @@ internal class LicensesService(
                     }
                 }
             }
-
-        Timber.i(
-            "LCP post-download: format sniff took %d ms",
-            System.currentTimeMillis() - sniffStarted
-        )
 
         // Saves the License Document into the downloaded publication
         val container = createLicenseContainer(destination, format.specification)
