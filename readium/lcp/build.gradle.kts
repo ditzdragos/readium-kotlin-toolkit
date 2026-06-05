@@ -27,6 +27,7 @@ dependencies {
     implementation(libs.androidx.core)
     implementation(libs.google.material)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.dnsoverhttps)
     implementation(libs.timber)
     implementation("com.mcxiaoke.koi:core:0.5.5") {
         exclude(module = "support-v4")

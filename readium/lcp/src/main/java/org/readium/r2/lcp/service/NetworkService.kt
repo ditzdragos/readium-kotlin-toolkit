@@ -57,6 +57,9 @@ internal class NetworkService {
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            // RallyReader fork patch: resolve the CDN host through a system-first, DNS-over-HTTPS
+            // fallback resolver so the publication download survives a broken device DNS.
+            .dns(systemThenDohDns())
             .build()
     }
 
