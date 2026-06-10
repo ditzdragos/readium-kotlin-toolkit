@@ -1,0 +1,71 @@
+/*
+ * RR-6369: Fixed-layout publications (e.g. graphic novels) frequently bake their
+ * story text into the page image using a Times-metric typeface, and lay an
+ * invisible HTML text layer on top purely to anchor read-aloud highlights and
+ * underlines. Those pages declare no font-family of their own, so the overlay
+ * inherits the WebView's default font.
+ *
+ * Android's WebView defaults unstyled text to sans-serif (Roboto), which is
+ * ~8% wider per character than the baked Times-metric text. The invisible
+ * overlay therefore renders progressively wider than the artwork, creeping
+ * right and accumulating across each line, which drags the read-aloud underline
+ * off the word being spoken (it ends up under the next word or in empty space).
+ *
+ * Default the unstyled text to a Times-metric serif so the overlay tracks the
+ * baked text. Android ships no Times face — and its generic `serif` (Noto Serif)
+ * is wider still — so a metric-compatible Times clone (NimbusRoman) is bundled
+ * here. This only sets the default: a publication that declares its own
+ * font-family still wins.
+ *
+ * Second correction — kerning. Independently of the font, Android's WebView
+ * applies pair-kerning to the overlay text, which tightens it (e.g. removes
+ * space between pairs like "Th", "av", "To"). The baked artwork was laid out
+ * without that kerning, so the overlay renders progressively narrower than the
+ * artwork and the last word on a line drifts left of the word it should sit
+ * under — the longer the line, the larger the negative offset. Measured on a
+ * baked overlay using its own embedded font with no letter-spacing, kerning
+ * tightened a ~27-character line by ~9px (the overlay right edge fell 9px short
+ * of its authored text box); disabling kerning brought it back onto the box.
+ * Turning kerning off restores the font's plain advance widths, which match the
+ * artwork. This is independent of which font the overlay ends up using, so it
+ * applies to every fixed-layout overlay, not just the no-font default above.
+ */
+@font-face {
+  font-family: "Times New Roman";
+  src: url("NimbusRoman.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Times New Roman";
+  src: url("NimbusRoman-Italic.woff") format("woff");
+  font-weight: normal;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Times New Roman";
+  src: url("NimbusRoman-Bold.woff") format("woff");
+  font-weight: bold;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Times New Roman";
+  src: url("NimbusRoman-BoldItalic.woff") format("woff");
+  font-weight: bold;
+  font-style: italic;
+}
+
+html {
+  font-family: "Times New Roman", serif;
+}
+
+/*
+ * Disable the pair-kerning the WebView would otherwise add to the overlay text,
+ * so its advance widths match the (unkerned) baked artwork and the read-aloud
+ * underline tracks the spoken word across the whole line. Applied broadly so it
+ * reaches every fixed-layout text node; a publication that explicitly sets
+ * font-kerning still wins.
+ */
+* {
+  font-kerning: none;
+}
