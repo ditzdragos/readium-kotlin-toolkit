@@ -41,12 +41,14 @@ class CachingReadableTest {
     }
 
     @Test
-    fun `close delegates to source`() = runTest {
+    fun `close does not propagate to the shared source`() = runTest {
         val source = CountingReadable(ByteArray(100))
         val caching = CachingReadable(source)
 
         caching.close()
 
-        assertEquals(1, source.closeCalls)
+        // CachingContainer shares one CachingReadable per URL across all callers, so a
+        // single consumer closing it must NOT close the underlying source for the others.
+        assertEquals(0, source.closeCalls)
     }
 }

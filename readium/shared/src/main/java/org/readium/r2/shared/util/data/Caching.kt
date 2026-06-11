@@ -59,9 +59,12 @@ internal class CachingReadable(
         }
     }
 
-    override fun close() {
-        source.close()
-    }
+    // No-op on purpose: CachingContainer hands the SAME CachingReadable instance to
+    // every caller of a given URL (see below). Delegating close() here would let one
+    // consumer — e.g. a WebView taking ownership of an InputStream via asInputStream() —
+    // close the shared underlying source out from under the other holders. The
+    // container owns the lifecycle and closes the sources in CachingContainer.close().
+    override fun close() {}
 }
 
 internal class CachingContainer(

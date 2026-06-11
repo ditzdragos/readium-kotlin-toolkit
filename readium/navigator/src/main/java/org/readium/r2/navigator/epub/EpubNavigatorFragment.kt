@@ -471,28 +471,6 @@ public class EpubNavigatorFragment public constructor(
             currentPagerPosition = position // Update current position
 
             notifyCurrentLocation()
-
-            // VL-8 stopgap for VL-1 (ViewPager1 keeps adjacent pages RESUMED):
-            // pause JS timers on offscreen pages so their setInterval/requestAnimationFrame
-            // do not run while invisible.
-            //
-            // pauseTimers/resumeTimers is process-wide on pre-API-31 (all WebViews share
-            // one JS thread; the LAST call wins). To keep the active page running, we
-            // pause every offscreen page first, then resume the active one LAST so the
-            // process-wide state ends in RESUMED.
-            val adapter = r2PagerAdapter
-            if (adapter != null) {
-                val activeId = adapter.getItemId(position)
-                adapter.mFragments.forEach { id, fragment ->
-                    if (id != activeId && fragment is R2EpubPageFragment) {
-                        fragment.webView?.pauseTimers()
-                        fragment.webViewRight?.pauseTimers()
-                    }
-                }
-                val activeFragment = adapter.mFragments.get(activeId) as? R2EpubPageFragment
-                activeFragment?.webView?.resumeTimers()
-                activeFragment?.webViewRight?.resumeTimers()
-            }
         }
     }
 
@@ -620,8 +598,6 @@ public class EpubNavigatorFragment public constructor(
         }
 
         notifyCurrentLocation()
-        currentReflowablePageFragment?.webView?.resumeTimers()
-        currentReflowablePageFragment?.webViewRight?.resumeTimers()
     }
 
     @OptIn(DelicateReadiumApi::class)
