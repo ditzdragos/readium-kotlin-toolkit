@@ -409,6 +409,10 @@ public class EpubNavigatorFragment public constructor(
             }
         }
 
+        // Start warming the initial spread's resources on IO while the WebViews initialise and
+        // load their HTML, so their first asset requests hit the server's cache.
+        prewarmInitialResources()
+
         resourcePager = binding.resourcePager
         resetResourcePager()
 
@@ -418,6 +422,43 @@ public class EpubNavigatorFragment public constructor(
         }
 
         return view
+    }
+
+    /**
+     * Warms the web view server's resource cache for the spread the reader will open on. Runs in
+     * the background; by the time the WebViews have initialised and parsed their HTML, the LCP
+     * decrypt of the spread's images is already under way (or done) instead of starting from
+     * zero on the first WebView request.
+     */
+    private fun prewarmInitialResources() {
+        val initialHref = initialLocator?.href?.removeFragment()
+            ?: readingOrder.firstOrNull()?.url()
+            ?: return
+
+        val resources = if (viewModel.layout == EpubLayout.FIXED && viewModel.dualPageMode == DualPage.ON) {
+            resourcesDouble
+        } else {
+            resourcesSingle
+        }
+
+        val page = resources.firstOrNull { res ->
+            when (res) {
+                is PageResource.EpubReflowable -> res.link.url().isEquivalent(initialHref)
+                is PageResource.EpubFxl ->
+                    res.leftLink?.url()?.isEquivalent(initialHref) == true ||
+                        res.rightLink?.url()?.isEquivalent(initialHref) == true
+                else -> false
+            }
+        } ?: return
+
+        val hrefs = when (page) {
+            is PageResource.EpubReflowable -> listOf(page.link.url())
+            is PageResource.EpubFxl -> listOfNotNull(page.leftLink?.url(), page.rightLink?.url())
+            else -> emptyList()
+        }
+        if (hrefs.isNotEmpty()) {
+            viewModel.prewarmResources(hrefs)
+        }
     }
 
     private fun resetResourcePager() {
@@ -469,6 +510,10 @@ public class EpubNavigatorFragment public constructor(
                 }
             }
             currentPagerPosition = position // Update current position
+
+            // If the user lands on a spread whose load was deferred (it was an offscreen
+            // neighbour of a still-loading page), it is the visible one now — load immediately.
+            (fragmentAt(position) as? R2EpubPageFragment)?.startDeferredLoadIfNeeded()
 
             notifyCurrentLocation()
         }
@@ -797,6 +842,10 @@ public class EpubNavigatorFragment public constructor(
 
                 notifyCurrentLocation()
 
+                // The visible spread may have just finished loading — let any deferred offscreen
+                // neighbours start loading now that the contention window is over.
+                releaseDeferredPageLoads()
+
                 Timber.d("onPageLoaded: ${link.href} ${state}")
                 paginationListener?.onPageLoaded(link.url(), state == State.Ready)
             }
@@ -989,6 +1038,31 @@ public class EpubNavigatorFragment public constructor(
         } else {
             null
         }
+
+    /**
+     * Whether [fragment] should postpone loading its resources in the web views.
+     *
+     * True only for fixed-layout offscreen neighbours materialised while the visible spread is
+     * still loading: at cold open, loading three spreads concurrently makes first paint slower
+     * (CPU/heap contention, GC churn on memory-constrained devices). Once the visible spread is
+     * loaded — or whenever we cannot determine it — pages load immediately, preserving the
+     * regular neighbour preloading behaviour.
+     */
+    internal fun shouldDeferPageLoad(fragment: R2EpubPageFragment): Boolean {
+        if (viewModel.layout != EpubLayout.FIXED) return false
+        val current = r2PagerAdapter?.getCurrentFragment() as? R2EpubPageFragment ?: return false
+        return current !== fragment && !current.isSpreadLoaded()
+    }
+
+    /** Releases deferred neighbour loads once the visible spread has finished loading. */
+    private fun releaseDeferredPageLoads() {
+        val adapter = r2PagerAdapter ?: return
+        val current = adapter.getCurrentFragment() as? R2EpubPageFragment
+        if (current != null && !current.isSpreadLoaded()) return
+        adapter.mFragments.forEach { _, fragment ->
+            (fragment as? R2EpubPageFragment)?.startDeferredLoadIfNeeded()
+        }
+    }
 
     private val currentReflowablePageFragment: R2EpubPageFragment?
         get() = currentFragment as? R2EpubPageFragment

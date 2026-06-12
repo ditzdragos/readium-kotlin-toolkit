@@ -16,6 +16,7 @@ import android.webkit.WebResourceResponse
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlin.reflect.KClass
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -249,6 +250,17 @@ internal class EpubNavigatorViewModel(
 
     fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
         server.shouldInterceptRequest(request, css.value)
+
+    /**
+     * Warms the web view server's resource cache for the given publication [hrefs] (and the
+     * assets their HTML references) in the background, so the WebViews' first requests are
+     * served from already-built Resources. See [WebViewServer.prewarm].
+     */
+    fun prewarmResources(hrefs: List<Url>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            hrefs.forEach { server.prewarm(it, css.value) }
+        }
+    }
 
     fun submitPreferences(preferences: EpubPreferences) = viewModelScope.launch {
         val oldSettings = settings.value

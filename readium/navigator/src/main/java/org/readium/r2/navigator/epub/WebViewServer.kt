@@ -37,6 +37,7 @@ import org.readium.r2.shared.util.resource.borrow
 import org.readium.r2.shared.util.resource.buffered
 import org.readium.r2.shared.util.resource.fallback
 import org.readium.r2.shared.util.resource.synchronized
+import org.readium.r2.shared.util.use
 
 /**
  * Serves the publication resources and application assets in the EPUB navigator web views.
@@ -55,6 +56,13 @@ internal class WebViewServer(
 
         fun assetUrl(path: String): Url? =
             Url.fromDecodedPath(path)?.let { assetsBaseHref.resolve(it) }
+
+        // One BufferingResource window (see buildResource).
+        private const val PREWARM_READ_BYTES = 256L * 1024
+
+        // Asset references in the page HTML: <img src>, <image xlink:href>, <link href>, etc.
+        private val assetRefRegex =
+            Regex("""(?:src|href)\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     }
 
     // Resources are cheap to *describe* but expensive to *build* — each construction
@@ -102,6 +110,56 @@ internal class WebViewServer(
                     .onFailure { Timber.w(it, "WebViewServer: failed to close duplicate Resource") }
             } ?: built.also { resourceCache[url] = it }
         }
+    }
+
+    /**
+     * Pre-builds and warms the cached [Resource]s for the publication resource at [href] and the
+     * assets (images, stylesheets) its HTML references.
+     *
+     * At cold open the WebView only discovers a page's images after Chromium has initialised and
+     * parsed the HTML — by then the LCP decrypt of multi-MB fixed-layout art starts from zero on
+     * the request path. Prewarming overlaps that window: the Resource is built ahead of time
+     * (zip entry lookup + LcpDecryptor wrapping) and its first buffer window decrypted, so the
+     * WebView's first requests hit [resourceCache] warm. Reads past the first window still
+     * stream on demand — we deliberately do NOT read whole resources, both to avoid decrypting
+     * everything twice and to keep peak memory flat (see the BufferingResource note in
+     * [buildResource]).
+     */
+    internal suspend fun prewarm(href: Url, css: ReadiumCss) {
+        val pageUrl = href.removeFragment()
+        val pageLink = publication.linkWithHref(pageUrl)?.copy(href = Href(pageUrl)) ?: return
+
+        if (pageLink.mediaType?.isHtml != true) {
+            prewarmResource(pageUrl, pageLink, css)
+            return
+        }
+
+        // Read the raw (small) HTML wrapper to discover referenced assets. Served HTML is built
+        // per-request (request-scoped ReadiumCss injection), so the page itself cannot be
+        // cached — only its assets are.
+        val html = publication.get(pageUrl)
+            ?.use { it.read().getOrNull() }
+            ?.decodeToString()
+            ?: return
+
+        for (match in assetRefRegex.findAll(html)) {
+            val ref = match.groupValues[1]
+            if (ref.startsWith("data:") || ref.startsWith("javascript:")) continue
+            val assetUrl = Url(ref)?.let { pageUrl.resolve(it) }?.removeFragment() ?: continue
+            val assetLink = publication.linkWithHref(assetUrl)?.copy(href = Href(assetUrl))
+                ?: continue // Not a publication resource (absolute/external URL) — skip.
+            prewarmResource(assetUrl, assetLink, css)
+        }
+    }
+
+    private suspend fun prewarmResource(url: Url, link: Link, css: ReadiumCss) {
+        // HTML is built per-request; only non-HTML resources are cacheable.
+        if (link.mediaType?.isHtml == true) return
+        // Same key and build recipe as servePublicationResource, so the WebView's request hits
+        // this exact entry.
+        val resource = cachedResource(url) { buildResource(link, url, css).synchronized() }
+        // Warm one BufferingResource window; result is intentionally discarded.
+        resource.borrow().use { it.read(0 until PREWARM_READ_BYTES) }
     }
 
     internal fun clearResourceCache() {

@@ -98,6 +98,7 @@ internal class R2EpubPageFragment : Fragment() {
     private var isLoading: Boolean = false
     private var isLoadingRight: Boolean = false
     private val _isLoaded = MutableStateFlow(false)
+    private var deferredLoadPending = false
 
     private var webViewClient = object : WebViewClientCompat() {
         override fun shouldOverrideUrlLoading(
@@ -297,9 +298,37 @@ internal class R2EpubPageFragment : Fragment() {
             }
         }
 
-        // Load left page first
+        webView?.let { setupWebView(it, resourceUrl) }
+        webViewRight?.let { setupWebView(it, rightResourceUrl) }
+
+        // At cold open, ViewPager materialises the current AND the two adjacent spreads at once,
+        // so three spreads' worth of LCP decrypt + image decode compete for CPU and heap — that
+        // contention slows first paint and triggers GC churn on memory-constrained devices
+        // (Chromebook). When this fragment is an offscreen neighbour of a spread that is still
+        // loading, defer loadUrl until the navigator releases it (visible spread ready), or until
+        // a fallback delay so neighbour preloading still happens if the visible page never
+        // finishes. When the visible spread is already loaded (steady-state swiping), neighbours
+        // load immediately as before.
+        if (navigator?.shouldDeferPageLoad(this) == true) {
+            deferredLoadPending = true
+            containerView.postDelayed(DEFERRED_LOAD_FALLBACK_MS) { startDeferredLoadIfNeeded() }
+        } else {
+            loadResources()
+        }
+
+        // Forward a tap event when the web view is not ready to propagate the taps. This allows
+        // to toggle a navigation UI while a page is loading, for example.
+        containerView.setOnClickListenerWithPoint { _, point ->
+            webView?.listener?.onTap(point)
+        }
+
+        return containerView
+    }
+
+    /** Starts loading the spread's resource(s) in the web view(s). */
+    private fun loadResources() {
+        // Load left page first.
         webView?.let {
-            setupWebView(it, resourceUrl)
             resourceUrl?.let { url ->
                 isLoading = true
                 _isLoaded.value = false
@@ -311,22 +340,28 @@ internal class R2EpubPageFragment : Fragment() {
         // Load right page in parallel with the left page. Previously this was deferred until
         // left's onContentReady, serialising two full LCP-decrypt + image-load cycles end-to-end.
         webViewRight?.let {
-            setupWebView(it, rightResourceUrl)
             rightResourceUrl?.let { url ->
                 isLoadingRight = true
                 Timber.d("Loading right page in parallel: $url")
                 it.loadUrl(url.toString())
             }
         }
-
-        // Forward a tap event when the web view is not ready to propagate the taps. This allows
-        // to toggle a navigation UI while a page is loading, for example.
-        containerView.setOnClickListenerWithPoint { _, point ->
-            webView?.listener?.onTap(point)
-        }
-
-        return containerView
     }
+
+    /**
+     * Loads the spread now if its load was deferred (offscreen neighbour created while the
+     * visible spread was still loading). Idempotent; no-op when the load already started.
+     */
+    internal fun startDeferredLoadIfNeeded() {
+        if (!deferredLoadPending) return
+        deferredLoadPending = false
+        if (view == null) return
+        loadResources()
+    }
+
+    /** Whether every page of this spread (left, and right when present) finished loading. */
+    internal fun isSpreadLoaded(): Boolean =
+        _isLoaded.value && !isLoadingRight
 
     fun setupWebView(webView: R2WebView, resourceUrl: AbsoluteUrl?) {
         webView.settings.javaScriptEnabled = true
@@ -629,6 +664,10 @@ internal class R2EpubPageFragment : Fragment() {
     companion object {
         private const val NET_ERROR = "net::ERR_FAILED"
         private const val textZoomBundleKey = "textZoom"
+
+        // Fallback before a deferred offscreen spread loads anyway, so neighbour preloading is
+        // never lost if the visible spread errors out and never reports loaded.
+        private const val DEFERRED_LOAD_FALLBACK_MS = 8_000L
 
         fun newInstance(
             url: AbsoluteUrl,
