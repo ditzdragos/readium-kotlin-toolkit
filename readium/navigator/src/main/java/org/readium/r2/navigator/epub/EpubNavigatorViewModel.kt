@@ -270,11 +270,13 @@ internal class EpubNavigatorViewModel(
         css.update { it.update(newSettings, useReadiumCssFontSize = config.useReadiumCssFontSize) }
 
         val needsInvalidation: Boolean =
-            (oldSettings.readingProgression != newSettings.readingProgression || oldSettings.language != newSettings.language || oldSettings.verticalText != newSettings.verticalText || oldSettings.spread != newSettings.spread ||
-                // We need to invalidate the resource pager when changing from scroll mode to
-                // paginated, otherwise the horizontal scroll will be broken.
-                // See https://github.com/readium/kotlin-toolkit/pull/304
-                oldSettings.scroll != newSettings.scroll)
+            (
+                oldSettings.readingProgression != newSettings.readingProgression || oldSettings.language != newSettings.language || oldSettings.verticalText != newSettings.verticalText || oldSettings.spread != newSettings.spread ||
+                    // We need to invalidate the resource pager when changing from scroll mode to
+                    // paginated, otherwise the horizontal scroll will be broken.
+                    // See https://github.com/readium/kotlin-toolkit/pull/304
+                    oldSettings.scroll != newSettings.scroll
+                )
 
         if (needsInvalidation) {
             _events.send(Event.InvalidateViewPager)
@@ -299,7 +301,7 @@ internal class EpubNavigatorViewModel(
      */
     val dualPageMode: DualPage
         get() {
-            Timber.d("dualPageMode: ${layout} ${settings.value.spread} ${settings.value.columnCount}")
+            Timber.d("dualPageMode: $layout ${settings.value.spread} ${settings.value.columnCount}")
             return when (layout) {
                 EpubLayout.FIXED -> when (settings.value.spread) {
                     Spread.AUTO -> DualPage.AUTO
@@ -326,7 +328,8 @@ internal class EpubNavigatorViewModel(
     // Selection
 
     fun clearSelection(): RunScriptCommand = RunScriptCommand(
-        "window.getSelection().removeAllRanges();", scope = RunScriptCommand.Scope.CurrentResource
+        "window.getSelection().removeAllRanges();",
+        scope = RunScriptCommand.Scope.CurrentResource
     )
 
     // Decorations
@@ -338,7 +341,9 @@ internal class EpubNavigatorViewModel(
         decorationTemplates.styles.containsKey(style)
 
     suspend fun applyDecorations(
-        decorations: List<Decoration>, group: String, enhanced: Boolean = false
+        decorations: List<Decoration>,
+        group: String,
+        enhanced: Boolean = false,
     ): List<RunScriptCommand> {
         val source = this.decorations[group] ?: emptyList()
         val target = decorations.toMutableList()
@@ -346,7 +351,7 @@ internal class EpubNavigatorViewModel(
 
         val cmds = mutableListOf<RunScriptCommand>()
         if (target.isEmpty()) {
-            Timber.d("clearing all decorations ${group}")
+            Timber.d("clearing all decorations $group")
             cmds.add(
                 RunScriptCommand(
                     // The updates command are using `requestAnimationFrame()`, so we need it for
@@ -381,7 +386,8 @@ internal class EpubNavigatorViewModel(
                     let group = readium.getDecorations('$group');
                     ${DecorationChange.AddedEnhanced(decoration).javascript(decorationTemplates)}
                 });
-        """, scope = RunScriptCommand.Scope.LoadedResource(decoration.locator.href)
+        """,
+            scope = RunScriptCommand.Scope.LoadedResource(decoration.locator.href)
         )
     }
 
@@ -419,14 +425,20 @@ internal class EpubNavigatorViewModel(
     }
 
     fun onDecorationActivated(
-        id: DecorationId, group: String, rect: RectF, point: PointF
+        id: DecorationId,
+        group: String,
+        rect: RectF,
+        point: PointF,
     ): Boolean {
         val listeners = decorationListeners[group] ?: return false
 
         val decoration = decorations[group]?.firstOrNull { it.id == id } ?: return false
 
         val event = DecorableNavigator.OnActivatedEvent(
-            decoration = decoration, group = group, rect = rect, point = point
+            decoration = decoration,
+            group = group,
+            rect = rect,
+            point = point
         )
         for (listener in listeners) {
             if (listener.onDecorationActivated(event)) {
@@ -476,9 +488,11 @@ internal class EpubNavigatorViewModel(
                     disableSelectionWhenProtected = config.disableSelectionWhenProtected,
                     onResourceLoadFailed = { url, error ->
                         listener?.onResourceLoadFailed(
-                            url, error
+                            url,
+                            error
                         )
-                    })
+                    }
+                )
             )
         }
     }

@@ -17,12 +17,12 @@ import java.io.BufferedInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
-import timber.log.Timber
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Href
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.encryption.encryption
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.Url
@@ -30,7 +30,6 @@ import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.data.asInputStream
 import org.readium.r2.shared.util.http.HttpHeaders
 import org.readium.r2.shared.util.http.HttpRange
-import org.readium.r2.shared.publication.encryption.encryption
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.StringResource
 import org.readium.r2.shared.util.resource.borrow
@@ -38,6 +37,7 @@ import org.readium.r2.shared.util.resource.buffered
 import org.readium.r2.shared.util.resource.fallback
 import org.readium.r2.shared.util.resource.synchronized
 import org.readium.r2.shared.util.use
+import timber.log.Timber
 
 /**
  * Serves the publication resources and application assets in the EPUB navigator web views.
@@ -237,10 +237,17 @@ internal class WebViewServer(
         val knownLength: Long? = if (isHtml) null else link.properties.encryption?.originalLength
 
         return if (range == null) {
-            val body = if (isHtml) BufferedInputStream(servedResource.asInputStream(), 65536)
-                else servedResource.asInputStream()
+            val body = if (isHtml) {
+                BufferedInputStream(servedResource.asInputStream(), 65536)
+            } else {
+                servedResource.asInputStream()
+            }
             WebResourceResponse(
-                link.mediaType?.toString(), null, 200, "OK", headers,
+                link.mediaType?.toString(),
+                null,
+                200,
+                "OK",
+                headers,
                 body
             )
         } else {
@@ -249,7 +256,11 @@ internal class WebViewServer(
             val longRange = range.toLongRange(length)
             headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/$length"
             WebResourceResponse(
-                link.mediaType?.toString(), null, 206, "Partial Content", headers,
+                link.mediaType?.toString(),
+                null,
+                206,
+                "Partial Content",
+                headers,
                 stream
             )
         }

@@ -79,13 +79,13 @@ internal class R2PagerAdapter internal constructor(
                 )
             }
             is PageResource.EpubFxl -> {
-                //FXL layout does not support highlight
+                // FXL layout does not support highlight
                 Timber.d("Creating FXL page with:")
                 Timber.d("Left URL: ${resource.leftUrl}")
                 Timber.d("Right URL: ${resource.rightUrl}")
                 Timber.d("Left Link: ${resource.leftLink}")
                 Timber.d("Right Link: ${resource.rightLink}")
-                
+
                 resource.leftUrl?.toUri()?.toAbsoluteUrl()?.let { leftUrl ->
                     Timber.d("Creating R2EpubPageFragment with left URL: $leftUrl")
                     R2EpubPageFragment.newInstance(

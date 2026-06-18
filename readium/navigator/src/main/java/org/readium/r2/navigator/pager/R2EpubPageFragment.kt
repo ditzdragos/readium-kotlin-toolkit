@@ -93,7 +93,8 @@ internal class R2EpubPageFragment : Fragment() {
 
     private lateinit var containerView: View
     private val viewModel: EpubNavigatorViewModel by viewModels(
-        ownerProducer = { requireParentFragment() })
+        ownerProducer = { requireParentFragment() }
+    )
 
     private var isLoading: Boolean = false
     private var isLoadingRight: Boolean = false
@@ -102,7 +103,8 @@ internal class R2EpubPageFragment : Fragment() {
 
     private var webViewClient = object : WebViewClientCompat() {
         override fun shouldOverrideUrlLoading(
-            view: WebView, request: WebResourceRequest
+            view: WebView,
+            request: WebResourceRequest,
         ): Boolean = (view as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
 
         override fun shouldOverrideKeyEvent(view: WebView, event: KeyEvent): Boolean {
@@ -166,7 +168,9 @@ internal class R2EpubPageFragment : Fragment() {
 
         @SuppressLint("RequiresFeature")
         override fun onReceivedError(
-            view: WebView, request: WebResourceRequest, error: WebResourceErrorCompat
+            view: WebView,
+            request: WebResourceRequest,
+            error: WebResourceErrorCompat,
         ) {
             super.onReceivedError(view, request, error)
             val errorDescription = error.description.toString()
@@ -183,7 +187,8 @@ internal class R2EpubPageFragment : Fragment() {
         }
 
         override fun shouldInterceptRequest(
-            view: WebView, request: WebResourceRequest
+            view: WebView,
+            request: WebResourceRequest,
         ): WebResourceResponse? = (view as? R2BasicWebView)?.shouldInterceptRequest(view, request)
 
         // On Chromebook (and other devices under memory pressure) the WebView renderer runs as a
@@ -239,7 +244,9 @@ internal class R2EpubPageFragment : Fragment() {
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
     ): View {
         Timber.d("onCreateView: $resourceUrl")
 
@@ -249,7 +256,9 @@ internal class R2EpubPageFragment : Fragment() {
             Timber.e("WebView not available: $webViewError")
             // Show error view instead of crashing
             val errorView = inflater.inflate(
-                R.layout.readium_navigator_error_webview, container, false
+                R.layout.readium_navigator_error_webview,
+                container,
+                false
             )
             errorView.findViewById<android.widget.TextView>(R.id.error_message)?.text = webViewError
             return errorView
@@ -394,7 +403,6 @@ internal class R2EpubPageFragment : Fragment() {
         webView.isLongClickable = true
     }
 
-
     private var isPageFinished = false
     private val pendingPageFinished = mutableListOf<() -> Unit>()
 
@@ -509,7 +517,9 @@ internal class R2EpubPageFragment : Fragment() {
 
                     pendingLocator?.let { locator ->
                         loadLocator(
-                            webView, requireNotNull(navigator).overflow.value.readingProgression, locator
+                            webView,
+                            requireNotNull(navigator).overflow.value.readingProgression,
+                            locator
                         )
                     }.also { pendingLocator = null }
                 }
@@ -536,7 +546,9 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     private suspend fun loadLocator(
-        webView: R2WebView, readingProgression: ReadingProgression, locator: Locator,
+        webView: R2WebView,
+        readingProgression: ReadingProgression,
+        locator: Locator,
     ) {
         if (locator.text.highlight != null) {
             if (webView.scrollToLocator(locator)) {
@@ -609,7 +621,8 @@ internal class R2EpubPageFragment : Fragment() {
                         text = Locator.Text.fromJSON(json.optJSONObject("text"))
                     )?.let {
                         Selection(
-                            locator = it, rect = rect
+                            locator = it,
+                            rect = rect
                         )
                     }
                     continuation.resume(selection)
@@ -642,7 +655,8 @@ internal class R2EpubPageFragment : Fragment() {
                         text = Locator.Text.fromJSON(json.optJSONObject("text"))
                     )?.let {
                         Selection(
-                            locator = it, rect = rect
+                            locator = it,
+                            rect = rect
                         )
                     }
                     continuation.resume(selection)

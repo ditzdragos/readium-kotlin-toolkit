@@ -25,7 +25,9 @@ class CachingReadableTest {
         }
         override suspend fun read(range: LongRange?): Try<ByteArray, ReadError> =
             Try.success(range?.let { bytes.sliceArray(it.first.toInt()..it.last.toInt()) } ?: bytes)
-        override fun close() { closeCalls++ }
+        override fun close() {
+            closeCalls++
+        }
     }
 
     @Test

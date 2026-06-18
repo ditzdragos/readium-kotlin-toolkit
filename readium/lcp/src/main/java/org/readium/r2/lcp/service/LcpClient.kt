@@ -20,7 +20,10 @@ internal object LcpClient {
         // need one per Context instance. Avoids reflective newInstance per decrypt.
         internal val drmContext: Any by lazy {
             drmContextConstructor.newInstance(
-                hashedPassphrase, encryptedContentKey, token, profile
+                hashedPassphrase,
+                encryptedContentKey,
+                token,
+                profile
             )
         }
 
@@ -44,7 +47,10 @@ internal object LcpClient {
 
     private val drmContextConstructor by lazy {
         drmContextClass.getConstructor(
-            String::class.java, String::class.java, String::class.java, String::class.java
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            String::class.java
         )
     }
     private val getEncryptedContentKey by lazy { drmContextClass.getMethod("getEncryptedContentKey") }
@@ -55,7 +61,9 @@ internal object LcpClient {
     private val createContextMethod by lazy {
         klass.getMethod(
             "createContext",
-            String::class.java, String::class.java, String::class.java
+            String::class.java,
+            String::class.java,
+            String::class.java
         )
     }
     private val decryptMethod by lazy {
