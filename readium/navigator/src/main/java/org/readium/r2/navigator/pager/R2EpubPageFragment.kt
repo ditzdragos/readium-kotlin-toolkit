@@ -311,7 +311,12 @@ internal class R2EpubPageFragment : Fragment() {
         // load immediately as before.
         if (navigator?.shouldDeferPageLoad(this) == true) {
             deferredLoadPending = true
-            containerView.postDelayed(DEFERRED_LOAD_FALLBACK_MS) { startDeferredLoadIfNeeded() }
+            // The fallback delay guarantees neighbour preloading at cold open if the visible spread
+            // never finishes. On memory-constrained hosts neighbours must stay deferred until swiped
+            // to (onPageSelected triggers their load), so the fallback is skipped there.
+            if (navigator?.shouldPersistDeferredLoad() != true) {
+                containerView.postDelayed(DEFERRED_LOAD_FALLBACK_MS) { startDeferredLoadIfNeeded() }
+            }
         } else {
             loadResources()
         }

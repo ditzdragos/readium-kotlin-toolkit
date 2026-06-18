@@ -8,6 +8,9 @@
 
 package org.readium.r2.navigator.epub
 
+import android.app.ActivityManager
+import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Build
@@ -1051,11 +1054,45 @@ public class EpubNavigatorFragment public constructor(
     internal fun shouldDeferPageLoad(fragment: R2EpubPageFragment): Boolean {
         if (viewModel.layout != EpubLayout.FIXED) return false
         val current = r2PagerAdapter?.getCurrentFragment() as? R2EpubPageFragment ?: return false
-        return current !== fragment && !current.isSpreadLoaded()
+        if (current === fragment) return false
+        // On memory-constrained hosts, keep offscreen neighbours deferred until they are swiped to,
+        // so only the visible spread's WebViews hold content instead of all three resident spreads
+        // (prev/current/next). Each fixed-layout spread carries two WebViews; where the system WebView
+        // renders in-process (as it can on ChromeOS) their decoded images count against the app heap,
+        // so trimming resident spreads removes avoidable pressure on a device whose lowmemorykiller
+        // already evicts foreground apps. Neighbours load on demand in PageChangeListener
+        // .onPageSelected, at the cost of a brief load when paging. Elsewhere, defer only during cold
+        // open to smooth first paint, then preload neighbours as usual.
+        if (shouldPersistDeferredLoad()) return true
+        return !current.isSpreadLoaded()
+    }
+
+    /**
+     * Whether offscreen fixed-layout neighbours should stay deferred until they become visible,
+     * rather than preloading once the visible spread is ready. True only for memory-constrained
+     * hosts where resident neighbour spreads risk an out-of-memory kill (see [shouldDeferPageLoad]).
+     */
+    internal fun shouldPersistDeferredLoad(): Boolean =
+        viewModel.layout == EpubLayout.FIXED && isMemoryConstrainedHost
+
+    private val isMemoryConstrainedHost: Boolean by lazy {
+        val ctx = context ?: return@lazy false
+        val pm = ctx.packageManager
+        val isChromeOs = pm.hasSystemFeature(PackageManager.FEATURE_PC) ||
+            pm.hasSystemFeature("org.chromium.arc")
+        val activityManager = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val lowTotalRam = activityManager?.let {
+            val memInfo = ActivityManager.MemoryInfo()
+            it.getMemoryInfo(memInfo)
+            it.isLowRamDevice || memInfo.totalMem <= LOW_RAM_THRESHOLD_BYTES
+        } ?: false
+        isChromeOs || lowTotalRam
     }
 
     /** Releases deferred neighbour loads once the visible spread has finished loading. */
     private fun releaseDeferredPageLoads() {
+        // On memory-constrained hosts neighbours stay deferred until swiped to, so never bulk-release.
+        if (shouldPersistDeferredLoad()) return
         val adapter = r2PagerAdapter ?: return
         val current = adapter.getCurrentFragment() as? R2EpubPageFragment
         if (current != null && !current.isSpreadLoaded()) return
@@ -1450,6 +1487,10 @@ public class EpubNavigatorFragment public constructor(
          * Returns null if the given [path] is not valid or an absolute URL.
          */
         public fun assetUrl(path: String): Url? = WebViewServer.assetUrl(path)
+
+        // Hosts at or below this total RAM keep offscreen fixed-layout spreads deferred to avoid an
+        // out-of-memory kill while paging (covers ~3 GB Chromebooks such as the octopus board).
+        private const val LOW_RAM_THRESHOLD_BYTES: Long = 3_758_096_384L // 3.5 GiB
     }
 }
 
