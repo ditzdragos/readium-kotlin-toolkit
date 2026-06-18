@@ -79,13 +79,13 @@ internal class R2PagerAdapter internal constructor(
                 )
             }
             is PageResource.EpubFxl -> {
-                //FXL layout does not support highlight
+                // FXL layout does not support highlight
                 Timber.d("Creating FXL page with:")
                 Timber.d("Left URL: ${resource.leftUrl}")
                 Timber.d("Right URL: ${resource.rightUrl}")
                 Timber.d("Left Link: ${resource.leftLink}")
                 Timber.d("Right Link: ${resource.rightLink}")
-                
+
                 resource.leftUrl?.toUri()?.toAbsoluteUrl()?.let { leftUrl ->
                     Timber.d("Creating R2EpubPageFragment with left URL: $leftUrl")
                     R2EpubPageFragment.newInstance(
@@ -165,12 +165,14 @@ internal class R2PagerAdapter internal constructor(
         mFragments.forEach { _, fragment ->
             try {
                 if (fragment is R2EpubPageFragment) {
-                    Timber.d("R2PagerAdapter: cleaning up WebView for fragment")
+                    Timber.d("R2PagerAdapter: cleaning up WebViews for fragment")
                     fragment.webView?.removeAllViews()
                     fragment.webView?.destroy()
+                    fragment.webViewRight?.removeAllViews()
+                    fragment.webViewRight?.destroy()
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Error cleaning up fragment WebView")
+                Timber.e(e, "Error cleaning up fragment WebViews")
             }
         }
 

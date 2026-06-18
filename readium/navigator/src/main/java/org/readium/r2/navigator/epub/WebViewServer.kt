@@ -13,6 +13,7 @@ import android.os.PatternMatcher
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
+import java.io.BufferedInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
@@ -21,6 +22,7 @@ import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Href
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.encryption.encryption
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.Url
@@ -30,7 +32,12 @@ import org.readium.r2.shared.util.http.HttpHeaders
 import org.readium.r2.shared.util.http.HttpRange
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.StringResource
+import org.readium.r2.shared.util.resource.borrow
+import org.readium.r2.shared.util.resource.buffered
 import org.readium.r2.shared.util.resource.fallback
+import org.readium.r2.shared.util.resource.synchronized
+import org.readium.r2.shared.util.use
+import timber.log.Timber
 
 /**
  * Serves the publication resources and application assets in the EPUB navigator web views.
@@ -49,6 +56,120 @@ internal class WebViewServer(
 
         fun assetUrl(path: String): Url? =
             Url.fromDecodedPath(path)?.let { assetsBaseHref.resolve(it) }
+
+        // One BufferingResource window (see buildResource).
+        private const val PREWARM_READ_BYTES = 256L * 1024
+
+        // Asset references in the page HTML: <img src>, <image xlink:href>, <link href>, etc.
+        private val assetRefRegex =
+            Regex("""(?:src|href)\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+    }
+
+    // Resources are cheap to *describe* but expensive to *build* — each construction
+    // re-wraps in LcpDecryptor + BufferingResource and allocates a fresh
+    // CachingRangeTailResource (empty cache). One page swipe fans out to 6–12 WebView
+    // requests; this LRU keeps the same Resource alive across that fan-out so the
+    // 256 KB buffer (Task 3) and decryption state are reused, not rebuilt per chunk.
+    //
+    // Bounded to 32 entries (~2–3 pages of assets). Evictions call close() on the
+    // displaced Resource so file handles and decryption state are released.
+    //
+    // Thread-safety / ownership: cached Resources are wrapped in SynchronizedResource
+    // (see servePublicationResource) so concurrent same-href reads — e.g. left+right
+    // FXL pages showing the same image, or rapid back-navigation — are serialized on a
+    // mutex instead of racing on BufferingResource's single mutable buffer slot. Each
+    // request is served through Resource.borrow(), whose close() is a no-op, so the
+    // WebView closing a response body does NOT tear down the shared cached Resource;
+    // the real close() happens only on eviction or clearResourceCache().
+    private val resourceCache: LinkedHashMap<Url, Resource> =
+        object : LinkedHashMap<Url, Resource>(32, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Url, Resource>?): Boolean {
+                if (size > 32) {
+                    runCatching { eldest?.value?.close() }
+                        .onFailure { Timber.w(it, "WebViewServer: failed to close evicted Resource") }
+                    return true
+                }
+                return false
+            }
+        }
+
+    private fun cachedResource(url: Url, build: () -> Resource): Resource {
+        // Fast path: return a live entry. The get() must hold the lock because the map
+        // is access-ordered (get() mutates iteration order).
+        synchronized(this) { resourceCache[url]?.let { return it } }
+
+        // Build OUTSIDE the lock: a slow LcpDecryptor / HTML-injection build for one
+        // href must not serialize the other 6–12 concurrent fan-out requests.
+        val built = build()
+
+        return synchronized(this) {
+            resourceCache[url]?.also {
+                // Lost the race with a concurrent build for the same href; keep the
+                // already-cached Resource and discard ours.
+                runCatching { built.close() }
+                    .onFailure { Timber.w(it, "WebViewServer: failed to close duplicate Resource") }
+            } ?: built.also { resourceCache[url] = it }
+        }
+    }
+
+    /**
+     * Pre-builds and warms the cached [Resource]s for the publication resource at [href] and the
+     * assets (images, stylesheets) its HTML references.
+     *
+     * At cold open the WebView only discovers a page's images after Chromium has initialised and
+     * parsed the HTML — by then the LCP decrypt of multi-MB fixed-layout art starts from zero on
+     * the request path. Prewarming overlaps that window: the Resource is built ahead of time
+     * (zip entry lookup + LcpDecryptor wrapping) and its first buffer window decrypted, so the
+     * WebView's first requests hit [resourceCache] warm. Reads past the first window still
+     * stream on demand — we deliberately do NOT read whole resources, both to avoid decrypting
+     * everything twice and to keep peak memory flat (see the BufferingResource note in
+     * [buildResource]).
+     */
+    internal suspend fun prewarm(href: Url, css: ReadiumCss) {
+        val pageUrl = href.removeFragment()
+        val pageLink = publication.linkWithHref(pageUrl)?.copy(href = Href(pageUrl)) ?: return
+
+        if (pageLink.mediaType?.isHtml != true) {
+            prewarmResource(pageUrl, pageLink, css)
+            return
+        }
+
+        // Read the raw (small) HTML wrapper to discover referenced assets. Served HTML is built
+        // per-request (request-scoped ReadiumCss injection), so the page itself cannot be
+        // cached — only its assets are.
+        val html = publication.get(pageUrl)
+            ?.use { it.read().getOrNull() }
+            ?.decodeToString()
+            ?: return
+
+        for (match in assetRefRegex.findAll(html)) {
+            val ref = match.groupValues[1]
+            if (ref.startsWith("data:") || ref.startsWith("javascript:")) continue
+            val assetUrl = Url(ref)?.let { pageUrl.resolve(it) }?.removeFragment() ?: continue
+            val assetLink = publication.linkWithHref(assetUrl)?.copy(href = Href(assetUrl))
+                ?: continue // Not a publication resource (absolute/external URL) — skip.
+            prewarmResource(assetUrl, assetLink, css)
+        }
+    }
+
+    private suspend fun prewarmResource(url: Url, link: Link, css: ReadiumCss) {
+        // HTML is built per-request; only non-HTML resources are cacheable.
+        if (link.mediaType?.isHtml == true) return
+        // Same key and build recipe as servePublicationResource, so the WebView's request hits
+        // this exact entry.
+        val resource = cachedResource(url) { buildResource(link, url, css).synchronized() }
+        // Warm one BufferingResource window; result is intentionally discarded.
+        resource.borrow().use { it.read(0 until PREWARM_READ_BYTES) }
+    }
+
+    internal fun clearResourceCache() {
+        synchronized(this) {
+            resourceCache.values.forEach { resource ->
+                runCatching { resource.close() }
+                    .onFailure { Timber.w(it, "WebViewServer: failed to close Resource during cache drain") }
+            }
+            resourceCache.clear()
+        }
     }
 
     /**
@@ -92,17 +213,70 @@ internal class WebViewServer(
 
         // Drop anchor because it is meant to be interpreted by the client.
         val urlWithoutAnchor = href.removeFragment()
+        val isHtml = link.mediaType?.isHtml == true
 
+        val resource = if (isHtml) {
+            // HTML injects request-scoped ReadiumCss; can't cache across requests.
+            buildResource(link, urlWithoutAnchor, css)
+        } else {
+            cachedResource(urlWithoutAnchor) { buildResource(link, urlWithoutAnchor, css).synchronized() }
+        }
+
+        // For cached (non-HTML) resources, serve through a borrowed view: WebView closes
+        // the response body when the request ends, and Resource.borrow().close() is a
+        // no-op, so the shared cached Resource survives for the next request. HTML is
+        // built per-request and owned by the response, so it is closed normally.
+        val servedResource = if (isHtml) resource else resource.borrow()
+
+        val headers = mutableMapOf("Accept-Ranges" to "bytes")
+        if (!isHtml) headers["Cache-Control"] = "max-age=86400, immutable"
+
+        // originalLength describes the RAW (pre-injection) bytes. For HTML the served
+        // stream is the injected document (longer), so only trust originalLength for
+        // non-HTML resources; otherwise fall back to the served stream's own length.
+        val knownLength: Long? = if (isHtml) null else link.properties.encryption?.originalLength
+
+        return if (range == null) {
+            val body = if (isHtml) {
+                BufferedInputStream(servedResource.asInputStream(), 65536)
+            } else {
+                servedResource.asInputStream()
+            }
+            WebResourceResponse(
+                link.mediaType?.toString(),
+                null,
+                200,
+                "OK",
+                headers,
+                body
+            )
+        } else {
+            val stream = servedResource.asInputStream()
+            val length: Long = knownLength ?: stream.available().toLong()
+            val longRange = range.toLongRange(length)
+            headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/$length"
+            WebResourceResponse(
+                link.mediaType?.toString(),
+                null,
+                206,
+                "Partial Content",
+                headers,
+                stream
+            )
+        }
+    }
+
+    private fun buildResource(link: Link, url: Url, css: ReadiumCss): Resource {
         var resource = publication
-            .get(urlWithoutAnchor)
+            .get(url)
             ?.fallback {
-                onResourceLoadFailed(urlWithoutAnchor, it)
+                onResourceLoadFailed(url, it)
                 errorResource()
             } ?: run {
             val error = ReadError.Decoding(
-                "Resource not found at $urlWithoutAnchor in publication."
+                "Resource not found at $url in publication."
             )
-            onResourceLoadFailed(urlWithoutAnchor, error)
+            onResourceLoadFailed(url, error)
             errorResource()
         }
 
@@ -118,35 +292,17 @@ internal class WebViewServer(
                 )
             }
 
-        val headers = mutableMapOf(
-            "Accept-Ranges" to "bytes"
-        )
-
-        if (range == null) {
-            return WebResourceResponse(
-                link.mediaType?.toString(),
-                null,
-                200,
-                "OK",
-                headers,
-                resource.asInputStream()
-            )
-        } else { // Byte range request
-            val stream = resource.asInputStream()
-            val length = stream.available()
-            val longRange = range.toLongRange(length.toLong())
-            headers["Content-Range"] = "bytes ${longRange.first}-${longRange.last}/$length"
-            // Content-Length will automatically be filled by the WebView using the Content-Range header.
-            // headers["Content-Length"] = (longRange.last - longRange.first + 1).toString()
-            // Weirdly, the WebView will call itself stream.skip to skip to the requested range.
-            return WebResourceResponse(
-                link.mediaType?.toString(),
-                null,
-                206,
-                "Partial Content",
-                headers,
-                stream
-            )
+        // For non-HTML resources, wrap in BufferingResource so WebView's 8 KB chunked
+        // reads get satisfied from an in-memory 256 KB buffer instead of issuing one
+        // underlying resource.read() (and one LCP decrypt) per WebView chunk. 256 KB is
+        // the trade-off: small enough that peak per-resource memory is bounded
+        // (critical on Chromebook ARC++), large enough that the LCP decrypt cost
+        // amortises across ~32 WebView chunks. Do NOT switch to a full-buffer
+        // ByteArrayInputStream — that path OOMs on Chromebook.
+        return if (link.mediaType?.isHtml == true) {
+            resource
+        } else {
+            resource.buffered(bufferSize = 256 * 1024)
         }
     }
     private fun errorResource(): Resource =

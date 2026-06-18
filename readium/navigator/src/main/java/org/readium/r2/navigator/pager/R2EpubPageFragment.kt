@@ -21,6 +21,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -92,15 +93,18 @@ internal class R2EpubPageFragment : Fragment() {
 
     private lateinit var containerView: View
     private val viewModel: EpubNavigatorViewModel by viewModels(
-        ownerProducer = { requireParentFragment() })
+        ownerProducer = { requireParentFragment() }
+    )
 
     private var isLoading: Boolean = false
     private var isLoadingRight: Boolean = false
     private val _isLoaded = MutableStateFlow(false)
+    private var deferredLoadPending = false
 
     private var webViewClient = object : WebViewClientCompat() {
         override fun shouldOverrideUrlLoading(
-            view: WebView, request: WebResourceRequest
+            view: WebView,
+            request: WebResourceRequest,
         ): Boolean = (view as? R2BasicWebView)?.shouldOverrideUrlLoading(request) == true
 
         override fun shouldOverrideKeyEvent(view: WebView, event: KeyEvent): Boolean {
@@ -136,16 +140,6 @@ internal class R2EpubPageFragment : Fragment() {
                         link?.let {
                             webView?.listener?.onPageLoaded(webView!!, it)
                         }
-
-                        // Now, if the right WebView exists and is for a fixed layout, load it.
-                        if (webViewRight != null && rightResourceUrl != null && fixedLayout) {
-                            Timber.d("Left page finished, now loading right page: $rightResourceUrl")
-                            isLoadingRight = true
-                            // setupWebView for webViewRight was already called in onCreateView
-                            withViewLifecycleOwner {
-                                webViewRight?.loadUrl(rightResourceUrl.toString())
-                            }
-                        }
                     }
                 }
 
@@ -174,7 +168,9 @@ internal class R2EpubPageFragment : Fragment() {
 
         @SuppressLint("RequiresFeature")
         override fun onReceivedError(
-            view: WebView, request: WebResourceRequest, error: WebResourceErrorCompat
+            view: WebView,
+            request: WebResourceRequest,
+            error: WebResourceErrorCompat,
         ) {
             super.onReceivedError(view, request, error)
             val errorDescription = error.description.toString()
@@ -191,8 +187,20 @@ internal class R2EpubPageFragment : Fragment() {
         }
 
         override fun shouldInterceptRequest(
-            view: WebView, request: WebResourceRequest
+            view: WebView,
+            request: WebResourceRequest,
         ): WebResourceResponse? = (view as? R2BasicWebView)?.shouldInterceptRequest(view, request)
+
+        // On Chromebook (and other devices under memory pressure) the WebView renderer runs as a
+        // separate sandboxed process and can be killed independently. Without this override the
+        // default implementation returns false, which causes the framework to throw a
+        // RuntimeException and kill the entire app. Returning true signals that we handled the
+        // crash gracefully; we reload the page so the user stays in the reader.
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            Timber.e("WebView renderer process gone (crashed=${detail.didCrash()}), reloading page")
+            view.reload()
+            return true
+        }
     }
 
     internal fun setFontSize(fontSize: Double) {
@@ -236,7 +244,9 @@ internal class R2EpubPageFragment : Fragment() {
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
     ): View {
         Timber.d("onCreateView: $resourceUrl")
 
@@ -246,7 +256,9 @@ internal class R2EpubPageFragment : Fragment() {
             Timber.e("WebView not available: $webViewError")
             // Show error view instead of crashing
             val errorView = inflater.inflate(
-                R.layout.readium_navigator_error_webview, container, false
+                R.layout.readium_navigator_error_webview,
+                container,
+                false
             )
             errorView.findViewById<android.widget.TextView>(R.id.error_message)?.text = webViewError
             return errorView
@@ -295,23 +307,27 @@ internal class R2EpubPageFragment : Fragment() {
             }
         }
 
-        // Load left page first
-        webView?.let {
-            setupWebView(it, resourceUrl)
-            resourceUrl?.let { url ->
-                isLoading = true
-                _isLoaded.value = false
-                Timber.d("Loading left page: $url")
-                it.loadUrl(url.toString())
-            }
-        }
+        webView?.let { setupWebView(it, resourceUrl) }
+        webViewRight?.let { setupWebView(it, rightResourceUrl) }
 
-        // Setup right page, but defer loading until left page is finished (handled in onPageFinished)
-        webViewRight?.let {
-            setupWebView(it, rightResourceUrl)
-            // The actual loadUrl for webViewRight will be triggered from onPageFinished
-            // when the left webView completes.
-            // isLoadingRight will be set to true at that point.
+        // At cold open, ViewPager materialises the current AND the two adjacent spreads at once,
+        // so three spreads' worth of LCP decrypt + image decode compete for CPU and heap — that
+        // contention slows first paint and triggers GC churn on memory-constrained devices
+        // (Chromebook). When this fragment is an offscreen neighbour of a spread that is still
+        // loading, defer loadUrl until the navigator releases it (visible spread ready), or until
+        // a fallback delay so neighbour preloading still happens if the visible page never
+        // finishes. When the visible spread is already loaded (steady-state swiping), neighbours
+        // load immediately as before.
+        if (navigator?.shouldDeferPageLoad(this) == true) {
+            deferredLoadPending = true
+            // The fallback delay guarantees neighbour preloading at cold open if the visible spread
+            // never finishes. On memory-constrained hosts neighbours must stay deferred until swiped
+            // to (onPageSelected triggers their load), so the fallback is skipped there.
+            if (navigator?.shouldPersistDeferredLoad() != true) {
+                containerView.postDelayed(DEFERRED_LOAD_FALLBACK_MS) { startDeferredLoadIfNeeded() }
+            }
+        } else {
+            loadResources()
         }
 
         // Forward a tap event when the web view is not ready to propagate the taps. This allows
@@ -322,6 +338,44 @@ internal class R2EpubPageFragment : Fragment() {
 
         return containerView
     }
+
+    /** Starts loading the spread's resource(s) in the web view(s). */
+    private fun loadResources() {
+        // Load left page first.
+        webView?.let {
+            resourceUrl?.let { url ->
+                isLoading = true
+                _isLoaded.value = false
+                Timber.d("Loading left page: $url")
+                it.loadUrl(url.toString())
+            }
+        }
+
+        // Load right page in parallel with the left page. Previously this was deferred until
+        // left's onContentReady, serialising two full LCP-decrypt + image-load cycles end-to-end.
+        webViewRight?.let {
+            rightResourceUrl?.let { url ->
+                isLoadingRight = true
+                Timber.d("Loading right page in parallel: $url")
+                it.loadUrl(url.toString())
+            }
+        }
+    }
+
+    /**
+     * Loads the spread now if its load was deferred (offscreen neighbour created while the
+     * visible spread was still loading). Idempotent; no-op when the load already started.
+     */
+    internal fun startDeferredLoadIfNeeded() {
+        if (!deferredLoadPending) return
+        deferredLoadPending = false
+        if (view == null) return
+        loadResources()
+    }
+
+    /** Whether every page of this spread (left, and right when present) finished loading. */
+    internal fun isSpreadLoaded(): Boolean =
+        _isLoaded.value && !isLoadingRight
 
     fun setupWebView(webView: R2WebView, resourceUrl: AbsoluteUrl?) {
         webView.settings.javaScriptEnabled = true
@@ -348,7 +402,6 @@ internal class R2EpubPageFragment : Fragment() {
         webView.isHapticFeedbackEnabled = false
         webView.isLongClickable = true
     }
-
 
     private var isPageFinished = false
     private val pendingPageFinished = mutableListOf<() -> Unit>()
@@ -464,7 +517,9 @@ internal class R2EpubPageFragment : Fragment() {
 
                     pendingLocator?.let { locator ->
                         loadLocator(
-                            webView, requireNotNull(navigator).overflow.value.readingProgression, locator
+                            webView,
+                            requireNotNull(navigator).overflow.value.readingProgression,
+                            locator
                         )
                     }.also { pendingLocator = null }
                 }
@@ -491,7 +546,9 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     private suspend fun loadLocator(
-        webView: R2WebView, readingProgression: ReadingProgression, locator: Locator,
+        webView: R2WebView,
+        readingProgression: ReadingProgression,
+        locator: Locator,
     ) {
         if (locator.text.highlight != null) {
             if (webView.scrollToLocator(locator)) {
@@ -564,7 +621,8 @@ internal class R2EpubPageFragment : Fragment() {
                         text = Locator.Text.fromJSON(json.optJSONObject("text"))
                     )?.let {
                         Selection(
-                            locator = it, rect = rect
+                            locator = it,
+                            rect = rect
                         )
                     }
                     continuation.resume(selection)
@@ -597,7 +655,8 @@ internal class R2EpubPageFragment : Fragment() {
                         text = Locator.Text.fromJSON(json.optJSONObject("text"))
                     )?.let {
                         Selection(
-                            locator = it, rect = rect
+                            locator = it,
+                            rect = rect
                         )
                     }
                     continuation.resume(selection)
@@ -624,6 +683,10 @@ internal class R2EpubPageFragment : Fragment() {
     companion object {
         private const val NET_ERROR = "net::ERR_FAILED"
         private const val textZoomBundleKey = "textZoom"
+
+        // Fallback before a deferred offscreen spread loads anyway, so neighbour preloading is
+        // never lost if the visible spread errors out and never reports loaded.
+        private const val DEFERRED_LOAD_FALLBACK_MS = 8_000L
 
         fun newInstance(
             url: AbsoluteUrl,

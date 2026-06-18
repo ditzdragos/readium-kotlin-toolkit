@@ -16,36 +16,64 @@ internal object LcpClient {
         val token: String,
         val profile: String,
     ) {
-        companion object {
-
-            fun fromDRMContext(drmContext: Any): Context =
-                with(Class.forName("org.readium.lcp.sdk.DRMContext")) {
-                    val encryptedContentKey = getMethod("getEncryptedContentKey").invoke(drmContext) as String
-                    val hashedPassphrase = getMethod("getHashedPassphrase").invoke(drmContext) as String
-                    val profile = getMethod("getProfile").invoke(drmContext) as String
-                    val token = getMethod("getToken").invoke(drmContext) as String
-                    Context(hashedPassphrase, encryptedContentKey, token, profile)
-                }
+        // Memoised: DRMContext is built from four immutable strings, so we only
+        // need one per Context instance. Avoids reflective newInstance per decrypt.
+        internal val drmContext: Any by lazy {
+            drmContextConstructor.newInstance(
+                hashedPassphrase,
+                encryptedContentKey,
+                token,
+                profile
+            )
         }
 
-        fun toDRMContext(): Any =
-            Class.forName("org.readium.lcp.sdk.DRMContext")
-                .getConstructor(
-                    String::class.java,
-                    String::class.java,
-                    String::class.java,
-                    String::class.java
-                )
-                .newInstance(hashedPassphrase, encryptedContentKey, token, profile)
+        companion object {
+            fun fromDRMContext(drmContext: Any): Context {
+                val encryptedContentKey = getEncryptedContentKey.invoke(drmContext) as String
+                val hashedPassphrase = getHashedPassphrase.invoke(drmContext) as String
+                val profile = getProfile.invoke(drmContext) as String
+                val token = getToken.invoke(drmContext) as String
+                return Context(hashedPassphrase, encryptedContentKey, token, profile)
+            }
+        }
     }
 
-    private val instance: Any by lazy {
-        klass.getDeclaredConstructor().newInstance()
-    }
+    private val klass: Class<*> by lazy { Class.forName("org.readium.lcp.sdk.Lcp") }
+    private val instance: Any by lazy { klass.getDeclaredConstructor().newInstance() }
 
-    private val klass: Class<*> by lazy {
-        Class.forName("org.readium.lcp.sdk.Lcp")
+    private val drmContextClass: Class<*> by lazy { Class.forName("org.readium.lcp.sdk.DRMContext") }
+    private val drmExceptionClass: Class<*> by lazy { Class.forName("org.readium.lcp.sdk.DRMException") }
+    private val drmErrorClass: Class<*> by lazy { Class.forName("org.readium.lcp.sdk.DRMError") }
+
+    private val drmContextConstructor by lazy {
+        drmContextClass.getConstructor(
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            String::class.java
+        )
     }
+    private val getEncryptedContentKey by lazy { drmContextClass.getMethod("getEncryptedContentKey") }
+    private val getHashedPassphrase by lazy { drmContextClass.getMethod("getHashedPassphrase") }
+    private val getProfile by lazy { drmContextClass.getMethod("getProfile") }
+    private val getToken by lazy { drmContextClass.getMethod("getToken") }
+
+    private val createContextMethod by lazy {
+        klass.getMethod(
+            "createContext",
+            String::class.java,
+            String::class.java,
+            String::class.java
+        )
+    }
+    private val decryptMethod by lazy {
+        klass.getMethod("decrypt", drmContextClass, ByteArray::class.java)
+    }
+    private val findOneValidPassphraseMethod by lazy {
+        klass.getMethod("findOneValidPassphrase", String::class.java, Array<String>::class.java)
+    }
+    private val getDrmErrorMethod by lazy { drmExceptionClass.getMethod("getDrmError") }
+    private val getCodeMethod by lazy { drmErrorClass.getMethod("getCode") }
 
     fun isAvailable(): Boolean = tryOr(false) {
         instance
@@ -54,15 +82,8 @@ internal object LcpClient {
 
     fun createContext(jsonLicense: String, hashedPassphrases: String, pemCrl: String): Context =
         try {
-            val drmContext = klass
-                .getMethod(
-                    "createContext",
-                    String::class.java,
-                    String::class.java,
-                    String::class.java
-                )
+            val drmContext = createContextMethod
                 .invoke(instance, jsonLicense, hashedPassphrases, pemCrl)!!
-
             Context.fromDRMContext(drmContext)
         } catch (e: InvocationTargetException) {
             throw mapException(e.targetException)
@@ -70,42 +91,26 @@ internal object LcpClient {
 
     fun decrypt(context: Context, encryptedData: ByteArray): ByteArray =
         try {
-            klass
-                .getMethod(
-                    "decrypt",
-                    Class.forName("org.readium.lcp.sdk.DRMContext"),
-                    ByteArray::class.java
-                )
-                .invoke(instance, context.toDRMContext(), encryptedData)
-                as ByteArray
+            decryptMethod.invoke(instance, context.drmContext, encryptedData) as ByteArray
         } catch (e: InvocationTargetException) {
             throw mapException(e.targetException)
         }
 
     fun findOneValidPassphrase(jsonLicense: String, hashedPassphrases: List<String>): String =
         try {
-            klass
-                .getMethod("findOneValidPassphrase", String::class.java, Array<String>::class.java)
+            findOneValidPassphraseMethod
                 .invoke(instance, jsonLicense, hashedPassphrases.toTypedArray()) as String
         } catch (e: InvocationTargetException) {
             throw mapException(e.targetException)
         }
 
     private fun mapException(e: Throwable): LcpException {
-        val drmExceptionClass = Class.forName("org.readium.lcp.sdk.DRMException")
-
         if (!drmExceptionClass.isInstance(e)) {
             return LcpException(LcpError.Runtime("the Lcp client threw an unhandled exception"))
         }
 
-        val drmError = drmExceptionClass
-            .getMethod("getDrmError")
-            .invoke(e)
-
-        val errorCode = Class
-            .forName("org.readium.lcp.sdk.DRMError")
-            .getMethod("getCode")
-            .invoke(drmError) as Int
+        val drmError = getDrmErrorMethod.invoke(e)
+        val errorCode = getCodeMethod.invoke(drmError) as Int
 
         val error = when (errorCode) {
             // Error code 11 should never occur since we check the start/end date before calling createContext

@@ -8,6 +8,9 @@
 
 package org.readium.r2.navigator.epub
 
+import android.app.ActivityManager
+import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Build
@@ -129,7 +132,11 @@ public class EpubNavigatorFragment public constructor(
     epubLayout: EpubLayout,
     private val defaults: EpubDefaults,
     configuration: Configuration,
-) : NavigatorFragment(publication), OverflowableNavigator, SelectableNavigator, DecorableNavigator, HyperlinkNavigator,
+) : NavigatorFragment(publication),
+    OverflowableNavigator,
+    SelectableNavigator,
+    DecorableNavigator,
+    HyperlinkNavigator,
     Configurable<EpubSettings, EpubPreferences> {
 
     // Make a copy to prevent the user from modifying the configuration after initialization.
@@ -399,7 +406,8 @@ public class EpubNavigatorFragment public constructor(
                 if (doublePageLeft != null) {
                     resourcesDouble.add(
                         PageResource.EpubFxl(
-                            leftLink = doublePageLeft, leftUrl = viewModel.urlTo(doublePageLeft)
+                            leftLink = doublePageLeft,
+                            leftUrl = viewModel.urlTo(doublePageLeft)
                         )
                     )
                 }
@@ -408,6 +416,10 @@ public class EpubNavigatorFragment public constructor(
                 this.resourcesDouble = resourcesDouble
             }
         }
+
+        // Start warming the initial spread's resources on IO while the WebViews initialise and
+        // load their HTML, so their first asset requests hit the server's cache.
+        prewarmInitialResources()
 
         resourcePager = binding.resourcePager
         resetResourcePager()
@@ -420,19 +432,50 @@ public class EpubNavigatorFragment public constructor(
         return view
     }
 
+    /**
+     * Warms the web view server's resource cache for the spread the reader will open on. Runs in
+     * the background; by the time the WebViews have initialised and parsed their HTML, the LCP
+     * decrypt of the spread's images is already under way (or done) instead of starting from
+     * zero on the first WebView request.
+     */
+    private fun prewarmInitialResources() {
+        val initialHref = initialLocator?.href?.removeFragment()
+            ?: readingOrder.firstOrNull()?.url()
+            ?: return
+
+        val resources = if (viewModel.layout == EpubLayout.FIXED && viewModel.dualPageMode == DualPage.ON) {
+            resourcesDouble
+        } else {
+            resourcesSingle
+        }
+
+        val page = resources.firstOrNull { res ->
+            when (res) {
+                is PageResource.EpubReflowable -> res.link.url().isEquivalent(initialHref)
+                is PageResource.EpubFxl ->
+                    res.leftLink?.url()?.isEquivalent(initialHref) == true ||
+                        res.rightLink?.url()?.isEquivalent(initialHref) == true
+                else -> false
+            }
+        } ?: return
+
+        val hrefs = when (page) {
+            is PageResource.EpubReflowable -> listOf(page.link.url())
+            is PageResource.EpubFxl -> listOfNotNull(page.leftLink?.url(), page.rightLink?.url())
+            else -> emptyList()
+        }
+        if (hrefs.isNotEmpty()) {
+            viewModel.prewarmResources(hrefs)
+        }
+    }
+
     private fun resetResourcePager() {
         val parent = requireNotNull(resourcePager.parent as? ConstraintLayout) {
             "The parent view of the EPUB `resourcePager` must be a ConstraintLayout"
         }
         // We need to null out the adapter explicitly, otherwise the page fragments will leak.
         if (resourcePager.adapter != null) {
-            // Clean up existing fragments first
-            (resourcePager.adapter as? R2PagerAdapter)?.mFragments?.forEach { _, fragment ->
-                if (fragment is R2EpubPageFragment) {
-                    fragment.webView?.removeAllViews()
-                    fragment.webView?.destroy()
-                }
-            }
+            (resourcePager.adapter as? R2PagerAdapter)?.cleanup()
             resourcePager.adapter = null
         }
         parent.removeView(resourcePager)
@@ -476,6 +519,10 @@ public class EpubNavigatorFragment public constructor(
             }
             currentPagerPosition = position // Update current position
 
+            // If the user lands on a spread whose load was deferred (it was an offscreen
+            // neighbour of a still-loading page), it is the visible one now — load immediately.
+            (fragmentAt(position) as? R2EpubPageFragment)?.startDeferredLoadIfNeeded()
+
             notifyCurrentLocation()
         }
     }
@@ -493,6 +540,10 @@ public class EpubNavigatorFragment public constructor(
         }
         adapter.listener = PagerAdapterListener()
         resourcePager.adapter = adapter
+        // Pre-render 1 page on each side (default). offscreenPageLimit=2 caused OOM on memory-
+        // constrained devices (e.g. Chromebook ARC++) because 5 simultaneous pages × full image
+        // ByteArrays would fill the heap to 99MB and trigger the lowmemorykiller.
+        resourcePager.offscreenPageLimit = 1
         resourcePager.direction = overflow.value.readingProgression
         resourcePager.layoutDirection = when (settings.value.readingProgression) {
             ReadingProgression.RTL -> LayoutDirection.RTL
@@ -604,7 +655,8 @@ public class EpubNavigatorFragment public constructor(
 
     @OptIn(DelicateReadiumApi::class)
     override fun go(locator: Locator, animated: Boolean): Boolean {
-        @Suppress("NAME_SHADOWING") val locator = publication.normalizeLocator(locator)
+        @Suppress("NAME_SHADOWING")
+        val locator = publication.normalizeLocator(locator)
 
         if (state == State.Initializing) {
             state = State.Loading(locator.href)
@@ -633,7 +685,7 @@ public class EpubNavigatorFragment public constructor(
                 resourcePager.currentItem = index
             }
 
-            Timber.d("setCurrent: ${page} $locator")
+            Timber.d("setCurrent: $page $locator")
 
             r2PagerAdapter?.loadLocatorAt(index, locator)
         }
@@ -743,9 +795,12 @@ public class EpubNavigatorFragment public constructor(
 
     @OptIn(DelicateReadiumApi::class)
     override suspend fun applyDecorations(
-        decorations: List<Decoration>, group: String, enhanced: Boolean
+        decorations: List<Decoration>,
+        group: String,
+        enhanced: Boolean,
     ) {
-        @Suppress("NAME_SHADOWING") val decorations =
+        @Suppress("NAME_SHADOWING")
+        val decorations =
             decorations.map { it.copy(locator = publication.normalizeLocator(it.locator)) }
 
         run(viewModel.applyDecorations(decorations, group, enhanced))
@@ -776,17 +831,16 @@ public class EpubNavigatorFragment public constructor(
             get() = viewModel.verticalText
 
         override fun onResourceLoaded(webView: R2BasicWebView, link: Link) {
-            Timber.d("onResourceLoaded: ${link.href} ${state}")
+            Timber.d("onResourceLoaded: ${link.href} $state")
             run(viewModel.onResourceLoaded(webView, link))
         }
 
         override fun onPageLoaded(webView: R2BasicWebView, link: Link) {
-            Timber.d("onPageLoaded: ${link.href} ${state}")
+            Timber.d("onPageLoaded: ${link.href} $state")
             viewLifecycleOwner.lifecycleScope.launch {
                 paginationListener?.onPageLoaded()
                 val href = link.url()
                 withContext(Dispatchers.IO) {
-
                     if (state is State.Initializing || (state as? State.Loading)?.initialResourceHref?.isEquivalent(
                             href
                         ) == true || readingOrder.none {
@@ -799,10 +853,13 @@ public class EpubNavigatorFragment public constructor(
 
                 notifyCurrentLocation()
 
-                Timber.d("onPageLoaded: ${link.href} ${state}")
+                // The visible spread may have just finished loading — let any deferred offscreen
+                // neighbours start loading now that the contention window is over.
+                releaseDeferredPageLoads()
+
+                Timber.d("onPageLoaded: ${link.href} $state")
                 paginationListener?.onPageLoaded(link.url(), state == State.Ready)
             }
-
         }
 
         override fun javascriptInterfacesForResource(link: Link): Map<String, Any?> =
@@ -820,7 +877,9 @@ public class EpubNavigatorFragment public constructor(
 
         private fun onDrag(type: DragEvent.Type, event: R2BasicWebView.DragEvent): Boolean = inputListener.onDrag(
             DragEvent(
-                type = type, start = event.startPoint.adjustedToViewport(), offset = event.offset
+                type = type,
+                start = event.startPoint.adjustedToViewport(),
+                offset = event.offset
             )
         )
 
@@ -832,7 +891,10 @@ public class EpubNavigatorFragment public constructor(
             rect: RectF,
             point: PointF,
         ): Boolean = viewModel.onDecorationActivated(
-            id = id, group = group, rect = rect.adjustedToViewport(), point = point.adjustedToViewport()
+            id = id,
+            group = group,
+            rect = rect.adjustedToViewport(),
+            point = point.adjustedToViewport()
         )
 
         override fun onHighlightRect(
@@ -867,7 +929,8 @@ public class EpubNavigatorFragment public constructor(
          * Prevents opening external links in the web view and handles internal links.
          */
         override fun shouldOverrideUrlLoading(
-            webView: WebView, request: WebResourceRequest
+            webView: WebView,
+            request: WebResourceRequest,
         ): Boolean {
             val url = request.url.toAbsoluteUrl() ?: return false
             viewModel.navigateToUrl(url)
@@ -882,7 +945,8 @@ public class EpubNavigatorFragment public constructor(
         }
 
         override fun shouldInterceptRequest(
-            webView: WebView, request: WebResourceRequest
+            webView: WebView,
+            request: WebResourceRequest,
         ): WebResourceResponse? = viewModel.shouldInterceptRequest(request)
 
         override fun resourceAtUrl(url: Url): Resource? =
@@ -992,6 +1056,65 @@ public class EpubNavigatorFragment public constructor(
             null
         }
 
+    /**
+     * Whether [fragment] should postpone loading its resources in the web views.
+     *
+     * True only for fixed-layout offscreen neighbours materialised while the visible spread is
+     * still loading: at cold open, loading three spreads concurrently makes first paint slower
+     * (CPU/heap contention, GC churn on memory-constrained devices). Once the visible spread is
+     * loaded — or whenever we cannot determine it — pages load immediately, preserving the
+     * regular neighbour preloading behaviour.
+     */
+    internal fun shouldDeferPageLoad(fragment: R2EpubPageFragment): Boolean {
+        if (viewModel.layout != EpubLayout.FIXED) return false
+        val current = r2PagerAdapter?.getCurrentFragment() as? R2EpubPageFragment ?: return false
+        if (current === fragment) return false
+        // On memory-constrained hosts, keep offscreen neighbours deferred until they are swiped to,
+        // so only the visible spread's WebViews hold content instead of all three resident spreads
+        // (prev/current/next). Each fixed-layout spread carries two WebViews; where the system WebView
+        // renders in-process (as it can on ChromeOS) their decoded images count against the app heap,
+        // so trimming resident spreads removes avoidable pressure on a device whose lowmemorykiller
+        // already evicts foreground apps. Neighbours load on demand in PageChangeListener
+        // .onPageSelected, at the cost of a brief load when paging. Elsewhere, defer only during cold
+        // open to smooth first paint, then preload neighbours as usual.
+        if (shouldPersistDeferredLoad()) return true
+        return !current.isSpreadLoaded()
+    }
+
+    /**
+     * Whether offscreen fixed-layout neighbours should stay deferred until they become visible,
+     * rather than preloading once the visible spread is ready. True only for memory-constrained
+     * hosts where resident neighbour spreads risk an out-of-memory kill (see [shouldDeferPageLoad]).
+     */
+    internal fun shouldPersistDeferredLoad(): Boolean =
+        viewModel.layout == EpubLayout.FIXED && isMemoryConstrainedHost
+
+    private val isMemoryConstrainedHost: Boolean by lazy {
+        val ctx = context ?: return@lazy false
+        val pm = ctx.packageManager
+        val isChromeOs = pm.hasSystemFeature(PackageManager.FEATURE_PC) ||
+            pm.hasSystemFeature("org.chromium.arc")
+        val activityManager = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val lowTotalRam = activityManager?.let {
+            val memInfo = ActivityManager.MemoryInfo()
+            it.getMemoryInfo(memInfo)
+            it.isLowRamDevice || memInfo.totalMem <= LOW_RAM_THRESHOLD_BYTES
+        } ?: false
+        isChromeOs || lowTotalRam
+    }
+
+    /** Releases deferred neighbour loads once the visible spread has finished loading. */
+    private fun releaseDeferredPageLoads() {
+        // On memory-constrained hosts neighbours stay deferred until swiped to, so never bulk-release.
+        if (shouldPersistDeferredLoad()) return
+        val adapter = r2PagerAdapter ?: return
+        val current = adapter.getCurrentFragment() as? R2EpubPageFragment
+        if (current != null && !current.isSpreadLoaded()) return
+        adapter.mFragments.forEach { _, fragment ->
+            (fragment as? R2EpubPageFragment)?.startDeferredLoadIfNeeded()
+        }
+    }
+
     private val currentReflowablePageFragment: R2EpubPageFragment?
         get() = currentFragment as? R2EpubPageFragment
 
@@ -1052,7 +1175,8 @@ public class EpubNavigatorFragment public constructor(
             EpubLayout.REFLOWABLE -> {
                 val resource = readingOrder[resourcePager.currentItem]
                 currentReflowablePageFragment?.webView?.findFirstVisibleLocator()?.copy(
-                    href = resource.url(), mediaType = resource.mediaType ?: MediaType.XHTML
+                    href = resource.url(),
+                    mediaType = resource.mediaType ?: MediaType.XHTML
                 )
             }
         }
@@ -1068,7 +1192,8 @@ public class EpubNavigatorFragment public constructor(
                 val resource = readingOrder[resourcePager.currentItem]
                 val resourceUrl = href ?: resource.url()
                 loadedFragmentForHref(href ?: resourceUrl)?.getWebView(href)?.findFirstVisibleLocator()?.copy(
-                    href = resourceUrl, mediaType = resource.mediaType ?: MediaType.XHTML
+                    href = resourceUrl,
+                    mediaType = resource.mediaType ?: MediaType.XHTML
                 )
             }
         }
@@ -1338,7 +1463,6 @@ public class EpubNavigatorFragment public constructor(
         cleanupResources()
     }
 
-
     public fun startActionMode(callback: ActionMode.Callback, href: Url) {
         val webView = loadedFragmentForHref(href)?.getWebView(href)
 
@@ -1348,7 +1472,6 @@ public class EpubNavigatorFragment public constructor(
             webView?.startActionMode(callback)
         }
     }
-
 
     public companion object {
 
@@ -1378,6 +1501,10 @@ public class EpubNavigatorFragment public constructor(
          * Returns null if the given [path] is not valid or an absolute URL.
          */
         public fun assetUrl(path: String): Url? = WebViewServer.assetUrl(path)
+
+        // Hosts at or below this total RAM keep offscreen fixed-layout spreads deferred to avoid an
+        // out-of-memory kill while paging (covers ~3 GB Chromebooks such as the octopus board).
+        private const val LOW_RAM_THRESHOLD_BYTES: Long = 3_758_096_384L // 3.5 GiB
     }
 }
 
