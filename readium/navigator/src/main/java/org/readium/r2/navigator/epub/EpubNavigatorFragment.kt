@@ -1212,12 +1212,7 @@ public class EpubNavigatorFragment public constructor(
      * Adjusts the given RectF based on viewport padding and applies horizontal offset
      * if it's the right page in a fixed-layout dual-page view.
      */
-    private fun adjustRectForLayout(rect: RectF, locatorHref: Url): RectF? {
-        if (!hasUsableViewForAsyncCallback()) {
-            Timber.d("Skipping RectF adjustment because navigator view is unavailable for $locatorHref")
-            return null
-        }
-
+    private fun adjustRectForLayout(rect: RectF, locatorHref: Url): RectF {
         val adjustedRect = rect.adjustedToViewport()
         Timber.d("RectF after adjustedToViewport for $locatorHref: $adjustedRect")
 
@@ -1287,12 +1282,7 @@ public class EpubNavigatorFragment public constructor(
                 val parsedRect = parseRectFFromJson(result, locator.href)
 
                 if (parsedRect != null) {
-                    val adjustedRect = adjustRectForLayout(parsedRect, locator.href)
-                    if (adjustedRect != null) {
-                        resumeRect(adjustedRect, "rect adjusted successfully")
-                    } else {
-                        resumeDefaultRect("navigator view unavailable while adjusting RectF")
-                    }
+                    resumeRect(adjustRectForLayout(parsedRect, locator.href), "rect adjusted successfully")
                 } else {
                     // Parsing failed or rect data was invalid
                     resumeDefaultRect("parsing failure")
