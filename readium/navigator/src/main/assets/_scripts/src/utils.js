@@ -720,11 +720,11 @@ export function calculateHorizontalPageRanges() {
   let lastRangeKey = null;
 
   function processElement(element) {
-    log("node name " + element.nodeName);
+    if (DEBUG_MODE) log("node name " + element.nodeName);
     
     // Cache textContent to avoid multiple DOM queries
     const elementTextContent = element.textContent;
-    log("<" + elementTextContent + ">");
+    if (DEBUG_MODE) log("<" + elementTextContent + ">");
 
     let rect;
 
@@ -838,7 +838,7 @@ export function calculateHorizontalPageRanges() {
     ) {
       removedWord = words.pop(); // Remove the last word or delimiter
 
-      log("word: <" + removedWord + ">");
+      if (DEBUG_MODE) log("word: <" + removedWord + ">");
 
       if (removedWord === " ") {
         removedText = removedWord + removedText;
@@ -938,7 +938,7 @@ export function calculateHorizontalPageRanges() {
       }
     }
 
-    log("adding text: <" + text + ">");
+    if (DEBUG_MODE) log("adding text: <" + text + ">");
     log("to range index: " + range);
   }
 
