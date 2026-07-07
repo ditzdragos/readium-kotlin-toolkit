@@ -248,6 +248,11 @@ internal class EpubNavigatorViewModel(
         server.clearResourceCache()
     }
 
+    /** Drops the web view server's built-Resource cache (e.g. under memory pressure). */
+    internal fun clearResourceCache() {
+        server.clearResourceCache()
+    }
+
     fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
         server.shouldInterceptRequest(request, css.value)
 

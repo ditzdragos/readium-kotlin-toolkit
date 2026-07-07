@@ -373,6 +373,17 @@ internal class R2EpubPageFragment : Fragment() {
         loadResources()
     }
 
+    /** Blanks this spread's web view(s) and marks the load deferred; [startDeferredLoadIfNeeded] reloads on swipe-back. No-op if already deferred. */
+    internal fun unloadSpread() {
+        if (deferredLoadPending) return
+        webView?.let { runCatching { it.loadUrl("about:blank") } }
+        webViewRight?.let { runCatching { it.loadUrl("about:blank") } }
+        isLoading = false
+        isLoadingRight = false
+        _isLoaded.value = false
+        deferredLoadPending = true
+    }
+
     /** Whether every page of this spread (left, and right when present) finished loading. */
     internal fun isSpreadLoaded(): Boolean =
         _isLoaded.value && !isLoadingRight
