@@ -1262,6 +1262,7 @@ public class EpubNavigatorFragment public constructor(
     @ExperimentalReadiumApi
     public suspend fun firstVisibleWordLocator(href: Url, side: StartPageSide?): Locator? {
         if (!::resourcePager.isInitialized) return null
+        if (viewModel.layout != EpubLayout.REFLOWABLE) return null
         val resource = readingOrder.firstWithHref(href) ?: return null
         val webView = loadedFragmentForHref(href)?.getWebView(href) ?: return null
         val text = when (side) {
