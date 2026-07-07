@@ -39,7 +39,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.withStarted
 import androidx.viewpager.widget.ViewPager
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlin.math.ceil
 import kotlin.reflect.KClass
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +55,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import org.readium.r2.navigator.BuildConfig.DEBUG
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.DecorationId
@@ -1429,25 +1429,31 @@ public class EpubNavigatorFragment public constructor(
     }
 
     public suspend fun calculateHorizontalPageRanges(href: Url): List<String> {
-        return suspendCancellableCoroutine { continuation ->
+        val raw = suspendCancellableCoroutine<String?> { continuation ->
             val fragment = loadedFragmentForHref(href)
-            Timber.d("calculateHorizontalPageRanges: $href -> $fragment")
-            fragment?.getWebView(href)?.calculateHorizontalPageRanges { result ->
-                Timber.d("calculateHorizontalPageRanges: $result")
-                try {
-                    val map = JSONObject(result).toMap()
+            if (DEBUG) Timber.d("calculateHorizontalPageRanges: $href -> $fragment")
+            val webView = fragment?.getWebView(href)
+            if (webView == null) {
+                continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+            webView.calculateHorizontalPageRanges { result ->
+                continuation.resume(result)
+            }
+        } ?: return emptyList()
 
-                    val pageRanges =
-                        map.entries.sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }.map { it.value.toString() }
-
-                    continuation.resume(pageRanges)
-                } catch (e: JSONException) {
-                    Timber.e(e, "Error parsing page ranges JSON: $result")
-                    continuation.resumeWithException(e)
-                } catch (e: Exception) {
-                    Timber.e(e, "Unexpected error processing page ranges result")
-                    continuation.resumeWithException(e)
-                }
+        return withContext(Dispatchers.Default) {
+            try {
+                if (DEBUG) Timber.d("calculateHorizontalPageRanges: $raw")
+                JSONObject(raw).toMap().entries
+                    .sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }
+                    .map { it.value.toString() }
+            } catch (e: JSONException) {
+                Timber.e(e, "Error parsing page ranges JSON: $raw")
+                throw e
+            } catch (e: Exception) {
+                Timber.e(e, "Unexpected error processing page ranges result")
+                throw e
             }
         }
     }

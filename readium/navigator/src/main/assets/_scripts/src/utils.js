@@ -484,7 +484,7 @@ export function rangeFromLocator(locator) {
       }
     }
   } catch (e) {
-    logError("Cannot parse range "+e);
+    if (DEBUG_MODE) logError("Cannot parse range "+e);
   }
 
   return null;
@@ -720,11 +720,11 @@ export function calculateHorizontalPageRanges() {
   let lastRangeKey = null;
 
   function processElement(element) {
-    log("node name " + element.nodeName);
+    if (DEBUG_MODE) log("node name " + element.nodeName);
     
     // Cache textContent to avoid multiple DOM queries
     const elementTextContent = element.textContent;
-    log("<" + elementTextContent + ">");
+    if (DEBUG_MODE) log("<" + elementTextContent + ">");
 
     let rect;
 
@@ -736,7 +736,7 @@ export function calculateHorizontalPageRanges() {
         range.selectNode(element);
         rect = range.getBoundingClientRect();
       } else {
-        log("node text does not have text");
+        if (DEBUG_MODE) log("node text does not have text");
         addTextToRange(elementTextContent, rangeIndex);
       }
     } else if (
@@ -746,19 +746,19 @@ export function calculateHorizontalPageRanges() {
       processText = true;
       rect = element.getBoundingClientRect();
     } else if (element.nodeName === "br") {
-      log(`adding br as new line`);
+      if (DEBUG_MODE) log(`adding br as new line`);
       addTextToRange("\n", rangeIndex);
     }
 
     if (processText) {
       rect.x += window.scrollX;
 
-      log("rect x: " + rect.x);
-      log("rext width: " + rect.width);
-      log("current page: " + currentPage);
-      log("current text length: " + currentTextLength);
-      log("current page x: " + currentPage * pageWidthValue);
-      log("next page x: " + (currentPage + 1) * pageWidthValue);
+      if (DEBUG_MODE) log("rect x: " + rect.x);
+      if (DEBUG_MODE) log("rext width: " + rect.width);
+      if (DEBUG_MODE) log("current page: " + currentPage);
+      if (DEBUG_MODE) log("current text length: " + currentTextLength);
+      if (DEBUG_MODE) log("current page x: " + currentPage * pageWidthValue);
+      if (DEBUG_MODE) log("next page x: " + (currentPage + 1) * pageWidthValue);
 
       // Use >= instead of > to handle boundary cases correctly
       if (rect.x >= (currentPage + 1) * pageWidthValue) {
@@ -766,10 +766,10 @@ export function calculateHorizontalPageRanges() {
         // Ensure additionalPages is non-negative
         const additionalPages = Math.max(0, Math.floor(pageDiff));
         currentPage = currentPage + additionalPages;
-        log("increase current page: " + currentPage);
+        if (DEBUG_MODE) log("increase current page: " + currentPage);
 
-        log("previous rect x: " + previousElementRect.x);
-        log("previous rect width: " + previousElementRect.width);
+        if (DEBUG_MODE) log("previous rect x: " + previousElementRect.x);
+        if (DEBUG_MODE) log("previous rect width: " + previousElementRect.width);
 
         // if previousElementRect.x + previousElementRect.width is more than curent page x+width, then we compare with next next page max x
 
@@ -780,7 +780,7 @@ export function calculateHorizontalPageRanges() {
         if (currentTextLength >= minCharactersPerRange && maxX < rect.x) {
           rangeIndex++;
           // currentTextLength = 0;
-          log("increase range index: " + rangeIndex);
+          if (DEBUG_MODE) log("increase range index: " + rangeIndex);
           currentTextLength = elementTextContent.length;
           addTextToRange(elementTextContent, rangeIndex);
           previousElementRect = rect;
@@ -792,7 +792,7 @@ export function calculateHorizontalPageRanges() {
         currentTextLength >= minCharactersPerRange &&
         rect.x + rect.width > (currentPage + 1) * pageWidthValue
       ) {
-        log("paragraph does not fit on current page");
+        if (DEBUG_MODE) log("paragraph does not fit on current page");
         processTextContent(element, elementTextContent);
       } else {
         // if (
@@ -802,7 +802,7 @@ export function calculateHorizontalPageRanges() {
         //   log("paragraph is too big; analyze words");
         //   processTextContent(element, elementTextContent);
         // } else {
-        log("add entire paragraph");
+        if (DEBUG_MODE) log("add entire paragraph");
         currentTextLength += elementTextContent.length;
         addTextToRange(elementTextContent, rangeIndex);
         // }
@@ -838,7 +838,7 @@ export function calculateHorizontalPageRanges() {
     ) {
       removedWord = words.pop(); // Remove the last word or delimiter
 
-      log("word: <" + removedWord + ">");
+      if (DEBUG_MODE) log("word: <" + removedWord + ">");
 
       if (removedWord === " ") {
         removedText = removedWord + removedText;
@@ -858,9 +858,9 @@ export function calculateHorizontalPageRanges() {
 
           wordBoundingRect = anchor.toRange().getBoundingClientRect();
           wordBoundingRect.x += window.scrollX;
-          log("word rect x: " + wordBoundingRect.x);
-          log("word rect width: " + wordBoundingRect.width);
-          log("current page max x: " + (currentPage + 1) * pageWidthValue);
+          if (DEBUG_MODE) log("word rect x: " + wordBoundingRect.x);
+          if (DEBUG_MODE) log("word rect width: " + wordBoundingRect.width);
+          if (DEBUG_MODE) log("current page max x: " + (currentPage + 1) * pageWidthValue);
 
           if (
             wordBoundingRect.x + wordBoundingRect.width >
@@ -871,7 +871,7 @@ export function calculateHorizontalPageRanges() {
 
           if (firstPoppedElement) {
             if (wordBoundingRect.x > (currentPage + 2) * pageWidthValue) {
-              log("text does not fit on the next page");
+              if (DEBUG_MODE) log("text does not fit on the next page");
               remainderDoesNotFitOnNextPage = true;
             }
           }
@@ -880,7 +880,7 @@ export function calculateHorizontalPageRanges() {
           // Update cached prefix after processing
           cachedPrefix = words.join("");
         } catch {
-          log("could not find range for word");
+          if (DEBUG_MODE) log("could not find range for word");
           // Update cached prefix even on error
           cachedPrefix = words.join("");
           // if (removedWord === "") {
@@ -899,7 +899,7 @@ export function calculateHorizontalPageRanges() {
       wordBoundingRect.x > (currentPage + 1) * pageWidthValue
     ) {
       // This should never happen!!!
-      log("this should never happen");
+      if (DEBUG_MODE) log("this should never happen");
       rangeIndex += 1;
       currentPage += 1; // Move to the next page
       //TODO the element must go through the regular processing in this case
@@ -914,7 +914,7 @@ export function calculateHorizontalPageRanges() {
 
       // TODO do we need to also check the current text length here????
       if (remainderDoesNotFitOnNextPage) {
-        log("remainderDoesNotFitOnNextPage");
+        if (DEBUG_MODE) log("remainderDoesNotFitOnNextPage");
         // processTextContent(element, removedText);
       }
       // else {
@@ -938,12 +938,12 @@ export function calculateHorizontalPageRanges() {
       }
     }
 
-    log("adding text: <" + text + ">");
-    log("to range index: " + range);
+    if (DEBUG_MODE) log("adding text: <" + text + ">");
+    if (DEBUG_MODE) log("to range index: " + range);
   }
 
   function processNode(node) {
-    log(`process node with name : ${node.nodeName} and type: ${node.nodeType}`);
+    if (DEBUG_MODE) log(`process node with name : ${node.nodeName} and type: ${node.nodeType}`);
 
     // Disabling this until we find a way to integrate this in the app;
 
@@ -964,7 +964,7 @@ export function calculateHorizontalPageRanges() {
     if (node.nodeName === "p" && lastRangeKey !== null) {
       const lastItem = rangeData[lastRangeKey];
       if (lastItem && !/\s$/.test(lastItem)) {
-        log(`appending new line before paragraph`);
+        if (DEBUG_MODE) log(`appending new line before paragraph`);
         addTextToRange("\n", rangeIndex);
       }
     }
