@@ -101,6 +101,7 @@ import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.epub.EpubLayout
+import org.readium.r2.shared.publication.firstWithHref
 import org.readium.r2.shared.publication.presentation.presentation
 import org.readium.r2.shared.publication.services.positionsByReadingOrder
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -1242,6 +1243,36 @@ public class EpubNavigatorFragment public constructor(
                 )
             }
         }
+    }
+
+    public enum class StartPageSide(public val jsValue: String) {
+        LEFT("left"), RIGHT("right"),
+    }
+
+    @ExperimentalReadiumApi
+    public suspend fun visibleColumnCountPerScreen(): Int {
+        if (!::resourcePager.isInitialized) return 1
+        return when (viewModel.layout) {
+            EpubLayout.FIXED -> currentLocators.value.let { listOfNotNull(it.first, it.second).size }
+            EpubLayout.REFLOWABLE ->
+                currentReflowablePageFragment?.webView?.getColumnCountPerScreen() ?: 1
+        }
+    }
+
+    @ExperimentalReadiumApi
+    public suspend fun firstVisibleWordLocator(href: Url, side: StartPageSide?): Locator? {
+        if (!::resourcePager.isInitialized) return null
+        val resource = readingOrder.firstWithHref(href) ?: return null
+        val webView = loadedFragmentForHref(href)?.getWebView(href) ?: return null
+        val text = when (side) {
+            null -> webView.getFirstVisibleWordText()
+            else -> webView.getFirstVisibleWordTextOnSide(side.jsValue)
+        } ?: return null
+        return Locator(
+            href = href,
+            mediaType = resource.mediaType ?: MediaType.XHTML,
+            text = text,
+        )
     }
 
     /**

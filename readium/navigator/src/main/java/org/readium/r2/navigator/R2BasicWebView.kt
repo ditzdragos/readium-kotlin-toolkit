@@ -668,6 +668,20 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
             .let { tryOrNull { JSONObject(it) } }
             ?.let { Locator.fromJSON(it) }
 
+    internal suspend fun getColumnCountPerScreen(): Int =
+        runJavaScriptSuspend("readium.getColumnCountPerScreen();").toIntOrNull() ?: 1
+
+    internal suspend fun getFirstVisibleWordText(): Locator.Text? =
+        parseWordTextResult(runJavaScriptSuspend("readium.getFirstVisibleWordText();"))
+
+    internal suspend fun getFirstVisibleWordTextOnSide(side: String): Locator.Text? =
+        parseWordTextResult(runJavaScriptSuspend("readium.getFirstVisibleWordTextOnSide(\"$side\");"))
+
+    private fun parseWordTextResult(result: String): Locator.Text? =
+        tryOrNull { JSONObject(result) }
+            ?.optJSONObject("text")
+            ?.let { Locator.Text.fromJSON(it) }
+
     fun createHighlight(locator: String?, color: String?, callback: (String) -> Unit) {
         uiScope.launch {
             runJavaScript("createHighlight($locator, $color, true);", callback)

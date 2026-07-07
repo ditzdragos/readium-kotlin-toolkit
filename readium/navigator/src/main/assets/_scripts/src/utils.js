@@ -6,6 +6,7 @@
 
 import { toNativeRect } from "./rect";
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
+import { TextRange } from "./vendor/hypothesis/anchoring/text-range";
 
 /**
  * Least Recently Used Cache with a limit wraping a Map object
@@ -490,6 +491,29 @@ export function rangeFromLocator(locator) {
   return null;
 }
 
+function getTextFrom(highlight, range) {
+  const text = document.body.textContent;
+  const textRange = TextRange.fromRange(range).relativeTo(document.body);
+  const start = textRange.start.offset;
+  const end = textRange.end.offset;
+
+  const snippetLength = 200;
+
+  let before = text.slice(Math.max(0, start - snippetLength), start);
+  const firstWordStart = before.search(/\P{L}\p{L}/gu);
+  if (firstWordStart !== -1) {
+    before = before.slice(firstWordStart + 1);
+  }
+
+  let after = text.slice(end, Math.min(text.length, end + snippetLength));
+  const lastWordEnd = Array.from(after.matchAll(/\p{L}\P{L}/gu)).pop();
+  if (lastWordEnd !== undefined && lastWordEnd.index > 1) {
+    after = after.slice(0, lastWordEnd.index + 1);
+  }
+
+  return { highlight, before, after };
+}
+
 export function getFirstVisibleWordText() {
   const range = document.createRange();
   const nodeIterator = document.createNodeIterator(
@@ -547,6 +571,62 @@ export function getFirstVisibleWordText() {
   }
 
   return null; // Return null if no visible word is found
+}
+
+export function getFirstVisibleWordTextOnSide(side) {
+  const halfWidth = window.innerWidth / 2;
+  const minX = side === "right" ? halfWidth : 0;
+  const maxX = side === "left" ? halfWidth : window.innerWidth;
+
+  const range = document.createRange();
+  const nodeIterator = document.createNodeIterator(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: function (node) {
+        if (node.nodeValue.trim().length > 0) {
+          range.selectNodeContents(node);
+          const rect = range.getBoundingClientRect();
+          if (
+            rect.right > minX &&
+            rect.left < maxX &&
+            rect.bottom > 0 &&
+            rect.top < window.innerHeight
+          ) {
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        }
+        return NodeFilter.FILTER_REJECT;
+      },
+    }
+  );
+
+  let documentNode;
+  while ((documentNode = nodeIterator.nextNode())) {
+    const words = documentNode.nodeValue.trim().split(/\s+/);
+    if (words.length > 0) {
+      for (let i = 0; i < words.length; i++) {
+        const wordIndex = documentNode.nodeValue.indexOf(words[i]);
+        const wordRange = document.createRange();
+        wordRange.setStart(documentNode, wordIndex);
+        wordRange.setEnd(documentNode, wordIndex + words[i].length);
+
+        const wordRect = wordRange.getBoundingClientRect();
+        const wordCenter = (wordRect.left + wordRect.right) / 2;
+
+        if (
+          wordCenter >= minX &&
+          wordCenter < maxX &&
+          wordRect.bottom > 0 &&
+          wordRect.top < window.innerHeight
+        ) {
+          return { text: getTextFrom(words[i], wordRange) };
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 /// User Settings.
