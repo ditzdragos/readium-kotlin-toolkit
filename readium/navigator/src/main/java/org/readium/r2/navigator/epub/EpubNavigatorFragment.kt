@@ -55,6 +55,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import org.readium.r2.navigator.BuildConfig.DEBUG
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.DecorationId
@@ -1430,7 +1431,7 @@ public class EpubNavigatorFragment public constructor(
     public suspend fun calculateHorizontalPageRanges(href: Url): List<String> {
         val raw = suspendCancellableCoroutine<String?> { continuation ->
             val fragment = loadedFragmentForHref(href)
-            Timber.d("calculateHorizontalPageRanges: $href -> $fragment")
+            if (DEBUG) Timber.d("calculateHorizontalPageRanges: $href -> $fragment")
             val webView = fragment?.getWebView(href)
             if (webView == null) {
                 continuation.resume(null)
@@ -1443,7 +1444,7 @@ public class EpubNavigatorFragment public constructor(
 
         return withContext(Dispatchers.Default) {
             try {
-                Timber.d("calculateHorizontalPageRanges: $raw")
+                if (DEBUG) Timber.d("calculateHorizontalPageRanges: $raw")
                 JSONObject(raw).toMap().entries
                     .sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }
                     .map { it.value.toString() }

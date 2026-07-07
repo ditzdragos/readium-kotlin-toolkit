@@ -5,7 +5,7 @@
 //
 
 import { toNativeRect } from "./rect";
-import { logError, log as logNative, snapCurrentOffset } from "./utils";
+import { DEBUG_MODE, logError, log as logNative, snapCurrentOffset } from "./utils";
 import { TextRange } from "./vendor/hypothesis/anchoring/text-range";
 
 // Polyfill for Android API 26
@@ -55,7 +55,7 @@ function getSelectionRect() {
 
     return toNativeRect(range.getBoundingClientRect());
   } catch (e) {
-    logError(e);
+    if (DEBUG_MODE) logError(e);
     return null;
   }
 }
@@ -110,7 +110,7 @@ function getCurrentSelectionText() {
           selection.focusOffset
         );
   if (!range || range.collapsed) {
-    log("$$$$$$$$$$$$$$$$$ CANNOT GET NON-COLLAPSED SELECTION RANGE?!");
+    if (DEBUG_MODE) log("$$$$$$$$$$$$$$$$$ CANNOT GET NON-COLLAPSED SELECTION RANGE?!");
     return undefined;
   }
 
@@ -151,15 +151,15 @@ function createOrderedRange(startNode, startOffset, endNode, endOffset) {
   if (!range.collapsed) {
     return range;
   }
-  log(">>> createOrderedRange COLLAPSED ... RANGE REVERSE?");
+  if (DEBUG_MODE) log(">>> createOrderedRange COLLAPSED ... RANGE REVERSE?");
   const rangeReverse = new Range();
   rangeReverse.setStart(endNode, endOffset);
   rangeReverse.setEnd(startNode, startOffset);
   if (!rangeReverse.collapsed) {
-    log(">>> createOrderedRange RANGE REVERSE OK.");
+    if (DEBUG_MODE) log(">>> createOrderedRange RANGE REVERSE OK.");
     return range;
   }
-  log(">>> createOrderedRange RANGE REVERSE ALSO COLLAPSED?!");
+  if (DEBUG_MODE) log(">>> createOrderedRange RANGE REVERSE ALSO COLLAPSED?!");
   return undefined;
 }
 
@@ -168,7 +168,7 @@ export function convertRangeInfo(document, rangeInfo) {
     rangeInfo.startContainerElementCssSelector
   );
   if (!startElement) {
-    log("^^^ convertRangeInfo NO START ELEMENT CSS SELECTOR?!");
+    if (DEBUG_MODE) log("^^^ convertRangeInfo NO START ELEMENT CSS SELECTOR?!");
     return undefined;
   }
   let startContainer = startElement;
@@ -177,15 +177,17 @@ export function convertRangeInfo(document, rangeInfo) {
       rangeInfo.startContainerChildTextNodeIndex >=
       startElement.childNodes.length
     ) {
-      log(
-        "^^^ convertRangeInfo rangeInfo.startContainerChildTextNodeIndex >= startElement.childNodes.length?!"
-      );
+      if (DEBUG_MODE) {
+        log(
+          "^^^ convertRangeInfo rangeInfo.startContainerChildTextNodeIndex >= startElement.childNodes.length?!"
+        );
+      }
       return undefined;
     }
     startContainer =
       startElement.childNodes[rangeInfo.startContainerChildTextNodeIndex];
     if (startContainer.nodeType !== Node.TEXT_NODE) {
-      log("^^^ convertRangeInfo startContainer.nodeType !== Node.TEXT_NODE?!");
+      if (DEBUG_MODE) log("^^^ convertRangeInfo startContainer.nodeType !== Node.TEXT_NODE?!");
       return undefined;
     }
   }
@@ -193,7 +195,7 @@ export function convertRangeInfo(document, rangeInfo) {
     rangeInfo.endContainerElementCssSelector
   );
   if (!endElement) {
-    log("^^^ convertRangeInfo NO END ELEMENT CSS SELECTOR?!");
+    if (DEBUG_MODE) log("^^^ convertRangeInfo NO END ELEMENT CSS SELECTOR?!");
     return undefined;
   }
   let endContainer = endElement;
@@ -201,15 +203,17 @@ export function convertRangeInfo(document, rangeInfo) {
     if (
       rangeInfo.endContainerChildTextNodeIndex >= endElement.childNodes.length
     ) {
-      log(
-        "^^^ convertRangeInfo rangeInfo.endContainerChildTextNodeIndex >= endElement.childNodes.length?!"
-      );
+      if (DEBUG_MODE) {
+        log(
+          "^^^ convertRangeInfo rangeInfo.endContainerChildTextNodeIndex >= endElement.childNodes.length?!"
+        );
+      }
       return undefined;
     }
     endContainer =
       endElement.childNodes[rangeInfo.endContainerChildTextNodeIndex];
     if (endContainer.nodeType !== Node.TEXT_NODE) {
-      log("^^^ convertRangeInfo endContainer.nodeType !== Node.TEXT_NODE?!");
+      if (DEBUG_MODE) log("^^^ convertRangeInfo endContainer.nodeType !== Node.TEXT_NODE?!");
       return undefined;
     }
   }

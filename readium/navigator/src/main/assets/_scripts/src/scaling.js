@@ -52,7 +52,7 @@ function emitViewportChangedEvent() {
             },
         }));
     } catch (error) {
-        debugWarn("[R2Scale] Failed to dispatch viewport changed event", error);
+        if (DEBUG_MODE) debugWarn("[R2Scale] Failed to dispatch viewport changed event", error);
     }
 }
 
@@ -95,22 +95,22 @@ export function applyInitialScaling() {
             contentWidth = parseInt(widthMatch[1]);
             contentHeight = parseInt(heightMatch[1]);
             dimensionMethod = 'viewport meta tag';
-            debugLog('[R2Scale] Using viewport meta dimensions: ' + contentWidth + 'x' + contentHeight);
+            if (DEBUG_MODE) debugLog('[R2Scale] Using viewport meta dimensions: ' + contentWidth + 'x' + contentHeight);
         }
     }
 
     // Fallback if meta tag is missing or invalid - crucial for FXL without viewport
     if (!contentWidth || !contentHeight) {
-        debugLog('[R2Scale] No valid meta viewport dimensions found, using body scroll dimensions as fallback.');
+        if (DEBUG_MODE) debugLog('[R2Scale] No valid meta viewport dimensions found, using body scroll dimensions as fallback.');
         window.r2ScalingInProgress = false;
         return;
     }
 
-    debugLog('[R2Scale] Final dimension detection method: ' + dimensionMethod);
+    if (DEBUG_MODE) debugLog('[R2Scale] Final dimension detection method: ' + dimensionMethod);
 
     var viewportWidth = window.innerWidth;
     var viewportHeight = window.innerHeight;
-    debugLog('[R2Scale] Using JS viewport: ' + viewportWidth + 'x' + viewportHeight);
+    if (DEBUG_MODE) debugLog('[R2Scale] Using JS viewport: ' + viewportWidth + 'x' + viewportHeight);
 
     // Calculate scale based on fitting content within viewport
     var scale = 1.0;
@@ -127,38 +127,38 @@ export function applyInitialScaling() {
             // Viewport is wider relative to height than content
             // Scale down to match the viewport's aspect ratio
             scale = (viewportRatio / contentRatio);
-            debugLog('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is smaller than content ratio (' +
+            if (DEBUG_MODE) debugLog('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is smaller than content ratio (' +
                         contentRatio.toFixed(2) + '), scaling to: ' + scale.toFixed(3));
         } else {
             // Viewport is taller relative to width than content
             // No scaling needed
-            debugLog('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is larger than content ratio (' +
+            if (DEBUG_MODE) debugLog('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is larger than content ratio (' +
                         contentRatio.toFixed(2) + '), no scaling needed');
             scale = 1.0;
         }
 
         // For content that barely fits (scale is close to 1.0), apply a small safety margin
         if (scale >= 0.95 && scale < 1.0) {
-            debugLog('[R2Scale] Content barely fits, applying slight safety margin');
+            if (DEBUG_MODE) debugLog('[R2Scale] Content barely fits, applying slight safety margin');
         }
 
         // Apply rule: No scaling up (max scale is 1.0)
         scale = Math.min(1.0, scale);
 
     } else {
-        debugWarn("[R2Scale] Content dimensions are zero or invalid, defaulting scale to 1.0");
+        if (DEBUG_MODE) debugWarn("[R2Scale] Content dimensions are zero or invalid, defaulting scale to 1.0");
         scale = 1.0;
     }
 
     // Optional: Apply safety margin (e.g., 1%)
-    debugLog('[R2Scale] Calculated scale (with safety margin): ' + scale.toFixed(3));
+    if (DEBUG_MODE) debugLog('[R2Scale] Calculated scale (with safety margin): ' + scale.toFixed(3));
 
     // Apply scaling via wrapper
     var existingWrapper = document.getElementById('r2-scale-wrapper');
     var scaleContainer;
 
     if (existingWrapper) {
-        debugLog('[R2Scale] Removing existing scale wrapper.');
+        if (DEBUG_MODE) debugLog('[R2Scale] Removing existing scale wrapper.');
         scaleContainer = document.getElementById('r2-scale-container');
         if (scaleContainer) {
             // Move children back to body carefully
@@ -177,7 +177,7 @@ export function applyInitialScaling() {
         }
     }
 
-    debugLog('[R2Scale] Creating new scale wrapper and container.');
+    if (DEBUG_MODE) debugLog('[R2Scale] Creating new scale wrapper and container.');
     var wrapper = document.createElement('div');
     wrapper.id = 'r2-scale-wrapper';
     // Style the wrapper to center its content (the scaleContainer)
@@ -223,7 +223,7 @@ export function applyInitialScaling() {
     // Store the JS viewport dimensions used for this scaling for potential future comparison
     window.r2LastJSViewport = { width: viewportWidth, height: viewportHeight };
 
-    debugLog(`[R2Scale] Universal scaling applied: ${contentWidth}x${contentHeight} (${dimensionMethod}) scaled to ${scale.toFixed(3)}`);
+    if (DEBUG_MODE) debugLog(`[R2Scale] Universal scaling applied: ${contentWidth}x${contentHeight} (${dimensionMethod}) scaled to ${scale.toFixed(3)}`);
     emitViewportChangedEvent();
 }
 
@@ -238,15 +238,15 @@ export function updateScaling() {
     if (window.r2LastJSViewport &&
         Math.abs(window.r2LastJSViewport.width - viewportWidth) < 5 &&
         Math.abs(window.r2LastJSViewport.height - viewportHeight) < 5) {
-        debugLog('[R2Scale] Viewport dimensions nearly unchanged, skipping scale update.');
+        if (DEBUG_MODE) debugLog('[R2Scale] Viewport dimensions nearly unchanged, skipping scale update.');
         return;
     }
 
-    debugLog('[R2Scale] Updating scaling for viewport: ' + viewportWidth + 'x' + viewportHeight);
+    if (DEBUG_MODE) debugLog('[R2Scale] Updating scaling for viewport: ' + viewportWidth + 'x' + viewportHeight);
 
     var scaleContainer = document.getElementById('r2-scale-container');
     if (!scaleContainer) {
-        debugWarn('[R2Scale] Scale container not found during update. Attempting re-initialization.');
+        if (DEBUG_MODE) debugWarn('[R2Scale] Scale container not found during update. Attempting re-initialization.');
         // Reset flags and try to apply initial scaling again
         window.r2ScalingApplied = false;
         window.r2ScalingInProgress = false;
@@ -259,13 +259,13 @@ export function updateScaling() {
     var contentHeight = window.r2ContentDimensions?.height || parseInt(scaleContainer.style.height);
 
     if (!contentWidth || !contentHeight || contentWidth <= 0 || contentHeight <= 0) {
-         debugError('[R2Scale] Cannot update scaling: Invalid content dimensions detected.', { width: contentWidth, height: contentHeight });
+         if (DEBUG_MODE) debugError('[R2Scale] Cannot update scaling: Invalid content dimensions detected.', { width: contentWidth, height: contentHeight });
          // Potentially attempt re-initialization here as well?
          return;
     }
 
     var dimensionMethod = window.r2ContentDimensions?.method || 'from style';
-    debugLog('[R2Scale] Using content dimensions for update: ' + contentWidth + 'x' + contentHeight + ' (' + dimensionMethod + ')');
+    if (DEBUG_MODE) debugLog('[R2Scale] Using content dimensions for update: ' + contentWidth + 'x' + contentHeight + ' (' + dimensionMethod + ')');
 
     // Calculate new scale
     var scale = 1.0;
@@ -277,22 +277,22 @@ export function updateScaling() {
 
         if (contentHeight > contentWidth) { // Page is taller than wide (portrait)
             targetRatio = ratioHeight;
-            debugLog('[R2Scale] Content is portrait, targeting height ratio for update: ' + targetRatio.toFixed(3));
+            if (DEBUG_MODE) debugLog('[R2Scale] Content is portrait, targeting height ratio for update: ' + targetRatio.toFixed(3));
         } else { // Page is wider than tall (landscape) or square
             targetRatio = ratioWidth;
-            debugLog('[R2Scale] Content is landscape or square, targeting width ratio for update: ' + targetRatio.toFixed(3));
+            if (DEBUG_MODE) debugLog('[R2Scale] Content is landscape or square, targeting width ratio for update: ' + targetRatio.toFixed(3));
         }
 
         // Apply rule: No scaling up (max scale is 1.0)
         scale = Math.min(1.0, targetRatio);
 
     } else {
-        debugWarn("[R2Scale] Content dimensions zero/invalid during update, defaulting scale to 1.0");
+        if (DEBUG_MODE) debugWarn("[R2Scale] Content dimensions zero/invalid during update, defaulting scale to 1.0");
         scale = 1.0;
     }
 
     // Optional: Apply safety margin
-    debugLog('[R2Scale] Updating scale transform (with safety margin) to: ' + scale.toFixed(3));
+    if (DEBUG_MODE) debugLog('[R2Scale] Updating scale transform (with safety margin) to: ' + scale.toFixed(3));
 
     scaleContainer.style.transform = 'scale(' + scale + ')';
     window.r2CurrentScale = scale; // Update stored scale
@@ -309,10 +309,10 @@ export function setupScalingListeners() {
     const hasViewportMeta = document.querySelector('meta[name="viewport"]');
 
     if (hasViewportMeta) {
-       debugLog(`[R2Scale] Viewport meta tag detected, setting up scaling listeners.`);
+       if (DEBUG_MODE) debugLog(`[R2Scale] Viewport meta tag detected, setting up scaling listeners.`);
        applyInitialScaling();
     } else {
-        debugLog("[R2Scale] No viewport meta tag found. Assuming reflowable content, scaling setup skipped.");
+        if (DEBUG_MODE) debugLog("[R2Scale] No viewport meta tag found. Assuming reflowable content, scaling setup skipped.");
     }
 
     if (scalingListenersAttached) {

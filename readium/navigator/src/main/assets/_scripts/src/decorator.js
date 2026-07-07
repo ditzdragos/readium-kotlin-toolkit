@@ -10,7 +10,7 @@ import {
   toNativeRect,
 } from "./rect";
 import { setupScalingListeners } from "./scaling.js";
-import { getOCRCorrectedRect, log, logError, rangeFromLocator } from "./utils";
+import { DEBUG_MODE, getOCRCorrectedRect, log, logError, rangeFromLocator } from "./utils";
 
 let styles = new Map();
 let groups = new Map();
@@ -409,11 +409,11 @@ export function DecorationGroup(groupId, groupName) {
 
     let range = rangeFromLocator(decoration.locator);
     if (!range) {
-      log("Can't locate DOM range for decoration", decoration);
+      if (DEBUG_MODE) log("Can't locate DOM range for decoration", decoration);
       return;
     }
 
-    log("adding decoration", groupName, JSON.stringify(decoration));
+    if (DEBUG_MODE) log("adding decoration", groupName, JSON.stringify(decoration));
     let item = { id, decoration, range, enhanced: false };
     items.push(item);
     layout(item, true);
@@ -424,7 +424,7 @@ export function DecorationGroup(groupId, groupName) {
 
     let range = rangeFromLocator(decoration.locator);
     if (!range) {
-      log("Can't locate DOM range for decoration", decoration);
+      if (DEBUG_MODE) log("Can't locate DOM range for decoration", decoration);
       return;
     }
 
@@ -472,9 +472,9 @@ export function DecorationGroup(groupId, groupName) {
   }
 
   function clearAllEnhanced() {
-    log("clearing all enhanced ", groupName, items);
+    if (DEBUG_MODE) log("clearing all enhanced ", groupName, items);
     visibleContainers.forEach((container) => {
-      log(`clearing container: ${container.id}`);
+      if (DEBUG_MODE) log(`clearing container: ${container.id}`);
       container.remove();
     });
 
@@ -484,7 +484,7 @@ export function DecorationGroup(groupId, groupName) {
 
   function clearEnhanced(decorationId) {
     // Iterate over each item in the items array
-    log("trying to clear decoration: ", decorationId);
+    if (DEBUG_MODE) log("trying to clear decoration: ", decorationId);
     items.forEach((item) => {
       // Check if the item's decoration id matches the one we want to remove
       if (item.decoration.id === decorationId && item.container) {
@@ -505,7 +505,7 @@ export function DecorationGroup(groupId, groupName) {
    * To be called after reflowing the resource, for example.
    */
   function requestLayout() {
-    log("requesting layout ", groupName, items.length);
+    if (DEBUG_MODE) log("requesting layout ", groupName, items.length);
     clearContainer();
     clearAllEnhanced();
     items.forEach((item) => {
@@ -525,7 +525,7 @@ export function DecorationGroup(groupId, groupName) {
 
     let style = styles.get(item.decoration.style);
     if (!style) {
-      logError(`Unknown decoration style: ${item.decoration.style}`);
+      if (DEBUG_MODE) logError(`Unknown decoration style: ${item.decoration.style}`);
       return;
     }
 
@@ -647,9 +647,11 @@ export function DecorationGroup(groupId, groupName) {
       template.innerHTML = item.decoration.element.trim();
       elementTemplate = template.content.firstElementChild;
     } catch (error) {
-      logError(
-        `Invalid decoration element "${item.decoration.element}": ${error.message}`
-      );
+      if (DEBUG_MODE) {
+        logError(
+          `Invalid decoration element "${item.decoration.element}": ${error.message}`
+        );
+      }
       return;
     }
 
@@ -690,7 +692,7 @@ export function DecorationGroup(groupId, groupName) {
 
       itemContainer.append(bounds);
     } else {
-      log("style layout: ", groupName, style.layout);
+      if (DEBUG_MODE) log("style layout: ", groupName, style.layout);
     }
 
     groupContainer.append(itemContainer);
@@ -714,7 +716,7 @@ export function DecorationGroup(groupId, groupName) {
   function layoutEnhanced(item, postMessage = true) {
     const style = styles.get(item.decoration.style);
     if (!style) {
-      logError(`Unknown decoration style: ${item.decoration.style}`);
+      if (DEBUG_MODE) logError(`Unknown decoration style: ${item.decoration.style}`);
       return;
     }
 
@@ -747,7 +749,7 @@ export function DecorationGroup(groupId, groupName) {
       }
       pageIndex = Math.max(0, pageIndex);
     } catch (error) {
-      logError(`Error calculating page index: ${error.message}`);
+      if (DEBUG_MODE) logError(`Error calculating page index: ${error.message}`);
       postMessageWithInvalidRect();
       return;
     }
@@ -914,9 +916,11 @@ export function DecorationGroup(groupId, groupName) {
       template.innerHTML = item.decoration.element.trim();
       elementTemplate = template.content.firstElementChild;
     } catch (error) {
-      logError(
-        `Invalid decoration element "${item.decoration.element}": ${error.message}`
-      );
+      if (DEBUG_MODE) {
+        logError(
+          `Invalid decoration element "${item.decoration.element}": ${error.message}`
+        );
+      }
       return;
     }
 
@@ -1038,7 +1042,7 @@ export function DecorationGroup(groupId, groupName) {
         itemContainer.append(positionedBounds);
       }
     } catch (error) {
-      logError(`Error calculating position: ${error.message}`);
+      if (DEBUG_MODE) logError(`Error calculating position: ${error.message}`);
       postMessageWithInvalidRect();
       return;
     }
