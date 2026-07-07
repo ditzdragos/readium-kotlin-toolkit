@@ -39,7 +39,6 @@ import org.readium.r2.shared.util.resource.TransformingContainer
 import org.readium.r2.shared.util.use
 import org.readium.r2.shared.util.xml.ElementNode
 import org.readium.r2.streamer.parser.PublicationParser
-import timber.log.Timber
 
 /**
  * Parses a Publication from an EPUB publication.
@@ -199,7 +198,6 @@ public class EpubParser(
         // match those nodes, so we try both direct namespace queries and namespace-agnostic queries.
         // https://readium.org/architecture/streamer/parser/metadata#epub-2x-10
 
-        Timber.d("Display options XML: ${displayOptionsXml}")
         val platform = findPlatform(displayOptionsXml)
             ?: return emptyMap()
 
@@ -218,8 +216,6 @@ public class EpubParser(
         val platformsWithNamespace = displayOptionsXml.get("platform", "")
         val platform = platformsWithNamespace.firstOrNull { it.getAttr("name") == "*" }
             ?: platformsWithNamespace.firstOrNull()
-        Timber.d("Platform namespace: ${platformsWithNamespace}")
-        Timber.d("Platform: ${platform}")
         if (platform != null) {
             return platform
         }

@@ -88,7 +88,10 @@ internal class CachingContainer(
     }
 
     override fun close() {
-        cache.forEach { it.value.close() }
+        // CachingReadable.close() is a deliberate no-op (shared instances), so just drop
+        // our references and close the underlying container it wraps — the `by container`
+        // delegate was overridden here, so this is the only place that close reaches it.
         cache.clear()
+        container.close()
     }
 }

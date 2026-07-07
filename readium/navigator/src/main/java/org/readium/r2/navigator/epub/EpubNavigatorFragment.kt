@@ -9,6 +9,7 @@
 package org.readium.r2.navigator.epub
 
 import android.app.ActivityManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.PointF
@@ -646,6 +647,16 @@ public class EpubNavigatorFragment public constructor(
         super.onSaveInstanceState(outState)
     }
 
+    override fun onStart() {
+        super.onStart()
+        requireContext().registerComponentCallbacks(memoryCallbacks)
+    }
+
+    override fun onStop() {
+        runCatching { requireContext().unregisterComponentCallbacks(memoryCallbacks) }
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
 
@@ -1062,6 +1073,33 @@ public class EpubNavigatorFragment public constructor(
         } else {
             null
         }
+
+    @Suppress("DEPRECATION")
+    private val memoryCallbacks = object : ComponentCallbacks2 {
+        override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {}
+
+        override fun onLowMemory() {
+            onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+        }
+
+        override fun onTrimMemory(level: Int) {
+            if (shouldShedOffscreenSpreads(level, viewModel.layout == EpubLayout.FIXED)) {
+                shedOffscreenSpreads()
+            }
+        }
+    }
+
+    /** Blanks offscreen fixed-layout spreads and clears the resource cache; they reload on swipe-back. */
+    private fun shedOffscreenSpreads() {
+        val adapter = r2PagerAdapter ?: return
+        val current = adapter.getCurrentFragment()
+        adapter.mFragments.forEach { _, fragment ->
+            if (fragment is R2EpubPageFragment && fragment !== current) {
+                fragment.unloadSpread()
+            }
+        }
+        viewModel.clearResourceCache()
+    }
 
     /**
      * Whether [fragment] should postpone loading its resources in the web views.
