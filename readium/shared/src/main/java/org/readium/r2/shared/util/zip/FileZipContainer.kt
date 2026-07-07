@@ -13,10 +13,7 @@ import java.io.IOException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipFile
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.readFully
@@ -129,13 +126,8 @@ internal class FileZipContainer(
 
         private var stream: CountingInputStream? = null
 
-        @OptIn(DelicateCoroutinesApi::class)
         override fun close() {
-            GlobalScope.launch {
-                withContext(Dispatchers.IO) {
-                    tryOrLog { stream?.close() }
-                }
-            }
+            tryOrLog { stream?.close() }
         }
     }
 
@@ -155,14 +147,7 @@ internal class FileZipContainer(
             }
             ?.let { Entry(url, it) }
 
-    @OptIn(DelicateCoroutinesApi::class)
     override fun close() {
-        GlobalScope.launch {
-            tryOrLog {
-                withContext(Dispatchers.IO) {
-                    archive.close()
-                }
-            }
-        }
+        tryOrLog { archive.close() }
     }
 }
