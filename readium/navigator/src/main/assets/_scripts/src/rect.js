@@ -4,7 +4,7 @@
 //  available in the top-level LICENSE file of the project.
 //
 
-import { log as logNative } from "./utils";
+import { DEBUG_MODE, log as logNative } from "./utils";
 
 const debug = false;
 
@@ -70,15 +70,15 @@ export function getClientRectsNoOverlap(
     const bigEnough = rect.width * rect.height > minArea;
     if (!bigEnough) {
       if (newRects.length > 1) {
-        if (debug) log("CLIENT RECT: remove small");
+        if (DEBUG_MODE) log("CLIENT RECT: remove small");
         newRects.splice(j, 1);
       } else {
-        if (debug) log("CLIENT RECT: remove small, but keep otherwise empty!");
+        if (DEBUG_MODE) log("CLIENT RECT: remove small, but keep otherwise empty!");
         break;
       }
     }
   }
-  if (debug) log(`CLIENT RECT: reduced ${originalRects.length} --> ${newRects.length}`);
+  if (DEBUG_MODE) log(`CLIENT RECT: reduced ${originalRects.length} --> ${newRects.length}`);
   return newRects;
 }
 
@@ -102,7 +102,7 @@ function mergeTouchingRects(
       
       const rect2 = rects[j];
       if (currentRect === rect2) {
-        if (debug) log("mergeTouchingRects rect1 === rect2 ??!");
+        if (DEBUG_MODE) log("mergeTouchingRects rect1 === rect2 ??!");
         continue;
       }
       
@@ -119,7 +119,7 @@ function mergeTouchingRects(
       const canMerge = aligned && rectsTouchOrOverlap(currentRect, rect2, tolerance);
       
       if (canMerge) {
-        if (debug) {
+        if (DEBUG_MODE) {
           log(
             `CLIENT RECT: merging two into one, VERTICAL: ${rectsLineUpVertically} HORIZONTAL: ${rectsLineUpHorizontally} (${doNotMergeHorizontallyAlignedRects})`
           );
@@ -165,7 +165,7 @@ function removeContainedRects(rects, tolerance) {
   for (const rect of rects) {
     const bigEnough = rect.width > 1 && rect.height > 1;
     if (!bigEnough) {
-      if (debug) log("CLIENT RECT: remove tiny");
+      if (DEBUG_MODE) log("CLIENT RECT: remove tiny");
       rectsToKeep.delete(rect);
       continue;
     }
@@ -177,7 +177,7 @@ function removeContainedRects(rects, tolerance) {
         continue;
       }
       if (rectContains(possiblyContainingRect, rect, tolerance)) {
-        if (debug) log("CLIENT RECT: remove contained");
+        if (DEBUG_MODE) log("CLIENT RECT: remove contained");
         rectsToKeep.delete(rect);
         break;
       }
@@ -210,7 +210,7 @@ function replaceOverlapingRects(rects) {
       const rect1 = rects[i];
       const rect2 = rects[j];
       if (rect1 === rect2) {
-        if (debug) log("replaceOverlapingRects rect1 === rect2 ??!");
+        if (DEBUG_MODE) log("replaceOverlapingRects rect1 === rect2 ??!");
         continue;
       }
       if (rectsTouchOrOverlap(rect1, rect2, -1)) {
@@ -230,7 +230,7 @@ function replaceOverlapingRects(rects) {
             toRemove = rect2;
           }
         }
-        if (debug) log(`CLIENT RECT: overlap, cut one rect into ${toAdd.length}`);
+        if (DEBUG_MODE) log(`CLIENT RECT: overlap, cut one rect into ${toAdd.length}`);
         const newRects = rects.filter((rect) => {
           return rect !== toRemove;
         });
