@@ -197,7 +197,7 @@ internal class R2EpubPageFragment : Fragment() {
         // RuntimeException and kill the entire app. Returning true signals that we handled the
         // crash gracefully; we reload the page so the user stays in the reader.
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-            Timber.e("WebView renderer process gone (crashed=${detail.didCrash()}), reloading page")
+            Timber.w("WebView renderer process gone (crashed=${detail.didCrash()}), reloading page")
             view.reload()
             return true
         }
