@@ -224,7 +224,9 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
 
     private fun initWebPager() {
         setWillNotDraw(false)
-        descendantFocusability = FOCUS_AFTER_DESCENDANTS
+        // FOCUS_AFTER_DESCENDANTS would make ViewRootImpl.leaveTouchMode() swallow the first
+        // navigation key (Space, arrows) pressed after a tap, to move focus instead.
+        descendantFocusability = FOCUS_BEFORE_DESCENDANTS
 
         // Disable the focus overlay appearing when interacting with the keyboard.
         // https://developer.android.com/about/versions/oreo/android-8.0-changes#ian
