@@ -33,6 +33,7 @@ import org.readium.r2.shared.util.io.CountingInputStream
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.filename
 import org.readium.r2.shared.util.toUrl
+import timber.log.Timber
 
 internal class FileZipContainer(
     private val archive: ZipFile,
@@ -142,8 +143,16 @@ internal class FileZipContainer(
 
     override fun get(url: Url): Resource? =
         (url as? RelativeUrl)?.path
-            ?.let {
-                tryOrLog { archive.getEntry(it) }
+            ?.let { path ->
+                try {
+                    archive.getEntry(path)
+                } catch (e: Exception) {
+                    // The archive can be closed underneath us when the publication is closed while a
+                    // background content iterator (e.g. reader search) is still walking entries. This
+                    // is a benign teardown race, not an error: treat the entry as unavailable.
+                    Timber.w(e, "ZIP entry lookup failed (archive may be closed)")
+                    null
+                }
             }
             ?.let { Entry(url, it) }
 
