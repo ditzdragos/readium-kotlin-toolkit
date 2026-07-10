@@ -1383,9 +1383,11 @@ public class EpubNavigatorFragment public constructor(
      * Returns null if parsing fails or the required keys are missing.
      */
     private fun parseRectFFromJson(jsonString: String?, locatorHref: Url): RectF? {
+        if (jsonString.isJavascriptNullResult()) return null
+
         return try {
             Timber.d("Parsing RectF for $locatorHref from JSON: $jsonString")
-            val jsonObject = jsonString?.let { JSONObject(it) } ?: return null
+            val jsonObject = JSONObject(jsonString)
             // Check if the rect is valid (e.g., contains non-zero dimensions or specific properties)
             val left = jsonObject.optDouble("left", 0.0).toFloat()
             val top = jsonObject.optDouble("top", 0.0).toFloat()
@@ -1510,14 +1512,12 @@ public class EpubNavigatorFragment public constructor(
             webView.calculateHorizontalPageRanges { result ->
                 continuation.resume(result)
             }
-        } ?: return emptyList()
+        }
 
         return withContext(Dispatchers.Default) {
             try {
                 if (DEBUG) Timber.d("calculateHorizontalPageRanges: $raw")
-                JSONObject(raw).toMap().entries
-                    .sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }
-                    .map { it.value.toString() }
+                parseHorizontalPageRanges(raw)
             } catch (e: JSONException) {
                 Timber.e(e, "Error parsing page ranges JSON: $raw")
                 throw e
