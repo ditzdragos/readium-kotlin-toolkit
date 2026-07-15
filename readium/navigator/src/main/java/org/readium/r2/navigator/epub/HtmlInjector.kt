@@ -101,8 +101,30 @@ internal fun Resource.injectHtml(
 
         val injectableContent = "\n" + injectables.joinToString("\n") + "\n"
         content = content.injectReadiumContent(injectableContent, sourceUrl)
+        content = injectFontDisplaySwap(content)
 
         Try.success(content.toByteArray())
+    }
+
+// Force `font-display: swap` on publisher @font-face rules: multi-MB embedded fonts otherwise
+// block first paint and the page-range layout the reading engine waits on, stalling the spinner
+// 20s+ on low-memory devices. Fallback renders first, embedded font swaps in once decoded.
+internal fun Resource.injectFontDisplay(): Resource =
+    TransformingResource(this) { bytes ->
+        val css = bytes.toString(Charsets.UTF_8)
+        Try.success(injectFontDisplaySwap(css).toByteArray())
+    }
+
+private val fontFaceRegex = Regex("""@font-face\s*[{]([^{}]*)[}]""", RegexOption.IGNORE_CASE)
+
+internal fun injectFontDisplaySwap(css: String): String =
+    fontFaceRegex.replace(css) { match ->
+        val body = match.groupValues[1]
+        if (body.contains("font-display", ignoreCase = true)) {
+            match.value
+        } else {
+            "@font-face{font-display:swap;$body}"
+        }
     }
 
 private fun script(src: Url): String =

@@ -30,6 +30,7 @@ import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.data.asInputStream
 import org.readium.r2.shared.util.http.HttpHeaders
 import org.readium.r2.shared.util.http.HttpRange
+import org.readium.r2.shared.util.mediatype.MediaType
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.StringResource
 import org.readium.r2.shared.util.resource.borrow
@@ -280,17 +281,21 @@ internal class WebViewServer(
             errorResource()
         }
 
-        link.mediaType
-            ?.takeIf { it.isHtml }
-            ?.let {
+        val mediaType = link.mediaType
+        when {
+            mediaType?.isHtml == true -> {
                 resource = resource.injectHtml(
                     publication,
-                    mediaType = it,
+                    mediaType = mediaType,
                     css,
                     baseHref = assetsBaseHref,
                     disableSelectionWhenProtected = disableSelectionWhenProtected
                 )
             }
+            mediaType?.matches(MediaType.CSS) == true -> {
+                resource = resource.injectFontDisplay()
+            }
+        }
 
         // For non-HTML resources, wrap in BufferingResource so WebView's 8 KB chunked
         // reads get satisfied from an in-memory 256 KB buffer instead of issuing one
