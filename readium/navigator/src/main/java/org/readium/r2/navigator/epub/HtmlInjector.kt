@@ -106,9 +106,8 @@ internal fun Resource.injectHtml(
         Try.success(content.toByteArray())
     }
 
-// Force `font-display: swap` on publisher @font-face rules: multi-MB embedded fonts otherwise
-// block first paint and the page-range layout the reading engine waits on, stalling the spinner
-// 20s+ on low-memory devices. Fallback renders first, embedded font swaps in once decoded.
+// Force `font-display: swap` onto publisher @font-face rules so multi-MB embedded fonts render
+// via the fallback first instead of blocking first paint / page-range layout.
 internal fun Resource.injectFontDisplay(): Resource =
     TransformingResource(this) { bytes ->
         val css = bytes.toString(Charsets.UTF_8)
