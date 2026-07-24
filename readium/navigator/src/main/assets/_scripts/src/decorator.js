@@ -18,21 +18,8 @@ var lastGroupId = 0;
 const PAGE_NUMBER_DEBUG = false;
 const PAGE_NUMBER_REGEX = /^\d+$/;
 
-const ENTITY_MAP = {
-  "&rsquo;": "'",
-  "&lsquo;": "'",
-  "&rdquo;": '"',
-  "&ldquo;": '"',
-  "&ndash;": "–",
-  "&mdash;": "—",
-  "&nbsp;": " ",
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-};
-const ENTITY_PATTERN = new RegExp(Object.keys(ENTITY_MAP).join("|"), "gi");
-
-const LIGATURE_MAP = {
+const TEXT_NORMALIZATION_MAP = {
+  "\u00a0": " ",
   "\uFB00": "ff",
   "\uFB01": "fi",
   "\uFB02": "fl",
@@ -45,7 +32,13 @@ const LIGATURE_MAP = {
   "\u0152": "OE",
   "\u0153": "oe",
 };
-const LIGATURE_PATTERN = new RegExp(Object.keys(LIGATURE_MAP).join("|"), "g");
+const TEXT_NORMALIZATION_PATTERN = new RegExp(
+  Object.keys(TEXT_NORMALIZATION_MAP).join("|"),
+  "g"
+);
+
+const BLOCK_START_PATTERN = /([^\n])<(div|p)/g;
+const BLOCK_END_PATTERN = /<\/(div|p)>([^\n])/g;
 
 // Cache for expensive computed style calls
 let documentWritingModeCache = null;
@@ -212,38 +205,16 @@ export function registerTemplates(newStyles) {
   `;
   document.head.appendChild(imgStyle);
 
-  // Decode common entities before further text normalization.
-  document.body.innerHTML = document.body.innerHTML.replace(
-    ENTITY_PATTERN,
-    (match) => ENTITY_MAP[match.toLowerCase()]
-  );
+  const originalHtml = document.body.innerHTML;
+  const separatedHtml = originalHtml
+    .replace(BLOCK_START_PATTERN, "$1\n<$2")
+    .replace(BLOCK_END_PATTERN, "</$1>\n$2");
+  if (separatedHtml !== originalHtml) {
+    document.body.innerHTML = separatedHtml;
+  }
 
-  // Replace common Unicode ligatures.
-  document.body.innerHTML = document.body.innerHTML.replace(
-    LIGATURE_PATTERN,
-    (match) => LIGATURE_MAP[match]
-  );
+  normalizeTextNodes();
 
-  // Add newlines before <div> and <p> tags to preserve line breaks if a new line is not present
-  document.body.innerHTML = document.body.innerHTML.replace(
-    /([^\n])<(div|p)/g,
-    "$1\n<$2"
-  );
-
-  // Add newlines after </div> and </p> tags, but only if a newline doesn't already exist
-  document.body.innerHTML = document.body.innerHTML.replace(
-    /<\/(div|p)>([^\n])/g,
-    "</$1>\n$2"
-  );
-
-  // Replace all br tag variants with the same tags plus a newline character
-  // This handles both <br/> and <br /> formats in a single operation
-  document.body.innerHTML = document.body.innerHTML.replace(
-    /<br\s*\/>/g,
-    "$&\n"
-  );
-
-  // Process span elements to ensure proper text spacing
   processSpansForTextSpacing();
 
   // Setup scaling listeners after initial DOM modifications
@@ -255,6 +226,28 @@ export function registerTemplates(newStyles) {
  * Processes spans in the document to ensure proper spacing between text segments.
  * This prevents words from being incorrectly stitched together when extracting text.
  */
+function normalizeTextNodes() {
+  const iterator = document.createNodeIterator(
+    document.body,
+    NodeFilter.SHOW_TEXT
+  );
+  let node;
+  while ((node = iterator.nextNode())) {
+    const value = node.nodeValue;
+    if (!value) {
+      continue;
+    }
+    const normalized = value.replace(
+      TEXT_NORMALIZATION_PATTERN,
+      (match) => TEXT_NORMALIZATION_MAP[match]
+    );
+    if (normalized !== value) {
+      node.nodeValue = normalized;
+    }
+  }
+}
+
+
 function processSpansForTextSpacing() {
   // Get all spans in the document - cache the query result
   const spans = document.querySelectorAll("span");
