@@ -4,7 +4,7 @@
 //  available in the top-level LICENSE file of the project.
 //
 
-import { toNativeRect } from "./rect";
+import { resetViewportRatioCache, toNativeRect } from "./rect";
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 import { TextRange } from "./vendor/hypothesis/anchoring/text-range";
 
@@ -64,6 +64,7 @@ window.addEventListener(
       requestAnimationFrame(() => {
         // Clear caches when viewport changes
         clearUtilsCache();
+        resetViewportRatioCache();
         onViewportWidthChanged();
         snapCurrentOffset();
       });

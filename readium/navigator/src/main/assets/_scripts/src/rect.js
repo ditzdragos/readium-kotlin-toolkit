@@ -8,17 +8,37 @@ import { DEBUG_MODE, log as logNative } from "./utils";
 
 const debug = false;
 
+// Android.getViewportWidth() crosses the JS/Java bridge, which costs far more
+// than the conversion it feeds. Cache the ratio it produces, keyed on the CSS
+// viewport, so it is re-read only when that viewport actually changes.
+let cachedInnerWidth = -1;
+let cachedDevicePixelRatio = -1;
+let cachedViewportRatio = 1;
+
+export function resetViewportRatioCache() {
+  cachedInnerWidth = -1;
+  cachedDevicePixelRatio = -1;
+}
+
+function viewportRatio() {
+  const innerWidth = window.innerWidth;
+  const devicePixelRatio = window.devicePixelRatio;
+  if (
+    innerWidth !== cachedInnerWidth ||
+    devicePixelRatio !== cachedDevicePixelRatio
+  ) {
+    cachedInnerWidth = innerWidth;
+    cachedDevicePixelRatio = devicePixelRatio;
+    cachedViewportRatio = Android.getViewportWidth() / innerWidth;
+  }
+  return cachedViewportRatio;
+}
+
 /**
  * Converts a DOMRect into a JSON object understandable by the native side.
  */
 export function toNativeRect(rect) {
-  const pixelRatio = window.devicePixelRatio;
-  // Get the WebView's viewport dimensions
-  const viewportWidth = Android.getViewportWidth();
-  const viewportHeight = window.innerHeight;
-
-  // check if we need to process the height instead
-  const ratio = viewportWidth / window.innerWidth;
+  const ratio = viewportRatio();
 
   // Convert coordinates to device pixels
   const width = rect.width * ratio;
