@@ -166,6 +166,7 @@ export function clearUtilsCache() {
   columnCountCache = null;
   verticalWritingModeCache = null;
   rtlCache = null;
+  elementTextCache.clear();
 }
 
 // Scroll to the given TagId in document and snap.
@@ -305,37 +306,59 @@ export function snapCurrentOffset() {
   document.scrollingElement.scrollLeft = snapOffset(currentOffset + delta);
 }
 
-// Cache the higher level css elements range for faster calculating the word by word dom ranges
-let elementRangeCache = new LRUCache(10); // Key: cssSelector, Value: entire element range
+// Cache the higher level css elements for faster calculating the word by word dom ranges.
+// The entry keeps the element's text so it is concatenated once per element instead of
+// once per word lookup.
+let elementTextCache = new LRUCache(10); // Key: cssSelector, Value: { element, text }
 
-// Caches the css element range
-function cacheElementRange(cssSelector) {
+function cachedElementFor(cssSelector) {
+  const cached = elementTextCache.get(cssSelector);
+  if (cached && cached.element.isConnected) {
+    return cached;
+  }
+
   const element = document.querySelector(cssSelector);
-  if (element) {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    elementRangeCache.set(cssSelector, range);
+  if (!element) {
+    return null;
+  }
+
+  const entry = { element, text: element.textContent };
+  elementTextCache.set(cssSelector, entry);
+  return entry;
+}
+
+/**
+ * Builds a range spanning the [start, end) character offsets of `root`'s text.
+ * `root` may be an element or a text node, and the offsets may span several of
+ * its text nodes. Returns null when they fall outside the root's text.
+ *
+ * @param {Node} root
+ * @param {number} start
+ * @param {number} end
+ * @returns {Range | null}
+ */
+function rangeFromTextOffsets(root, start, end) {
+  try {
+    return TextRange.fromOffsets(root, start, end).toRange();
+  } catch {
+    return null;
   }
 }
 
 // Returns a range from a locator; it first searches for the higher level css element in the cache
 function rangeFromCachedLocator(locator) {
-  const cssSelector = locator.locations.cssSelector;
-  const entireRange = elementRangeCache.get(cssSelector);
-  if (!entireRange) {
-    cacheElementRange(cssSelector);
-    return rangeFromCachedLocator(locator);
+  const cached = cachedElementFor(locator.locations.cssSelector);
+  if (!cached) {
+    throw new Error("Locator range could not be calculated");
   }
 
-  const entireText = entireRange.toString();
-  let startIndex = 0;
+  const entireText = cached.text;
+  const highlight = locator.text.highlight;
+  let searchIndex = 0;
   let foundIndex = -1;
 
-  while (startIndex < entireText.length) {
-    const highlightIndex = entireText.indexOf(
-      locator.text.highlight,
-      startIndex
-    );
+  while (searchIndex < entireText.length) {
+    const highlightIndex = entireText.indexOf(highlight, searchIndex);
     if (highlightIndex === -1) {
       break; // No more occurrences of highlight text
     }
@@ -348,10 +371,8 @@ function rangeFromCachedLocator(locator) {
       : "";
     const afterText = locator.text.after
       ? entireText.slice(
-          highlightIndex + locator.text.highlight.length,
-          highlightIndex +
-            locator.text.highlight.length +
-            locator.text.after.length
+          highlightIndex + highlight.length,
+          highlightIndex + highlight.length + locator.text.after.length
         )
       : "";
 
@@ -366,37 +387,27 @@ function rangeFromCachedLocator(locator) {
       break;
     }
 
-    // Update startIndex for next iteration to search for next occurrence of highlight text
-    startIndex = highlightIndex + 1;
+    // Search for the next occurrence of the highlight text
+    searchIndex = highlightIndex + 1;
   }
 
   if (foundIndex === -1) {
     throw new Error("Locator range could not be calculated");
   }
 
-  const highlightStartIndex = foundIndex;
-  const highlightEndIndex = foundIndex + locator.text.highlight.length;
-
-  const subRange = document.createRange();
-  let count = 0;
-  let node;
-  const nodeIterator = document.createNodeIterator(
-    entireRange.commonAncestorContainer, // This should be a Document or DocumentFragment node
-    NodeFilter.SHOW_TEXT
+  // Resolving the offsets against the element's text nodes has to account for
+  // the match landing in any of them, and for start and end landing in
+  // different ones.
+  const range = rangeFromTextOffsets(
+    cached.element,
+    foundIndex,
+    foundIndex + highlight.length
   );
-
-  for (node = nodeIterator.nextNode(); node; node = nodeIterator.nextNode()) {
-    const nodeEndIndex = count + node.nodeValue.length;
-    if (nodeEndIndex > startIndex) {
-      break;
-    }
-    count = nodeEndIndex;
+  if (!range) {
+    throw new Error("Locator range could not be calculated");
   }
 
-  subRange.setStart(node, highlightStartIndex - count);
-  subRange.setEnd(node, highlightEndIndex - count);
-
-  return subRange;
+  return range;
 }
 
 export function rangeFromLocator(locator) {
@@ -408,6 +419,29 @@ export function rangeFromLocator(locator) {
     let locations = locator.locations;
     let text = locator.text;
     if (text && text.highlight) {
+      // The locator usually carries the exact character offsets of the word
+      // within the body text. When they resolve to the expected highlight, use
+      // them as-is: the approximate search below is bounded to a window around
+      // them, and on a page that repeats a word it can settle on the wrong
+      // occurrence (RR-8486).
+      if (
+        locations &&
+        Number.isFinite(locations.start) &&
+        Number.isFinite(locations.end)
+      ) {
+        const exact = rangeFromTextOffsets(
+          document.body,
+          locations.start,
+          locations.end
+        );
+        if (exact && exact.toString() === text.highlight) {
+          if (DEBUG_MODE) {
+            log("rangeFromLocator: resolved directly from offsets");
+          }
+          return exact;
+        }
+      }
+
       var root;
       if (locations && locations.cssSelector) {
         try {
@@ -434,12 +468,19 @@ export function rangeFromLocator(locator) {
       if (locations && root.textContent.length > 0) {
         // If there is info about the start and end positions from the client, use that
         if (locations.start !== undefined && locations.end !== undefined) {
-          start = Math.max(locations.start-10, 0);
-          end = Math.min(locations.end+10, root.textContent.length);
+          start = Math.max(locations.start - 10, 0);
+          end = Math.min(locations.end + 10, root.textContent.length);
         }
         if (DEBUG_MODE) {
-          log("rangeFromLocator: Text at actual range: [", root.textContent.slice(locations.start,locations.end),"]");
-          log("rangeFromLocator: Text at adjusted range: ", root.textContent.slice(start, end));
+          log(
+            "rangeFromLocator: Text at actual range: [",
+            root.textContent.slice(locations.start, locations.end),
+            "]"
+          );
+          log(
+            "rangeFromLocator: Text at adjusted range: ",
+            root.textContent.slice(start, end)
+          );
         }
       }
 
@@ -449,7 +490,13 @@ export function rangeFromLocator(locator) {
       });
 
       if (DEBUG_MODE) {
-        log("rangeFromLocator: anchor", JSON.stringify(anchor), text.highlight ,start, end);
+        log(
+          "rangeFromLocator: anchor",
+          JSON.stringify(anchor),
+          text.highlight,
+          start,
+          end
+        );
       }
       let result = anchor.toRange({}, start, end);
       if (DEBUG_MODE) {
@@ -485,7 +532,7 @@ export function rangeFromLocator(locator) {
       }
     }
   } catch (e) {
-    if (DEBUG_MODE) logError("Cannot parse range "+e);
+    if (DEBUG_MODE) logError("Cannot parse range " + e);
   }
 
   return null;
@@ -801,7 +848,7 @@ export function calculateHorizontalPageRanges() {
 
   function processElement(element) {
     if (DEBUG_MODE) log("node name " + element.nodeName);
-    
+
     // Cache textContent to avoid multiple DOM queries
     const elementTextContent = element.textContent;
     if (DEBUG_MODE) log("<" + elementTextContent + ">");
@@ -849,7 +896,8 @@ export function calculateHorizontalPageRanges() {
         if (DEBUG_MODE) log("increase current page: " + currentPage);
 
         if (DEBUG_MODE) log("previous rect x: " + previousElementRect.x);
-        if (DEBUG_MODE) log("previous rect width: " + previousElementRect.width);
+        if (DEBUG_MODE)
+          log("previous rect width: " + previousElementRect.width);
 
         // if previousElementRect.x + previousElementRect.width is more than curent page x+width, then we compare with next next page max x
 
@@ -893,115 +941,100 @@ export function calculateHorizontalPageRanges() {
   }
 
   function processTextContent(element, textContent) {
-    // Split the text by spaces or dashes, and keep the delimiters
-    let words = textContent.split(/(\s|[-–—―‒])/g).filter(Boolean); // Split on spaces or dashes, keeping them as separate tokens
-    let removedText = "";
-    let removedWord = "";
-    let firstPoppedElement = true;
-    let remainderDoesNotFitOnNextPage = false;
+    const pageRightEdge = (currentPage + 1) * pageWidthValue;
 
-    let wordBoundingRect = new DOMRect(
-      Number.MAX_VALUE, // we use the max possible value for 'x' to make sure it enters the 'while' iterator
-      0,
-      0,
-      0
-    );
+    // Split the text by spaces or dashes, keeping the delimiters, and record
+    // where each token starts so a token's rect can be resolved from its
+    // offsets rather than searched for by its text.
+    const tokens = [];
+    let tokenOffset = 0;
+    for (const part of textContent.split(/(\s|[-–—―‒])/g)) {
+      if (part.length > 0) {
+        tokens.push({ text: part, start: tokenOffset });
+      }
+      tokenOffset += part.length;
+    }
 
-    // Cache the joined prefix to avoid repeated string concatenation
-    let cachedPrefix = words.join("");
+    const measurable = [];
+    for (let index = 0; index < tokens.length; index++) {
+      if (/\S/.test(tokens[index].text)) {
+        measurable.push(index);
+      }
+    }
 
-    // Reduce the element text until it fits the page height
-    while (
-      wordBoundingRect.x + wordBoundingRect.width >
-        (currentPage + 1) * pageWidthValue &&
-      words.length > 0
-    ) {
-      removedWord = words.pop(); // Remove the last word or delimiter
+    function rectForToken(index) {
+      const token = tokens[index];
+      const range = rangeFromTextOffsets(
+        element,
+        token.start,
+        token.start + token.text.length
+      );
+      if (!range) {
+        if (DEBUG_MODE) log("could not find range for word");
+        return null;
+      }
 
-      if (DEBUG_MODE) log("word: <" + removedWord + ">");
+      const rect = range.getBoundingClientRect();
+      return new DOMRect(
+        rect.x + window.scrollX,
+        rect.y,
+        rect.width,
+        rect.height
+      );
+    }
 
-      if (removedWord === " ") {
-        removedText = removedWord + removedText;
-        // Update cached prefix by removing the space
-        cachedPrefix = words.join("");
+    // Tokens flow left to right and wrap into later columns, so "extends past
+    // the page" only ever flips from false to true along the token order. That
+    // makes the split point a binary search instead of a walk back from the end.
+    let low = 0;
+    let high = measurable.length - 1;
+    let lastFitting = -1;
+    while (low <= high) {
+      const middle = (low + high) >> 1;
+      const rect = rectForToken(measurable[middle]);
+      if (rect && rect.x + rect.width <= pageRightEdge) {
+        lastFitting = middle;
+        low = middle + 1;
       } else {
-        try {
-          // Use cached prefix instead of calling words.join() every time
-          let anchor = new TextQuoteAnchor(element, removedWord, {
-            prefix: cachedPrefix, // Use cached value
-            suffix: removedText.length > 0 ? removedText : "",
-          });
-
-          // log("anchor prefix: " + anchor.context.prefix);
-          // log("anchor suffix: " + anchor.context.suffix);
-          // log("anchor highlight: " + anchor.exact);
-
-          wordBoundingRect = anchor.toRange().getBoundingClientRect();
-          wordBoundingRect.x += window.scrollX;
-          if (DEBUG_MODE) log("word rect x: " + wordBoundingRect.x);
-          if (DEBUG_MODE) log("word rect width: " + wordBoundingRect.width);
-          if (DEBUG_MODE) log("current page max x: " + (currentPage + 1) * pageWidthValue);
-
-          if (
-            wordBoundingRect.x + wordBoundingRect.width >
-            (currentPage + 1) * pageWidthValue
-          ) {
-            removedText = removedWord + removedText;
-          }
-
-          if (firstPoppedElement) {
-            if (wordBoundingRect.x > (currentPage + 2) * pageWidthValue) {
-              if (DEBUG_MODE) log("text does not fit on the next page");
-              remainderDoesNotFitOnNextPage = true;
-            }
-          }
-
-          firstPoppedElement = false;
-          // Update cached prefix after processing
-          cachedPrefix = words.join("");
-        } catch {
-          if (DEBUG_MODE) log("could not find range for word");
-          // Update cached prefix even on error
-          cachedPrefix = words.join("");
-          // if (removedWord === "") {
-          //     removedText = removedText;
-          // }
-        }
+        high = middle - 1;
       }
     }
 
-    // If after removing all words it still doesn't fit, start on a new page
-    // Check if wordBoundingRect was initialized (not MAX_VALUE)
-    const isValidRect = wordBoundingRect.x !== Number.MAX_VALUE;
-    if (
-      words.length === 0 &&
-      isValidRect &&
-      wordBoundingRect.x > (currentPage + 1) * pageWidthValue
-    ) {
-      // This should never happen!!!
-      if (DEBUG_MODE) log("this should never happen");
-      rangeIndex += 1;
-      currentPage += 1; // Move to the next page
-      //TODO the element must go through the regular processing in this case
-      currentTextLength = textContent.length;
-      addTextToRange(textContent, rangeIndex);
-    } else {
-      words.push(removedWord);
-
-      addTextToRange(words.join(""), rangeIndex);
-      currentPage += 1;
-      rangeIndex += 1;
-
-      // TODO do we need to also check the current text length here????
-      if (remainderDoesNotFitOnNextPage) {
-        if (DEBUG_MODE) log("remainderDoesNotFitOnNextPage");
-        // processTextContent(element, removedText);
+    if (DEBUG_MODE && measurable.length > 0) {
+      const lastRect = rectForToken(measurable[measurable.length - 1]);
+      if (lastRect && lastRect.x > (currentPage + 2) * pageWidthValue) {
+        log("text does not fit on the next page");
       }
-      // else {
-      currentTextLength = removedText.length;
-      addTextToRange(removedText, rangeIndex);
-      // }
     }
+
+    if (lastFitting === -1 && measurable.length > 0) {
+      const firstRect = rectForToken(measurable[0]);
+      if (firstRect && firstRect.x > pageRightEdge) {
+        // This should never happen!!!
+        if (DEBUG_MODE) log("this should never happen");
+        rangeIndex += 1;
+        currentPage += 1; // Move to the next page
+        //TODO the element must go through the regular processing in this case
+        currentTextLength = textContent.length;
+        addTextToRange(textContent, rangeIndex);
+        return;
+      }
+    }
+
+    const splitToken = lastFitting === -1 ? 0 : measurable[lastFitting] + 1;
+    const splitOffset =
+      splitToken < tokens.length
+        ? tokens[splitToken].start
+        : textContent.length;
+
+    addTextToRange(textContent.slice(0, splitOffset), rangeIndex);
+    currentPage += 1;
+    rangeIndex += 1;
+
+    // TODO do we need to also check the current text length here????
+    const remainderText = textContent.slice(splitOffset);
+    currentTextLength = remainderText.length;
+    addTextToRange(remainderText, rangeIndex);
   }
 
   function addTextToRange(text, range) {
@@ -1013,7 +1046,10 @@ export function calculateHorizontalPageRanges() {
     } else {
       rangeData[rangeKey] = text;
       // Update last range key when adding to a new range
-      if (lastRangeKey === null || parseInt(rangeKey) > parseInt(lastRangeKey)) {
+      if (
+        lastRangeKey === null ||
+        parseInt(rangeKey) > parseInt(lastRangeKey)
+      ) {
         lastRangeKey = rangeKey;
       }
     }
@@ -1023,7 +1059,10 @@ export function calculateHorizontalPageRanges() {
   }
 
   function processNode(node) {
-    if (DEBUG_MODE) log(`process node with name : ${node.nodeName} and type: ${node.nodeType}`);
+    if (DEBUG_MODE)
+      log(
+        `process node with name : ${node.nodeName} and type: ${node.nodeType}`
+      );
 
     // Disabling this until we find a way to integrate this in the app;
 
