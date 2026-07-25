@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import org.readium.r2.navigator.BuildConfig.DEBUG
 import org.readium.r2.navigator.R
 import org.readium.r2.navigator.R2BasicWebView
 import org.readium.r2.navigator.R2WebView
@@ -484,15 +485,20 @@ internal class R2EpubPageFragment : Fragment() {
 
     override fun onDestroy() {
         super.onDestroy()
-        runCatching { destroyWebViewSilently(webView) }
-        runCatching { destroyWebViewSilently(webViewRight) }
+        destroyWebViews()
     }
 
     override fun onDetach() {
         super.onDetach()
-        runCatching { destroyWebViewSilently(webView) }
-        runCatching { destroyWebViewSilently(webViewRight) }
+        destroyWebViews()
         pendingPageFinished.clear()
+    }
+
+    private fun destroyWebViews() {
+        webView?.let { runCatching { destroyWebViewSilently(it) } }
+        webView = null
+        webViewRight?.let { runCatching { destroyWebViewSilently(it) } }
+        webViewRight = null
     }
 
     private fun destroyWebViewSilently(webView: R2WebView?) {
@@ -524,7 +530,7 @@ internal class R2EpubPageFragment : Fragment() {
         withViewLifecycleOwner { lifecycleOwner ->
             lifecycleOwner.lifecycleScope.launch {
                 lifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                    val webView = requireNotNull(webView)
+                    val webView = webView ?: return@repeatOnLifecycle
 
                     pendingLocator?.let { locator ->
                         loadLocator(
@@ -547,7 +553,9 @@ internal class R2EpubPageFragment : Fragment() {
         withViewLifecycleOwner { lifecycleOwner ->
             lifecycleOwner.lifecycleScope.launch {
                 lifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                    val webView = getWebView(locator.href) ?: requireNotNull(this@R2EpubPageFragment.webView)
+                    val webView = getWebView(locator.href)
+                        ?: this@R2EpubPageFragment.webView
+                        ?: return@repeatOnLifecycle
                     val epubNavigator = requireNotNull(navigator)
                     loadLocator(webView, epubNavigator.overflow.value.readingProgression, locator)
                     webView.listener?.onProgressionChanged()
@@ -599,7 +607,9 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     internal fun getWebView(href: Url?): R2WebView? {
-        Timber.d("getWebView: $href vs ${rightLink?.url()}")
+        if (DEBUG) {
+            Timber.d("getWebView: $href vs ${rightLink?.url()}")
+        }
         return if (href == rightLink?.url()) {
             webViewRight
         } else {
@@ -678,7 +688,7 @@ internal class R2EpubPageFragment : Fragment() {
 
     fun runJavaScript(script: String, callback: ((String) -> Unit)? = null) {
         whenPageFinished {
-            requireNotNull(webView).runJavaScript(script, callback)
+            webView?.runJavaScript(script, callback)
             webViewRight?.runJavaScript(script, callback)
         }
     }

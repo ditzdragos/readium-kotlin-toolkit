@@ -739,7 +739,9 @@ public class EpubNavigatorFragment public constructor(
     }
 
     private fun run(command: RunScriptCommand) {
-        Timber.d("run: $command")
+        if (DEBUG) {
+            Timber.d("run: $command")
+        }
         when (command.scope) {
             RunScriptCommand.Scope.CurrentResource -> {
                 currentReflowablePageFragment?.runJavaScript(command.script)
@@ -747,6 +749,7 @@ public class EpubNavigatorFragment public constructor(
 
             RunScriptCommand.Scope.LoadedResources -> {
                 r2PagerAdapter?.mFragments?.forEach { _, fragment ->
+                    if (!fragment.isAdded || fragment.isDetached) return@forEach
                     (fragment as? R2EpubPageFragment)?.takeIf { it.isLoaded.value }?.runJavaScript(command.script)
                 }
             }
