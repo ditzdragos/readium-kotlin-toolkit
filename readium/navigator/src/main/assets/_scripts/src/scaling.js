@@ -1,304 +1,343 @@
 // scaling.js
 
-// Import DEBUG_MODE from utils
 import { DEBUG_MODE } from "./utils";
 
-// Helper function to conditionally log
 function debugLog(...args) {
-    if (DEBUG_MODE) {
-        console.log(...args);
-    }
+  if (DEBUG_MODE) {
+    console.log(...args);
+  }
 }
 
 function debugWarn(...args) {
-    if (DEBUG_MODE) {
-        console.warn(...args);
-    }
-}
-
-function debugError(...args) {
-    if (DEBUG_MODE) {
-        console.error(...args);
-    }
+  if (DEBUG_MODE) {
+    console.warn(...args);
+  }
 }
 
 /** Debounce utility to limit how often a function is called */
-function debounce(func, wait, immediate) {
-	var timeout;
-	return function() {
-		var context = this, args = arguments;
-		var later = function() {
-			timeout = null;
-			if (!immediate) func.apply(context, args);
-		};
-		var callNow = immediate && !timeout;
-		clearTimeout(timeout);
-		timeout = setTimeout(later, wait);
-		if (callNow) func.apply(context, args);
-	};
-};
+function debounce(func, wait) {
+  let timeout;
+  return function () {
+    const context = this;
+    const args = arguments;
+    clearTimeout(timeout);
+    timeout = setTimeout(function () {
+      timeout = null;
+      func.apply(context, args);
+    }, wait);
+  };
+}
 
-// Cache for viewport meta tag query
-let cachedViewportMeta = null;
+const WRAPPER_ID = "r2-scale-wrapper";
+const CONTAINER_ID = "r2-scale-container";
+
+/** Viewport deltas below this are not worth a re-scale. */
+const VIEWPORT_EPSILON_PX = 5;
+
 let scalingListenersAttached = false;
 
+/**
+ * Whether this document is a fixed-layout resource, and so whether scaling applies
+ * at all.
+ *
+ * The presence of a `<meta name="viewport">` cannot answer this: index-reflowable.js
+ * injects one into every reflowable document on DOMContentLoaded. Reading a
+ * reflowable page's size and wrapping it in a scaled container would collapse the
+ * whole column-paginated chapter to the height of one screen. The bundle that set
+ * this flag is the only reliable signal, and it is set before registerTemplates()
+ * runs.
+ */
+function isFixedLayoutDocument() {
+  return window.readium?.isFixedLayout === true;
+}
+
 function emitViewportChangedEvent() {
-    try {
-        window.dispatchEvent(new CustomEvent("readium:viewport-changed", {
-            detail: {
-                width: window.innerWidth,
-                height: window.innerHeight,
-                scale: window.r2CurrentScale ?? 1.0,
-            },
-        }));
-    } catch (error) {
-        if (DEBUG_MODE) debugWarn("[R2Scale] Failed to dispatch viewport changed event", error);
-    }
+  try {
+    window.dispatchEvent(
+      new CustomEvent("readium:viewport-changed", {
+        detail: {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          scale: window.r2CurrentScale ?? 1.0,
+        },
+      })
+    );
+  } catch (error) {
+    debugWarn("[R2Scale] Failed to dispatch viewport changed event", error);
+  }
 }
 
 /**
- * Applies initial scaling and centering to fixed-layout content.
+ * The largest scale at which the whole page still fits.
+ *
+ * Both axes have to bind. Fitting only one — which is what the WebView's own
+ * loadWithOverviewMode does, and it fits the width — is what leaves a page taller
+ * than the viewport anchored at the top with its bottom edge cut off.
+ *
+ * Scaling above 1.0 is deliberately not allowed: setupWebView turns on
+ * useWideViewPort, so the CSS viewport is already exactly as wide as the
+ * <meta viewport> width, and a larger scale could only overflow horizontally.
  */
-export function applyInitialScaling() {
-    // Prevent multiple executions
-    if (window.r2ScalingApplied || window.r2ScalingInProgress) {
-        if (DEBUG_MODE) {
-            console.log('[R2Scale] Scaling already applied or in progress, skipping initial scaling.');
-        }
-        return;
+function containScale(
+  contentWidth,
+  contentHeight,
+  viewportWidth,
+  viewportHeight
+) {
+  if (!(contentWidth > 0) || !(contentHeight > 0)) {
+    return 1.0;
+  }
+  return Math.min(
+    1.0,
+    viewportWidth / contentWidth,
+    viewportHeight / contentHeight
+  );
+}
+
+function parseLength(value) {
+  const length = parseFloat(value);
+  return Number.isFinite(length) && length > 0 ? length : null;
+}
+
+/**
+ * Matches `width=1200` but not the `width=` inside `min-width=` or `device-width`,
+ * and accepts the fractional values some publications declare.
+ */
+function metaViewportLength(content, name) {
+  const match = content.match(
+    new RegExp(`(?:^|[;,\\s])${name}\\s*=\\s*([0-9.]+)`)
+  );
+  return match ? parseLength(match[1]) : null;
+}
+
+function dimensionsFromMetaViewport() {
+  const meta = document.querySelector('meta[name="viewport"]');
+  const content = meta && meta.getAttribute("content");
+  if (!content) {
+    return null;
+  }
+  const width = metaViewportLength(content, "width");
+  const height = metaViewportLength(content, "height");
+  return width && height
+    ? { width, height, method: "viewport meta tag" }
+    : null;
+}
+
+/**
+ * An image-only fixed-layout page often states its size only on the SVG that wraps
+ * the image, leaving the <meta viewport> at `width=device-width` or absent.
+ */
+function dimensionsFromSvg() {
+  const svg = document.querySelector("svg");
+  if (!svg) {
+    return null;
+  }
+  const viewBox = svg.getAttribute("viewBox");
+  if (viewBox) {
+    const parts = viewBox.trim().split(/[\s,]+/);
+    const width = parseLength(parts[2]);
+    const height = parseLength(parts[3]);
+    if (width && height) {
+      return { width, height, method: "svg viewBox" };
     }
-    window.r2ScalingInProgress = true;
-    if (DEBUG_MODE) {
-        console.log('[R2Scale] Applying universal full-page scaling');
+  }
+  const width = parseLength(svg.getAttribute("width"));
+  const height = parseLength(svg.getAttribute("height"));
+  return width && height ? { width, height, method: "svg width/height" } : null;
+}
+
+/** Last resort, and only valid before the content has been wrapped. */
+function dimensionsFromBody() {
+  const width = parseLength(document.body.scrollWidth);
+  const height = parseLength(document.body.scrollHeight);
+  return width && height ? { width, height, method: "body scroll size" } : null;
+}
+
+function contentDimensions() {
+  return (
+    dimensionsFromMetaViewport() || dimensionsFromSvg() || dimensionsFromBody()
+  );
+}
+
+/**
+ * The decoration overlays are positioned from getBoundingClientRect(), which
+ * already reports post-transform coordinates, so they have to stay outside the
+ * scaled container — moving them in would scale those coordinates a second time.
+ * decorator.js marks every one of them with an inline `pointer-events: none`.
+ */
+function isDecorationLayer(node) {
+  return node.style && node.style.pointerEvents === "none";
+}
+
+function isContentNode(node) {
+  return (
+    node.id !== WRAPPER_ID &&
+    node.tagName !== "SCRIPT" &&
+    node.tagName !== "STYLE" &&
+    node.tagName !== "LINK" &&
+    !isDecorationLayer(node)
+  );
+}
+
+/**
+ * Moves the wrapped content back onto the body and drops the wrapper.
+ *
+ * The content is taken from the wrapper when the container is the element that
+ * went missing: it is still inside the wrapper at that point, and removing the
+ * wrapper without moving it out first would delete the page.
+ */
+function unwrap() {
+  const wrapper = document.getElementById(WRAPPER_ID);
+  if (!wrapper) {
+    return;
+  }
+  const container = document.getElementById(CONTAINER_ID);
+  const source = container || wrapper;
+  Array.from(source.children).forEach(function (child) {
+    if (child !== wrapper) {
+      document.body.appendChild(child);
     }
+  });
+  wrapper.remove();
+}
 
-    // Prepare document/body styles
-    document.documentElement.style.margin = '0';
-    document.documentElement.style.padding = '0';
-    document.body.style.margin = '0';
-    document.body.style.padding = '0';
-    document.body.style.backgroundColor = 'white'; // Ensure body background is white
-
-    // Get content dimensions primarily from meta viewport
-    // Cache the query result
-    var contentWidth, contentHeight;
-    var dimensionMethod = '';
-    if (cachedViewportMeta === null) {
-        cachedViewportMeta = document.querySelector('meta[name="viewport"]');
-    }
-    var metaViewport = cachedViewportMeta;
-    if (metaViewport) {
-        var content = metaViewport.getAttribute('content');
-        var widthMatch = content.match(/width=([0-9]+)/);
-        var heightMatch = content.match(/height=([0-9]+)/);
-        if (widthMatch && heightMatch) {
-            contentWidth = parseInt(widthMatch[1]);
-            contentHeight = parseInt(heightMatch[1]);
-            dimensionMethod = 'viewport meta tag';
-            if (DEBUG_MODE) debugLog('[R2Scale] Using viewport meta dimensions: ' + contentWidth + 'x' + contentHeight);
-        }
-    }
-
-    // Fallback if meta tag is missing or invalid - crucial for FXL without viewport
-    if (!contentWidth || !contentHeight) {
-        if (DEBUG_MODE) debugLog('[R2Scale] No valid meta viewport dimensions found, using body scroll dimensions as fallback.');
-        window.r2ScalingInProgress = false;
-        return;
-    }
-
-    if (DEBUG_MODE) debugLog('[R2Scale] Final dimension detection method: ' + dimensionMethod);
-
-    var viewportWidth = window.innerWidth;
-    var viewportHeight = window.innerHeight;
-    if (DEBUG_MODE) debugLog('[R2Scale] Using JS viewport: ' + viewportWidth + 'x' + viewportHeight);
-
-    // Calculate scale based on fitting content within viewport
-    var scale = 1.0;
-    if (contentWidth > 0 && contentHeight > 0) {
-        // New logic: Determine scale based on content aspect ratio, max 1.0
-         // Calculate aspect ratios
-        var contentRatio = contentHeight / contentWidth;
-        var viewportRatio = viewportHeight / viewportWidth;
-
-        // Simple ratio comparison for scaling
-        var scale = 1.0;
-
-        if (viewportRatio < contentRatio) {
-            // Viewport is wider relative to height than content
-            // Scale down to match the viewport's aspect ratio
-            scale = (viewportRatio / contentRatio);
-            if (DEBUG_MODE) debugLog('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is smaller than content ratio (' +
-                        contentRatio.toFixed(2) + '), scaling to: ' + scale.toFixed(3));
-        } else {
-            // Viewport is taller relative to width than content
-            // No scaling needed
-            if (DEBUG_MODE) debugLog('[R2Scale] Viewport ratio (' + viewportRatio.toFixed(2) + ') is larger than content ratio (' +
-                        contentRatio.toFixed(2) + '), no scaling needed');
-            scale = 1.0;
-        }
-
-        // For content that barely fits (scale is close to 1.0), apply a small safety margin
-        if (scale >= 0.95 && scale < 1.0) {
-            if (DEBUG_MODE) debugLog('[R2Scale] Content barely fits, applying slight safety margin');
-        }
-
-        // Apply rule: No scaling up (max scale is 1.0)
-        scale = Math.min(1.0, scale);
-
-    } else {
-        if (DEBUG_MODE) debugWarn("[R2Scale] Content dimensions are zero or invalid, defaulting scale to 1.0");
-        scale = 1.0;
-    }
-
-    // Optional: Apply safety margin (e.g., 1%)
-    if (DEBUG_MODE) debugLog('[R2Scale] Calculated scale (with safety margin): ' + scale.toFixed(3));
-
-    // Apply scaling via wrapper
-    var existingWrapper = document.getElementById('r2-scale-wrapper');
-    var scaleContainer;
-
-    if (existingWrapper) {
-        if (DEBUG_MODE) debugLog('[R2Scale] Removing existing scale wrapper.');
-        scaleContainer = document.getElementById('r2-scale-container');
-        if (scaleContainer) {
-            // Move children back to body carefully
-            while (scaleContainer.firstChild) {
-                 if(scaleContainer.firstChild !== existingWrapper) { // Avoid infinite loop
-                    document.body.appendChild(scaleContainer.firstChild);
-                 } else {
-                    // If somehow the wrapper got inside, just remove it
-                    scaleContainer.removeChild(scaleContainer.firstChild);
-                 }
-            }
-        }
-        // Remove wrapper from its parent, wherever it might be
-        if (existingWrapper.parentNode) {
-            existingWrapper.parentNode.removeChild(existingWrapper);
-        }
-    }
-
-    if (DEBUG_MODE) debugLog('[R2Scale] Creating new scale wrapper and container.');
-    var wrapper = document.createElement('div');
-    wrapper.id = 'r2-scale-wrapper';
-    // Style the wrapper to center its content (the scaleContainer)
-    wrapper.style.cssText = `
+function buildWrapper(dimensions) {
+  const wrapper = document.createElement("div");
+  wrapper.id = WRAPPER_ID;
+  wrapper.style.cssText = `
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        overflow: hidden; background-color: transparent; /* Wrapper is see-through */
+        overflow: hidden; background-color: transparent;
         display: flex; align-items: center; justify-content: center;
         box-sizing: border-box; padding: 0; margin: 0;
-        pointer-events: none; /* Wrapper should not intercept clicks */
+        pointer-events: none;
     `;
 
-    scaleContainer = document.createElement('div');
-    scaleContainer.id = 'r2-scale-container';
-    // Style the container with original content dimensions and apply scale
-    scaleContainer.style.cssText = `
-        width: ${contentWidth}px; height: ${contentHeight}px;
+  const container = document.createElement("div");
+  container.id = CONTAINER_ID;
+  container.style.cssText = `
+        width: ${dimensions.width}px; height: ${dimensions.height}px;
         transform-origin: center center;
-        transform: scale(${scale});
-        position: relative; /* Needed for transform */
-        background-color: white; /* Set background on container to avoid transparency issues */
-        overflow: hidden; /* Contain the scaled content */
-        pointer-events: auto; /* Allow interaction with scaled content */
+        position: relative;
+        background-color: white;
+        overflow: hidden;
+        pointer-events: auto;
     `;
 
-    // Move original body children into the scale container
-    var bodyContent = Array.from(document.body.children);
+  const content = Array.from(document.body.children).filter(isContentNode);
+  document.body.appendChild(wrapper);
+  wrapper.appendChild(container);
+  content.forEach(function (node) {
+    container.appendChild(node);
+  });
+  return container;
+}
 
-    document.body.appendChild(wrapper); // Add wrapper first to body
-    wrapper.appendChild(scaleContainer); // Add scale container inside wrapper
+function storedDimensions(container) {
+  if (window.r2ContentDimensions) {
+    return window.r2ContentDimensions;
+  }
+  const width = parseLength(container.style.width);
+  const height = parseLength(container.style.height);
+  return width && height ? { width, height, method: "from style" } : null;
+}
 
-    bodyContent.forEach(function(node) {
-        // Make sure not to move the wrapper itself, or scripts/styles that should remain top-level
-        if (node !== wrapper && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE' && node.tagName !== 'LINK') {
-            scaleContainer.appendChild(node);
-        }
-    });
+/**
+ * Scales the fixed-layout content so the whole page fits, and centres it.
+ *
+ * Builds the wrapper on the first call and only re-applies the transform after
+ * that. Rebuilding would have to move the content out and back in, which risks
+ * both the page and the decoration overlays for no gain.
+ */
+function scaleToViewport() {
+  if (!isFixedLayoutDocument()) {
+    return;
+  }
+  if (window.r2ScalingInProgress) {
+    debugLog("[R2Scale] Scaling already in progress, skipping.");
+    return;
+  }
+  window.r2ScalingInProgress = true;
+  try {
+    if (
+      document.getElementById(WRAPPER_ID) &&
+      !document.getElementById(CONTAINER_ID)
+    ) {
+      debugWarn("[R2Scale] Scale wrapper lost its container, rebuilding.");
+      unwrap();
+    }
 
-    // Mark scaling as completed and store info
+    let container = document.getElementById(CONTAINER_ID);
+    const dimensions = container
+      ? storedDimensions(container)
+      : contentDimensions();
+    if (!dimensions) {
+      debugWarn(
+        "[R2Scale] No usable content dimensions, leaving content unscaled."
+      );
+      return;
+    }
+
+    if (!container) {
+      document.documentElement.style.margin = "0";
+      document.documentElement.style.padding = "0";
+      document.body.style.margin = "0";
+      document.body.style.padding = "0";
+      document.body.style.backgroundColor = "white";
+      container = buildWrapper(dimensions);
+      debugLog(
+        `[R2Scale] Wrapped ${dimensions.width}x${dimensions.height} content (${dimensions.method})`
+      );
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const scale = containScale(
+      dimensions.width,
+      dimensions.height,
+      viewportWidth,
+      viewportHeight
+    );
+
+    container.style.transform = `scale(${scale})`;
     window.r2ScalingApplied = true;
-    window.r2ScalingInProgress = false;
-    window.r2ContentDimensions = { width: contentWidth, height: contentHeight, method: dimensionMethod };
+    window.r2ContentDimensions = dimensions;
     window.r2CurrentScale = scale;
-    // Store the JS viewport dimensions used for this scaling for potential future comparison
     window.r2LastJSViewport = { width: viewportWidth, height: viewportHeight };
 
-    if (DEBUG_MODE) debugLog(`[R2Scale] Universal scaling applied: ${contentWidth}x${contentHeight} (${dimensionMethod}) scaled to ${scale.toFixed(3)}`);
-    emitViewportChangedEvent();
+    debugLog(
+      `[R2Scale] Scaled to ${scale.toFixed(
+        3
+      )} for viewport ${viewportWidth}x${viewportHeight}`
+    );
+  } finally {
+    window.r2ScalingInProgress = false;
+  }
+  emitViewportChangedEvent();
+}
+
+/**
+ * Applies scaling and centering to fixed-layout content.
+ */
+export function applyInitialScaling() {
+  scaleToViewport();
 }
 
 /**
  * Updates the scaling factor when viewport dimensions change.
  */
 export function updateScaling() {
-    var viewportWidth = window.innerWidth;
-    var viewportHeight = window.innerHeight;
-
-    // Optional: Check if viewport actually changed significantly to avoid unnecessary updates
-    if (window.r2LastJSViewport &&
-        Math.abs(window.r2LastJSViewport.width - viewportWidth) < 5 &&
-        Math.abs(window.r2LastJSViewport.height - viewportHeight) < 5) {
-        if (DEBUG_MODE) debugLog('[R2Scale] Viewport dimensions nearly unchanged, skipping scale update.');
-        return;
-    }
-
-    if (DEBUG_MODE) debugLog('[R2Scale] Updating scaling for viewport: ' + viewportWidth + 'x' + viewportHeight);
-
-    var scaleContainer = document.getElementById('r2-scale-container');
-    if (!scaleContainer) {
-        if (DEBUG_MODE) debugWarn('[R2Scale] Scale container not found during update. Attempting re-initialization.');
-        // Reset flags and try to apply initial scaling again
-        window.r2ScalingApplied = false;
-        window.r2ScalingInProgress = false;
-        applyInitialScaling();
-        return;
-    }
-
-    // Use stored content dimensions if available, otherwise try reading from style (less reliable)
-    var contentWidth = window.r2ContentDimensions?.width || parseInt(scaleContainer.style.width);
-    var contentHeight = window.r2ContentDimensions?.height || parseInt(scaleContainer.style.height);
-
-    if (!contentWidth || !contentHeight || contentWidth <= 0 || contentHeight <= 0) {
-         if (DEBUG_MODE) debugError('[R2Scale] Cannot update scaling: Invalid content dimensions detected.', { width: contentWidth, height: contentHeight });
-         // Potentially attempt re-initialization here as well?
-         return;
-    }
-
-    var dimensionMethod = window.r2ContentDimensions?.method || 'from style';
-    if (DEBUG_MODE) debugLog('[R2Scale] Using content dimensions for update: ' + contentWidth + 'x' + contentHeight + ' (' + dimensionMethod + ')');
-
-    // Calculate new scale
-    var scale = 1.0;
-    if (contentWidth > 0 && contentHeight > 0) {
-        // New logic: Determine scale based on content aspect ratio, max 1.0
-        let ratioWidth = viewportWidth / contentWidth;
-        let ratioHeight = viewportHeight / contentHeight;
-        let targetRatio = 1.0;
-
-        if (contentHeight > contentWidth) { // Page is taller than wide (portrait)
-            targetRatio = ratioHeight;
-            if (DEBUG_MODE) debugLog('[R2Scale] Content is portrait, targeting height ratio for update: ' + targetRatio.toFixed(3));
-        } else { // Page is wider than tall (landscape) or square
-            targetRatio = ratioWidth;
-            if (DEBUG_MODE) debugLog('[R2Scale] Content is landscape or square, targeting width ratio for update: ' + targetRatio.toFixed(3));
-        }
-
-        // Apply rule: No scaling up (max scale is 1.0)
-        scale = Math.min(1.0, targetRatio);
-
-    } else {
-        if (DEBUG_MODE) debugWarn("[R2Scale] Content dimensions zero/invalid during update, defaulting scale to 1.0");
-        scale = 1.0;
-    }
-
-    // Optional: Apply safety margin
-    if (DEBUG_MODE) debugLog('[R2Scale] Updating scale transform (with safety margin) to: ' + scale.toFixed(3));
-
-    scaleContainer.style.transform = 'scale(' + scale + ')';
-    window.r2CurrentScale = scale; // Update stored scale
-    // Update the stored viewport dimensions
-    window.r2LastJSViewport = { width: viewportWidth, height: viewportHeight };
-    emitViewportChangedEvent();
+  if (
+    window.r2ScalingApplied &&
+    window.r2LastJSViewport &&
+    Math.abs(window.r2LastJSViewport.width - window.innerWidth) <
+      VIEWPORT_EPSILON_PX &&
+    Math.abs(window.r2LastJSViewport.height - window.innerHeight) <
+      VIEWPORT_EPSILON_PX
+  ) {
+    debugLog("[R2Scale] Viewport dimensions nearly unchanged, skipping.");
+    return;
+  }
+  scaleToViewport();
 }
 
 /**
@@ -306,36 +345,30 @@ export function updateScaling() {
  * This should be called once the core Readium scripts are ready.
  */
 export function setupScalingListeners() {
-    const hasViewportMeta = document.querySelector('meta[name="viewport"]');
+  if (!isFixedLayoutDocument()) {
+    debugLog("[R2Scale] Reflowable resource, scaling setup skipped.");
+    return;
+  }
 
-    if (hasViewportMeta) {
-       if (DEBUG_MODE) debugLog(`[R2Scale] Viewport meta tag detected, setting up scaling listeners.`);
-       applyInitialScaling();
-    } else {
-        if (DEBUG_MODE) debugLog("[R2Scale] No viewport meta tag found. Assuming reflowable content, scaling setup skipped.");
-    }
+  applyInitialScaling();
 
-    if (scalingListenersAttached) {
-        return;
-    }
-    scalingListenersAttached = true;
+  if (scalingListenersAttached) {
+    return;
+  }
+  scalingListenersAttached = true;
 
-    const onViewportChanged = debounce(function () {
-        if (!document.querySelector('meta[name="viewport"]')) {
-            return;
-        }
+  const onViewportChanged = debounce(function () {
+    updateScaling();
+  }, 120);
 
-        if (window.r2ScalingApplied) {
-            updateScaling();
-        } else {
-            applyInitialScaling();
-        }
-    }, 120);
+  window.addEventListener("resize", onViewportChanged, { passive: true });
+  window.addEventListener("orientationchange", onViewportChanged, {
+    passive: true,
+  });
 
-    window.addEventListener("resize", onViewportChanged, { passive: true });
-    window.addEventListener("orientationchange", onViewportChanged, { passive: true });
-
-    if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", onViewportChanged, { passive: true });
-    }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", onViewportChanged, {
+      passive: true,
+    });
+  }
 }
