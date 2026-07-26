@@ -55,6 +55,7 @@ import org.readium.r2.navigator.R2WebView
 import org.readium.r2.navigator.Selection
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubNavigatorViewModel
+import org.readium.r2.navigator.epub.isJavascriptNullResult
 import org.readium.r2.navigator.extensions.htmlId
 import org.readium.r2.navigator.extensions.optRectF
 import org.readium.r2.navigator.preferences.ReadingProgression
@@ -416,23 +417,37 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     private var isPageFinished = false
-    private val pendingPageFinished = mutableListOf<() -> Unit>()
+    private val pendingPageFinished = mutableListOf<PendingPageAction>()
+
+    private class PendingPageAction(
+        val action: () -> Unit,
+        val onDiscarded: (() -> Unit)?,
+    )
 
     /**
-     * Will run the given [action] when the content of the [WebView] is loaded.
+     * Will run the given [action] when the content of the [WebView] is loaded, or
+     * [onDiscarded] if the fragment is torn down first and the action will never run.
+     * Anything awaiting the action's result has to be told, or it waits forever.
      */
-    fun whenPageFinished(action: () -> Unit) {
+    fun whenPageFinished(onDiscarded: (() -> Unit)? = null, action: () -> Unit) {
         if (isPageFinished) {
             action()
         } else {
-            pendingPageFinished.add(action)
+            pendingPageFinished.add(PendingPageAction(action, onDiscarded))
         }
     }
 
     private fun onPageFinished() {
         isPageFinished = true
-        pendingPageFinished.forEach { it() }
+        val pending = pendingPageFinished.toList()
         pendingPageFinished.clear()
+        pending.forEach { it.action() }
+    }
+
+    private fun discardPendingPageFinished() {
+        val pending = pendingPageFinished.toList()
+        pendingPageFinished.clear()
+        pending.forEach { it.onDiscarded?.invoke() }
     }
 
     private inline fun withViewLifecycleOwner(action: (LifecycleOwner) -> Unit) {
@@ -491,7 +506,7 @@ internal class R2EpubPageFragment : Fragment() {
     override fun onDetach() {
         super.onDetach()
         destroyWebViews()
-        pendingPageFinished.clear()
+        discardPendingPageFinished()
     }
 
     private fun destroyWebViews() {
@@ -686,19 +701,61 @@ internal class R2EpubPageFragment : Fragment() {
         }
     }
 
-    fun runJavaScript(script: String, callback: ((String) -> Unit)? = null) {
-        whenPageFinished {
-            webView?.runJavaScript(script, callback)
-            webViewRight?.runJavaScript(script, callback)
+    /**
+     * Runs [script] in every [WebView] this fragment still holds, reporting through
+     * [onExhausted] when none of them produced a result — either because the fragment
+     * was torn down before the script could be dispatched, or because every WebView
+     * has since answered without one.
+     */
+    fun runJavaScript(
+        script: String,
+        callback: ((String) -> Unit)? = null,
+        onExhausted: (() -> Unit)? = null,
+    ) {
+        whenPageFinished(onDiscarded = onExhausted) {
+            val targets = listOfNotNull(webView, webViewRight)
+            if (targets.isEmpty()) {
+                onExhausted?.invoke()
+                return@whenPageFinished
+            }
+
+            var outstanding = targets.size
+            for (target in targets) {
+                target.runJavaScript(script) { result ->
+                    callback?.invoke(result)
+                    outstanding--
+                    if (outstanding == 0) {
+                        onExhausted?.invoke()
+                    }
+                }
+            }
         }
     }
 
-    suspend fun runJavaScriptSuspend(javascript: String): String = suspendCoroutine { cont ->
-        runJavaScript(javascript) { result ->
-            if (result != "null") {
-                cont.resume(result)
-            }
+    /**
+     * A spread dispatches the script to both of its WebViews and only one of them holds
+     * the resource, so the other answers with the "null" sentinel; that answer is skipped
+     * rather than returned. Returns null once every WebView has answered that way, or if
+     * the fragment went away before any of them could — waiting for a result that is not
+     * coming would suspend the caller for the rest of the session.
+     */
+    suspend fun runJavaScriptSuspend(javascript: String): String? = suspendCoroutine { cont ->
+        var isResumed = false
+        fun resumeOnce(result: String?) {
+            if (isResumed) return
+            isResumed = true
+            cont.resume(result)
         }
+
+        runJavaScript(
+            javascript,
+            callback = { result ->
+                if (!result.isJavascriptNullResult()) {
+                    resumeOnce(result)
+                }
+            },
+            onExhausted = { resumeOnce(null) }
+        )
     }
 
     companion object {

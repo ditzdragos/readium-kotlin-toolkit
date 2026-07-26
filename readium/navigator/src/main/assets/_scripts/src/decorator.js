@@ -10,7 +10,13 @@ import {
   toNativeRect,
 } from "./rect";
 import { setupScalingListeners } from "./scaling.js";
-import { DEBUG_MODE, getOCRCorrectedRect, log, logError, rangeFromLocator } from "./utils";
+import {
+  DEBUG_MODE,
+  getOCRCorrectedRect,
+  log,
+  logError,
+  rangeFromLocator,
+} from "./utils";
 
 let styles = new Map();
 let groups = new Map();
@@ -213,6 +219,8 @@ export function registerTemplates(newStyles) {
     document.body.innerHTML = separatedHtml;
   }
 
+  separateLineBreaks();
+
   normalizeTextNodes();
 
   processSpansForTextSpacing();
@@ -220,6 +228,33 @@ export function registerTemplates(newStyles) {
   // Setup scaling listeners after initial DOM modifications
   setupScalingListeners();
   setupViewportRelayoutListeners();
+}
+
+/**
+ * A <br> contributes a line break when rendered but nothing at all to
+ * textContent, so the word before it and the word after it arrive at the text
+ * extractor stitched into one unmatchable token. Give each one an explicit
+ * newline in the DOM, which — unlike rewriting innerHTML — does not depend on
+ * whether the document serializes void elements as <br> or <br />.
+ */
+function separateLineBreaks() {
+  const lineBreaks = document.body.querySelectorAll("br");
+  for (let i = 0; i < lineBreaks.length; i++) {
+    const lineBreak = lineBreaks[i];
+    const parent = lineBreak.parentNode;
+    if (!parent) {
+      continue;
+    }
+    const next = lineBreak.nextSibling;
+    if (
+      next &&
+      next.nodeType === Node.TEXT_NODE &&
+      next.nodeValue.startsWith("\n")
+    ) {
+      continue;
+    }
+    parent.insertBefore(document.createTextNode("\n"), next);
+  }
 }
 
 /**
@@ -246,7 +281,6 @@ function normalizeTextNodes() {
     }
   }
 }
-
 
 function processSpansForTextSpacing() {
   // Get all spans in the document - cache the query result
@@ -406,7 +440,8 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    if (DEBUG_MODE) log("adding decoration", groupName, JSON.stringify(decoration));
+    if (DEBUG_MODE)
+      log("adding decoration", groupName, JSON.stringify(decoration));
     let item = { id, decoration, range, enhanced: false };
     items.push(item);
     layout(item, true);
@@ -518,7 +553,8 @@ export function DecorationGroup(groupId, groupName) {
 
     let style = styles.get(item.decoration.style);
     if (!style) {
-      if (DEBUG_MODE) logError(`Unknown decoration style: ${item.decoration.style}`);
+      if (DEBUG_MODE)
+        logError(`Unknown decoration style: ${item.decoration.style}`);
       return;
     }
 
@@ -532,7 +568,8 @@ export function DecorationGroup(groupId, groupName) {
       documentWritingMode === "vertical-rl" ||
       documentWritingMode === "vertical-lr";
 
-    const scrollingElement = document.scrollingElement || document.documentElement;
+    const scrollingElement =
+      document.scrollingElement || document.documentElement;
     const { scrollLeft: xOffset, scrollTop: yOffset } = scrollingElement;
     const viewportWidth = isVertical ? window.innerHeight : window.innerWidth;
     const viewportHeight = isVertical ? window.innerWidth : window.innerHeight;
@@ -709,13 +746,18 @@ export function DecorationGroup(groupId, groupName) {
   function layoutEnhanced(item, postMessage = true) {
     const style = styles.get(item.decoration.style);
     if (!style) {
-      if (DEBUG_MODE) logError(`Unknown decoration style: ${item.decoration.style}`);
+      if (DEBUG_MODE)
+        logError(`Unknown decoration style: ${item.decoration.style}`);
       return;
     }
 
     function postMessageWithInvalidRect() {
       if (postMessage) {
-        emitHighlightRect(item, { left: 0, top: 0, width: 0, height: 0 }, false);
+        emitHighlightRect(
+          item,
+          { left: 0, top: 0, width: 0, height: 0 },
+          false
+        );
       }
     }
 
@@ -735,14 +777,17 @@ export function DecorationGroup(groupId, groupName) {
         return;
       }
 
-      pageIndex = Math.floor((boundingRect.left + window.scrollX) / viewportWidth);
+      pageIndex = Math.floor(
+        (boundingRect.left + window.scrollX) / viewportWidth
+      );
       if (!Number.isFinite(pageIndex)) {
         postMessageWithInvalidRect();
         return;
       }
       pageIndex = Math.max(0, pageIndex);
     } catch (error) {
-      if (DEBUG_MODE) logError(`Error calculating page index: ${error.message}`);
+      if (DEBUG_MODE)
+        logError(`Error calculating page index: ${error.message}`);
       postMessageWithInvalidRect();
       return;
     }
@@ -774,9 +819,13 @@ export function DecorationGroup(groupId, groupName) {
         const beforeEndsWithSignificantWhitespace = /\s{2,}$/.test(before);
 
         const beforeIsIsolated =
-          before.length === 0 || before.endsWith("\n") || !/[a-zA-Z0-9]/.test(before);
+          before.length === 0 ||
+          before.endsWith("\n") ||
+          !/[a-zA-Z0-9]/.test(before);
         const afterIsIsolated =
-          after.length === 0 || after.startsWith("\n") || !/[a-zA-Z0-9]/.test(after);
+          after.length === 0 ||
+          after.startsWith("\n") ||
+          !/[a-zA-Z0-9]/.test(after);
 
         let isDOMIsolated = false;
         try {
@@ -823,7 +872,9 @@ export function DecorationGroup(groupId, groupName) {
 
         pageNumberLog(`PAGE NUMBER :: before: "${before}"`);
         pageNumberLog(
-          `PAGE NUMBER :: before is empty: ${before.length === 0} | before ends in newline: ${before.endsWith(
+          `PAGE NUMBER :: before is empty: ${
+            before.length === 0
+          } | before ends in newline: ${before.endsWith(
             "\n"
           )} | before has no alphanumeric: ${!/[a-zA-Z0-9]/.test(before)}`
         );
@@ -833,7 +884,9 @@ export function DecorationGroup(groupId, groupName) {
 
         pageNumberLog(`PAGE NUMBER :: after: "${after}"`);
         pageNumberLog(
-          `PAGE NUMBER :: after is empty: ${after.length === 0} | after begins with newline: ${after.startsWith(
+          `PAGE NUMBER :: after is empty: ${
+            after.length === 0
+          } | after begins with newline: ${after.startsWith(
             "\n"
           )} | after has no alphanumeric: ${!/[a-zA-Z0-9]/.test(after)}`
         );
@@ -849,7 +902,8 @@ export function DecorationGroup(groupId, groupName) {
       }
     }
 
-    const scrollingElement = document.scrollingElement || document.documentElement;
+    const scrollingElement =
+      document.scrollingElement || document.documentElement;
     const yOffset = scrollingElement.scrollTop;
     const xOffset = window.scrollX - pageIndex * viewportWidth;
     const visibleArea = applyContainmentToArea(pageIndex).visibleArea;
@@ -931,7 +985,9 @@ export function DecorationGroup(groupId, groupName) {
           ? computedLeft
           : rect.left;
       const topPos =
-        useOverlayPosition && computedTop !== undefined ? computedTop : rect.top;
+        useOverlayPosition && computedTop !== undefined
+          ? computedTop
+          : rect.top;
       const finalXOffset = useOverlayPosition ? 0 : xOffset;
       const finalYOffset = useOverlayPosition ? 0 : yOffset;
 
@@ -1083,7 +1139,7 @@ export function DecorationGroup(groupId, groupName) {
         visibleArea = document.createElement("div");
         visibleArea.className = "visible-area";
         visibleArea.id = visibleAreaId;
-        
+
         // Optimize: Batch style assignments
         const visibleAreaLeft = pageIndex * viewportWidth;
         visibleArea.style.cssText = `position:absolute;left:${visibleAreaLeft}px;top:0px;margin-top:0px;width:${viewportWidth}px;height:${viewportHeight}px;pointer-events:none;z-index:999`;

@@ -312,6 +312,47 @@ export function snapCurrentOffset() {
 // once per word lookup.
 let elementTextCache = new LRUCache(10); // Key: cssSelector, Value: { element, text }
 
+// The cached text is a snapshot, so any mutation that changes a text node while
+// leaving its element attached would leave the snapshot describing characters the
+// DOM no longer has, and offsets derived from it would land on the wrong ones.
+// Decoration highlights insert and remove elements constantly, so only text-node
+// changes invalidate here — reacting to every childList mutation would keep the
+// cache permanently cold during reading.
+let textMutationObserver = null;
+
+function mutationTouchesText(mutation) {
+  if (mutation.type === "characterData") {
+    return true;
+  }
+  for (const node of mutation.addedNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return true;
+    }
+  }
+  for (const node of mutation.removedNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function observeTextMutations() {
+  if (textMutationObserver || !document.body) {
+    return;
+  }
+  textMutationObserver = new MutationObserver((mutations) => {
+    if (mutations.some(mutationTouchesText)) {
+      elementTextCache.clear();
+    }
+  });
+  textMutationObserver.observe(document.body, {
+    characterData: true,
+    childList: true,
+    subtree: true,
+  });
+}
+
 function cachedElementFor(cssSelector) {
   const cached = elementTextCache.get(cssSelector);
   if (cached && cached.element.isConnected) {
@@ -322,6 +363,8 @@ function cachedElementFor(cssSelector) {
   if (!element) {
     return null;
   }
+
+  observeTextMutations();
 
   const entry = { element, text: element.textContent };
   elementTextCache.set(cssSelector, entry);
@@ -346,6 +389,86 @@ function rangeFromTextOffsets(root, start, end) {
   }
 }
 
+class AmbiguousLocatorError extends Error {}
+
+/**
+ * Resolves the locator's character offsets against the body text and returns the
+ * range only if the text it lands on, and the text on either side of it, agree
+ * with the locator. Returns null when it cannot be corroborated, so the caller can
+ * fall back rather than underline whatever those offsets happened to hit.
+ *
+ * The offsets are body-relative, so this walks the body's text nodes; it is worth
+ * the walk only once the cheaper element-scoped lookup has failed.
+ */
+function rangeFromOffsetsWithContext(locations, text) {
+  const exact = rangeFromTextOffsets(
+    document.body,
+    locations.start,
+    locations.end
+  );
+  if (!exact || exact.toString() !== text.highlight) {
+    return null;
+  }
+
+  if (text.before) {
+    const beforeStart = Math.max(0, locations.start - text.before.length);
+    const beforeRange = rangeFromTextOffsets(
+      document.body,
+      beforeStart,
+      locations.start
+    );
+    if (beforeRange && !text.before.endsWith(beforeRange.toString())) {
+      return null;
+    }
+  }
+
+  if (text.after) {
+    // A locator at the very end of the resource has no text after it to compare
+    // against, which is a failure to corroborate rather than a contradiction.
+    const afterRange = rangeFromTextOffsets(
+      document.body,
+      locations.end,
+      locations.end + text.after.length
+    );
+    if (afterRange && !text.after.startsWith(afterRange.toString())) {
+      return null;
+    }
+  }
+
+  return exact;
+}
+
+/**
+ * Whether the text surrounding `highlightIndex` agrees with the locator's
+ * before/after context. This is what distinguishes the intended occurrence of a
+ * short repeated word from its neighbours (RR-8486); a locator carrying neither
+ * side offers nothing to check, so any occurrence satisfies it.
+ */
+function contextMatchesAt(entireText, highlightIndex, highlight, locatorText) {
+  const before = locatorText.before;
+  const after = locatorText.after;
+
+  const beforeMatches =
+    !before ||
+    before.endsWith(
+      entireText.slice(
+        Math.max(0, highlightIndex - before.length),
+        highlightIndex
+      )
+    );
+  if (!beforeMatches) {
+    return false;
+  }
+
+  const highlightEnd = highlightIndex + highlight.length;
+  return (
+    !after ||
+    after.startsWith(
+      entireText.slice(highlightEnd, highlightEnd + after.length)
+    )
+  );
+}
+
 // Returns a range from a locator; it first searches for the higher level css element in the cache
 function rangeFromCachedLocator(locator) {
   const cached = cachedElementFor(locator.locations.cssSelector);
@@ -357,6 +480,7 @@ function rangeFromCachedLocator(locator) {
   const highlight = locator.text.highlight;
   let searchIndex = 0;
   let foundIndex = -1;
+  let matchCount = 0;
 
   while (searchIndex < entireText.length) {
     const highlightIndex = entireText.indexOf(highlight, searchIndex);
@@ -364,28 +488,14 @@ function rangeFromCachedLocator(locator) {
       break; // No more occurrences of highlight text
     }
 
-    const beforeText = locator.text.before
-      ? entireText.slice(
-          Math.max(0, highlightIndex - locator.text.before.length),
-          highlightIndex
-        )
-      : "";
-    const afterText = locator.text.after
-      ? entireText.slice(
-          highlightIndex + highlight.length,
-          highlightIndex + highlight.length + locator.text.after.length
-        )
-      : "";
-
-    const beforeTextMatches =
-      !locator.text.before || locator.text.before.endsWith(beforeText);
-    const afterTextMatches =
-      !locator.text.after || locator.text.after.startsWith(afterText);
-
-    if (beforeTextMatches && afterTextMatches) {
-      // Highlight text from locator was found
-      foundIndex = highlightIndex;
-      break;
+    if (contextMatchesAt(entireText, highlightIndex, highlight, locator.text)) {
+      if (foundIndex === -1) {
+        foundIndex = highlightIndex;
+      }
+      matchCount++;
+      if (matchCount > 1) {
+        break;
+      }
     }
 
     // Search for the next occurrence of the highlight text
@@ -394,6 +504,13 @@ function rangeFromCachedLocator(locator) {
 
   if (foundIndex === -1) {
     throw new Error("Locator range could not be calculated");
+  }
+
+  // Several occurrences satisfy the context equally well, so this element's text
+  // cannot say which one was meant. The caller's offsets can, so defer to them
+  // rather than guessing at the first.
+  if (matchCount > 1) {
+    throw new AmbiguousLocatorError();
   }
 
   // Resolving the offsets against the element's text nodes has to account for
@@ -420,30 +537,12 @@ export function rangeFromLocator(locator) {
     let locations = locator.locations;
     let text = locator.text;
     if (text && text.highlight) {
-      // The locator usually carries the exact character offsets of the word
-      // within the body text. When they resolve to the expected highlight, use
-      // them as-is: the approximate search below is bounded to a window around
-      // them, and on a page that repeats a word it can settle on the wrong
-      // occurrence (RR-8486).
-      if (
-        locations &&
-        Number.isFinite(locations.start) &&
-        Number.isFinite(locations.end)
-      ) {
-        const exact = rangeFromTextOffsets(
-          document.body,
-          locations.start,
-          locations.end
-        );
-        if (exact && exact.toString() === text.highlight) {
-          if (DEBUG_MODE) {
-            log("rangeFromLocator: resolved directly from offsets");
-          }
-          return exact;
-        }
-      }
-
+      // Resolving within the locator's own element only walks that element's text
+      // nodes and reuses a cached concatenation of them, so it is tried before the
+      // offset path, which has to walk the whole body. It gives up rather than
+      // guessing when its context check cannot single out one occurrence.
       var root;
+      let ambiguousInElement = false;
       if (locations && locations.cssSelector) {
         try {
           const range = rangeFromCachedLocator(locator);
@@ -451,12 +550,38 @@ export function rangeFromLocator(locator) {
             log("rangeFromLocator: found range from cached locator", range);
           }
           return range;
-        } catch {
+        } catch (error) {
+          ambiguousInElement = error instanceof AmbiguousLocatorError;
           if (DEBUG_MODE) {
             log("failed getting the range from css selector");
           }
           // root = document.querySelector(locations.cssSelector);
         }
+      }
+
+      // The locator usually carries the exact character offsets of the word within
+      // the body text, which is the strongest evidence available for which
+      // occurrence was meant. Verify the surrounding context before trusting them,
+      // because the offsets are only accurate to within a few characters and a
+      // short repeated word resolves to a plausible neighbour otherwise (RR-8486).
+      if (
+        locations &&
+        Number.isFinite(locations.start) &&
+        Number.isFinite(locations.end)
+      ) {
+        const exact = rangeFromOffsetsWithContext(locations, text);
+        if (exact) {
+          if (DEBUG_MODE) {
+            log("rangeFromLocator: resolved directly from offsets");
+          }
+          return exact;
+        }
+      }
+
+      // Neither the element's text nor the offsets could name a single occurrence,
+      // so the windowed search below would only pick one arbitrarily.
+      if (ambiguousInElement) {
+        throw new Error("Locator range could not be calculated");
       }
 
       if (!root) {
