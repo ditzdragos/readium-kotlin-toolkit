@@ -8,17 +8,59 @@ import { DEBUG_MODE, log as logNative } from "./utils";
 
 const debug = false;
 
+// Android.getViewportWidth() crosses the JS/Java bridge, which costs far more
+// than the conversion it feeds, so the ratio it produces is cached. The CSS
+// viewport is not a sufficient key on its own: a fixed-layout resource pins its
+// own size via <meta viewport>, so neither innerWidth nor the body ResizeObserver
+// changes when the WebView itself is resized. MAX_AGE_MS bounds how long a ratio
+// can outlive such a resize; at any realistic word rate it still collapses many
+// conversions onto one bridge call.
+const MAX_AGE_MS = 1000;
+
+let cachedInnerWidth = -1;
+let cachedDevicePixelRatio = -1;
+let cachedViewportRatio = 1;
+let cachedAt = -Infinity;
+
+export function resetViewportRatioCache() {
+  cachedInnerWidth = -1;
+  cachedDevicePixelRatio = -1;
+  cachedAt = -Infinity;
+}
+
+function viewportRatio() {
+  const innerWidth = window.innerWidth;
+  const devicePixelRatio = window.devicePixelRatio;
+  const now = Date.now();
+  if (
+    innerWidth === cachedInnerWidth &&
+    devicePixelRatio === cachedDevicePixelRatio &&
+    now - cachedAt < MAX_AGE_MS
+  ) {
+    return cachedViewportRatio;
+  }
+
+  // getViewportWidth() is the View's measured width, which is 0 until the WebView
+  // has been laid out. Caching that would make every rect collapse to zero size
+  // for the lifetime of the resource, so leave the previous ratio in place and
+  // retry on the next conversion instead.
+  const viewportWidth = Android.getViewportWidth();
+  if (!(viewportWidth > 0) || !(innerWidth > 0)) {
+    return cachedViewportRatio;
+  }
+
+  cachedInnerWidth = innerWidth;
+  cachedDevicePixelRatio = devicePixelRatio;
+  cachedAt = now;
+  cachedViewportRatio = viewportWidth / innerWidth;
+  return cachedViewportRatio;
+}
+
 /**
  * Converts a DOMRect into a JSON object understandable by the native side.
  */
 export function toNativeRect(rect) {
-  const pixelRatio = window.devicePixelRatio;
-  // Get the WebView's viewport dimensions
-  const viewportWidth = Android.getViewportWidth();
-  const viewportHeight = window.innerHeight;
-
-  // check if we need to process the height instead
-  const ratio = viewportWidth / window.innerWidth;
+  const ratio = viewportRatio();
 
   // Convert coordinates to device pixels
   const width = rect.width * ratio;
@@ -33,7 +75,14 @@ export function toNativeRect(rect) {
   if (top < 0 && bottom > 0) {
     const adjustedTop = 0;
     const adjustedBottom = height;
-    return { width, height, left, top: adjustedTop, right, bottom: adjustedBottom };
+    return {
+      width,
+      height,
+      left,
+      top: adjustedTop,
+      right,
+      bottom: adjustedBottom,
+    };
   }
 
   return { width, height, left, top, right, bottom };
@@ -73,12 +122,14 @@ export function getClientRectsNoOverlap(
         if (DEBUG_MODE) log("CLIENT RECT: remove small");
         newRects.splice(j, 1);
       } else {
-        if (DEBUG_MODE) log("CLIENT RECT: remove small, but keep otherwise empty!");
+        if (DEBUG_MODE)
+          log("CLIENT RECT: remove small, but keep otherwise empty!");
         break;
       }
     }
   }
-  if (DEBUG_MODE) log(`CLIENT RECT: reduced ${originalRects.length} --> ${newRects.length}`);
+  if (DEBUG_MODE)
+    log(`CLIENT RECT: reduced ${originalRects.length} --> ${newRects.length}`);
   return newRects;
 }
 
@@ -90,22 +141,22 @@ function mergeTouchingRects(
   // Use a more efficient approach: track merged indices to avoid redundant checks
   const merged = new Set();
   const newRects = [];
-  
+
   for (let i = 0; i < rects.length; i++) {
     if (merged.has(i)) continue;
-    
+
     let currentRect = rects[i];
-    
+
     // Try to merge with remaining rects
     for (let j = i + 1; j < rects.length; j++) {
       if (merged.has(j)) continue;
-      
+
       const rect2 = rects[j];
       if (currentRect === rect2) {
         if (DEBUG_MODE) log("mergeTouchingRects rect1 === rect2 ??!");
         continue;
       }
-      
+
       const rectsLineUpVertically =
         almostEqual(currentRect.top, rect2.top, tolerance) &&
         almostEqual(currentRect.bottom, rect2.bottom, tolerance);
@@ -116,8 +167,9 @@ function mergeTouchingRects(
       const aligned =
         (rectsLineUpHorizontally && horizontalAllowed) ||
         (rectsLineUpVertically && !rectsLineUpHorizontally);
-      const canMerge = aligned && rectsTouchOrOverlap(currentRect, rect2, tolerance);
-      
+      const canMerge =
+        aligned && rectsTouchOrOverlap(currentRect, rect2, tolerance);
+
       if (canMerge) {
         if (DEBUG_MODE) {
           log(
@@ -128,11 +180,11 @@ function mergeTouchingRects(
         currentRect = getBoundingRect(currentRect, rect2);
       }
     }
-    
+
     merged.add(i);
     newRects.push(currentRect);
   }
-  
+
   // If we merged anything, recursively check for more merges
   if (newRects.length < rects.length) {
     return mergeTouchingRects(
@@ -141,7 +193,7 @@ function mergeTouchingRects(
       doNotMergeHorizontallyAlignedRects
     );
   }
-  
+
   return newRects;
 }
 
@@ -230,7 +282,8 @@ function replaceOverlapingRects(rects) {
             toRemove = rect2;
           }
         }
-        if (DEBUG_MODE) log(`CLIENT RECT: overlap, cut one rect into ${toAdd.length}`);
+        if (DEBUG_MODE)
+          log(`CLIENT RECT: overlap, cut one rect into ${toAdd.length}`);
         const newRects = rects.filter((rect) => {
           return rect !== toRemove;
         });

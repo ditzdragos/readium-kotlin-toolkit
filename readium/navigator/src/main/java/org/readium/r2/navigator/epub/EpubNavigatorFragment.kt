@@ -739,7 +739,9 @@ public class EpubNavigatorFragment public constructor(
     }
 
     private fun run(command: RunScriptCommand) {
-        Timber.d("run: $command")
+        if (DEBUG) {
+            Timber.d("run: $command")
+        }
         when (command.scope) {
             RunScriptCommand.Scope.CurrentResource -> {
                 currentReflowablePageFragment?.runJavaScript(command.script)
@@ -747,13 +749,19 @@ public class EpubNavigatorFragment public constructor(
 
             RunScriptCommand.Scope.LoadedResources -> {
                 r2PagerAdapter?.mFragments?.forEach { _, fragment ->
+                    if (!fragment.isAdded || fragment.isDetached) return@forEach
                     (fragment as? R2EpubPageFragment)?.takeIf { it.isLoaded.value }?.runJavaScript(command.script)
                 }
             }
 
             is RunScriptCommand.Scope.LoadedResource -> {
-                loadedFragmentForHref(command.scope.href)?.takeIf { it.isLoaded.value }?.getWebView(command.scope.href)
-                    ?.runJavaScript(command.script)
+                // A publication may place the same resource at more than one position, so
+                // several live fragments can be showing it. Reaching only the first would
+                // leave the others untouched, and a decoration removal has already been
+                // applied to the model by then, so nothing would ever clear them.
+                loadedFragmentsForHref(command.scope.href)
+                    .filter { it.isLoaded.value }
+                    .forEach { it.getWebView(command.scope.href)?.runJavaScript(command.script) }
             }
 
             is RunScriptCommand.Scope.WebView -> {
@@ -1180,8 +1188,17 @@ public class EpubNavigatorFragment public constructor(
      * Returns the reflowable page fragment matching the given href, if it is already loaded in the
      * view pager.
      */
-    private fun loadedFragmentForHref(href: Url): R2EpubPageFragment? {
-        val adapter = r2PagerAdapter ?: return null
+    private fun loadedFragmentForHref(href: Url): R2EpubPageFragment? =
+        loadedFragmentsForHref(href).firstOrNull()
+
+    /**
+     * Returns every loaded reflowable page fragment showing the given href. A publication may
+     * place one resource at several positions in the reading order, in which case more than one
+     * live fragment displays it.
+     */
+    private fun loadedFragmentsForHref(href: Url): List<R2EpubPageFragment> {
+        val adapter = r2PagerAdapter ?: return emptyList()
+        val fragments = mutableListOf<R2EpubPageFragment>()
         val iterator = adapter.mFragments.valueIterator()
         while (iterator.hasNext()) {
             val fragment = iterator.next()
@@ -1189,10 +1206,10 @@ public class EpubNavigatorFragment public constructor(
             val pageFragment = fragment as? R2EpubPageFragment ?: continue
             val link = pageFragment.link ?: continue
             if (link.url().isEquivalent(href) || pageFragment.rightLink?.url()?.isEquivalent(href) == true) {
-                return pageFragment
+                fragments.add(pageFragment)
             }
         }
-        return null
+        return fragments
     }
 
     override val currentLocator: StateFlow<Locator> get() = _currentLocator
