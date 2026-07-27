@@ -47,6 +47,7 @@ import timber.log.Timber
 internal class WebViewServer(
     private val application: Application,
     private val publication: Publication,
+    private val isFixedLayout: Boolean,
     servedAssets: List<String>,
     private val disableSelectionWhenProtected: Boolean,
     private val onResourceLoadFailed: (Url, ReadError) -> Unit,
@@ -93,6 +94,12 @@ internal class WebViewServer(
                 return false
             }
         }
+
+    // Page box per fixed-layout resource. Two doubles per page and never invalidated — the
+    // declared box is a property of the markup, so it cannot go stale while the publication is
+    // open, and it must survive clearResourceCache() or a memory-pressure drop would cost every
+    // visible page a re-read on the load path.
+    private val fxlViewports: MutableMap<Url, FixedLayoutViewport?> = mutableMapOf()
 
     private fun cachedResource(url: Url, build: () -> Resource): Resource {
         // Fast path: return a live entry. The get() must hold the lock because the map
@@ -143,6 +150,10 @@ internal class WebViewServer(
             ?.decodeToString()
             ?: return
 
+        if (isFixedLayout) {
+            cacheFixedLayoutViewport(pageUrl, html)
+        }
+
         for (match in assetRefRegex.findAll(html)) {
             val ref = match.groupValues[1]
             if (ref.startsWith("data:") || ref.startsWith("javascript:")) continue
@@ -161,6 +172,39 @@ internal class WebViewServer(
         val resource = cachedResource(url) { buildResource(link, url, css).synchronized() }
         // Warm one BufferingResource window; result is intentionally discarded.
         resource.borrow().use { it.read(0 until PREWARM_READ_BYTES) }
+    }
+
+    /**
+     * The page box declared by the fixed-layout resource at [href], or null when it declares none.
+     *
+     * Reads and parses on the first call for a resource and caches the result — including the
+     * "declares none" answer, so a page without a usable box is not re-read on every swipe. Warm
+     * calls return without suspending, which is what lets [R2EpubPageFragment] size its web view
+     * from the same dispatch that creates it.
+     */
+    internal suspend fun fixedLayoutViewport(href: Url): FixedLayoutViewport? {
+        val pageUrl = href.removeFragment()
+        synchronized(fxlViewports) {
+            if (fxlViewports.containsKey(pageUrl)) return fxlViewports[pageUrl]
+        }
+
+        val link = publication.linkWithHref(pageUrl) ?: return null
+        if (link.mediaType?.isHtml != true) return null
+
+        // A read failure is deliberately not cached: the WebView is about to request the same
+        // resource, and a transient failure should not pin this page full-bleed for the session.
+        val html = publication.get(pageUrl)
+            ?.use { it.read().getOrNull() }
+            ?.decodeToString()
+            ?: return null
+
+        return cacheFixedLayoutViewport(pageUrl, html)
+    }
+
+    private fun cacheFixedLayoutViewport(pageUrl: Url, html: String): FixedLayoutViewport? {
+        val viewport = FixedLayoutViewportParser.parse(html)
+        synchronized(fxlViewports) { fxlViewports[pageUrl] = viewport }
+        return viewport
     }
 
     internal fun clearResourceCache() {

@@ -4,10 +4,15 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!--
+      Both dimensions are MATCH_CONSTRAINT so that R2EpubPageFragment can constrain each half to
+      its page's declared box; each web view then takes the largest size that fits its half of the
+      spread at that ratio, centred within it.
+    -->
     <org.readium.r2.navigator.R2WebView
         android:id="@+id/webView"
         android:layout_width="0dp"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/middle"
         app:layout_constraintStart_toStartOf="parent"
@@ -25,11 +30,10 @@
     <org.readium.r2.navigator.R2WebView
         android:id="@+id/webViewRight"
         android:layout_width="0dp"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@+id/middle"
         app:layout_constraintTop_toTopOf="parent" />
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>

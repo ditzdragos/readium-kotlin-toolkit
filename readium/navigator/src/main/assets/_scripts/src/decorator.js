@@ -9,7 +9,6 @@ import {
   rectContainsPoint,
   toNativeRect,
 } from "./rect";
-import { setupScalingListeners } from "./scaling.js";
 import { DEBUG_MODE, getOCRCorrectedRect, log, logError, rangeFromLocator } from "./utils";
 
 let styles = new Map();
@@ -110,7 +109,6 @@ function setupViewportRelayoutListeners() {
 
   const onViewportChanged = () => requestGroupsLayout();
 
-  window.addEventListener("readium:viewport-changed", onViewportChanged);
   window.addEventListener("orientationchange", onViewportChanged, {
     passive: true,
   });
@@ -246,8 +244,6 @@ export function registerTemplates(newStyles) {
   // Process span elements to ensure proper text spacing
   processSpansForTextSpacing();
 
-  // Setup scaling listeners after initial DOM modifications
-  setupScalingListeners();
   setupViewportRelayoutListeners();
 }
 

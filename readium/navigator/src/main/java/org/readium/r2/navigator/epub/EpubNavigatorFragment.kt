@@ -1103,6 +1103,13 @@ public class EpubNavigatorFragment public constructor(
     }
 
     /**
+     * The page box declared by the fixed-layout resource at [url], so a page fragment can give its
+     * web view the page's aspect ratio before the first frame.
+     */
+    internal suspend fun fixedLayoutViewport(url: AbsoluteUrl): FixedLayoutViewport? =
+        viewModel.fixedLayoutViewport(url)
+
+    /**
      * Whether [fragment] should postpone loading its resources in the web views.
      *
      * True only for fixed-layout offscreen neighbours materialised while the visible spread is
