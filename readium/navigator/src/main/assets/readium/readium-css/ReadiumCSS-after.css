@@ -166,6 +166,23 @@ body {
   word-break: break-all;
 }
 
+/* Authors size horizontal heading margins for a print page and express them in em, so they
+   scale with the font size: `h1.chapter { margin-left: 14em; margin-right: 14em }` needs a
+   28em line just to reach zero width. When the pair exceeds the line length the used width
+   of the block clamps to 0 and the heading wraps one character per line, rendering the
+   chapter title as a vertical column (RR-8640). Only neutralise them when the reader has
+   opted out of publisher styles, which is when the user already expects normalised
+   typography — `text-align` still positions the text, so headings keep their alignment. */
+:root[style*="readium-advanced-on"] h1,
+:root[style*="readium-advanced-on"] h2,
+:root[style*="readium-advanced-on"] h3,
+:root[style*="readium-advanced-on"] h4,
+:root[style*="readium-advanced-on"] h5,
+:root[style*="readium-advanced-on"] h6 {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
 /* We’ll now redefine margins and columns depending on the minimum width available
    The goal is having the simplest model possible and avoid targeting devices */
 
