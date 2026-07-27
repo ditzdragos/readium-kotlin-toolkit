@@ -16,12 +16,17 @@ import {
   logError,
   rangeFromLocator,
 } from "./utils";
+import {
+  isExplicitPageBreak,
+  isPageNumberText,
+  isTitleNumber,
+  shouldSkipPageNumber,
+} from "./pageNumber.mjs";
 
 let styles = new Map();
 let groups = new Map();
 var lastGroupId = 0;
 const PAGE_NUMBER_DEBUG = false;
-const PAGE_NUMBER_REGEX = /^\d+$/;
 
 const TEXT_NORMALIZATION_MAP = {
   "\u00a0": " ",
@@ -732,10 +737,6 @@ export function DecorationGroup(groupId, groupName) {
     }
   }
 
-  function isPageNumber(text) {
-    return !!text && PAGE_NUMBER_REGEX.test(text.trim());
-  }
-
   function layoutEnhanced(item, postMessage = true) {
     const style = styles.get(item.decoration.style);
     if (!style) {
@@ -792,106 +793,45 @@ export function DecorationGroup(groupId, groupName) {
 
     const text = item.decoration.locator.text.highlight || "";
     const startTime = performance.now();
-    if (isPageNumber(text)) {
+    if (isPageNumberText(text)) {
       pageNumberLog(`PAGE NUMBER :: page number detected: ${text}`);
 
       const isAtTopOrBottom =
         boundingRect.top < window.innerHeight * 0.2 ||
         boundingRect.top > window.innerHeight * 0.8;
 
-      if (isAtTopOrBottom) {
-        pageNumberLog(`PAGE NUMBER :: is at top or bottom: ${text}`);
+      const before = item.decoration.locator.text.before || "";
+      const after = item.decoration.locator.text.after || "";
 
-        const before = item.decoration.locator.text.before || "";
-        const after = item.decoration.locator.text.after || "";
+      let skip = false;
+      try {
+        skip = shouldSkipPageNumber({
+          text,
+          before,
+          after,
+          element: startNode,
+          isAtTopOrBottom,
+        });
+      } catch (error) {
+        pageNumberLog(`PAGE NUMBER :: classification failed: ${error.message}`);
+      }
 
-        const beforeEndsWithPunctuationAndWhitespace = /[.!?;:]\s*$/.test(
-          before
-        );
-        const beforeHasMultipleNewlines = /\n\s*\n/.test(before);
-        const beforeEndsWithSignificantWhitespace = /\s{2,}$/.test(before);
-
-        const beforeIsIsolated =
-          before.length === 0 ||
-          before.endsWith("\n") ||
-          !/[a-zA-Z0-9]/.test(before);
-        const afterIsIsolated =
-          after.length === 0 ||
-          after.startsWith("\n") ||
-          !/[a-zA-Z0-9]/.test(after);
-
-        let isDOMIsolated = false;
-        try {
-          let nodeForCheck = item.range.startContainer;
-          if (nodeForCheck.nodeType === Node.TEXT_NODE) {
-            nodeForCheck = nodeForCheck.parentElement;
-          }
-
-          const parentText = nodeForCheck.textContent.trim();
-          const isOnlyPageNumber = parentText === text.trim();
-          const parentHasMinimalContent = parentText.length <= 5;
-
-          isDOMIsolated = isOnlyPageNumber || parentHasMinimalContent;
-
-          pageNumberLog(
-            `PAGE NUMBER :: DOM isolation check - parentText: "${parentText}", isOnlyPageNumber: ${isOnlyPageNumber}, isDOMIsolated: ${isDOMIsolated}`
-          );
-        } catch (error) {
-          pageNumberLog(
-            `PAGE NUMBER :: DOM isolation check failed: ${error.message}`
-          );
-        }
-
-        const isIsolatedPageNumber = beforeIsIsolated && afterIsIsolated;
-        const isIsolatedWithEnhancements =
-          isIsolatedPageNumber ||
-          (isDOMIsolated && afterIsIsolated) ||
-          (beforeEndsWithPunctuationAndWhitespace &&
-            isDOMIsolated &&
-            after.length === 0) ||
-          (beforeHasMultipleNewlines &&
-            (after.length === 0 || after.startsWith("\n"))) ||
-          (beforeEndsWithSignificantWhitespace &&
-            isDOMIsolated &&
-            after.length === 0);
-
-        const endTime = performance.now();
-        const elapsedTime = endTime - startTime;
+      if (PAGE_NUMBER_DEBUG) {
         pageNumberLog(
-          `PAGE NUMBER :: isolation check took ${elapsedTime.toFixed(
-            3
-          )} ms for: ${text}`
+          `PAGE NUMBER :: at top or bottom: ${isAtTopOrBottom} | in a title: ${isTitleNumber(
+            startNode
+          )} | marked as a page break: ${isExplicitPageBreak(
+            startNode
+          )} | before: "${before}" | after: "${after}" | took ${(
+            performance.now() - startTime
+          ).toFixed(3)} ms`
         );
+      }
 
-        pageNumberLog(`PAGE NUMBER :: before: "${before}"`);
-        pageNumberLog(
-          `PAGE NUMBER :: before is empty: ${
-            before.length === 0
-          } | before ends in newline: ${before.endsWith(
-            "\n"
-          )} | before has no alphanumeric: ${!/[a-zA-Z0-9]/.test(before)}`
-        );
-        pageNumberLog(
-          `PAGE NUMBER :: before ends with punctuation+whitespace: ${beforeEndsWithPunctuationAndWhitespace} | has multiple newlines: ${beforeHasMultipleNewlines} | ends with significant whitespace: ${beforeEndsWithSignificantWhitespace}`
-        );
-
-        pageNumberLog(`PAGE NUMBER :: after: "${after}"`);
-        pageNumberLog(
-          `PAGE NUMBER :: after is empty: ${
-            after.length === 0
-          } | after begins with newline: ${after.startsWith(
-            "\n"
-          )} | after has no alphanumeric: ${!/[a-zA-Z0-9]/.test(after)}`
-        );
-        pageNumberLog(
-          `PAGE NUMBER :: original isolated: ${isIsolatedPageNumber} | with enhancements: ${isIsolatedWithEnhancements}`
-        );
-
-        if (isIsolatedWithEnhancements) {
-          pageNumberLog(`PAGE NUMBER :: is isolated: ${text}`);
-          postMessageWithInvalidRect();
-          return;
-        }
+      if (skip) {
+        pageNumberLog(`PAGE NUMBER :: skipping: ${text}`);
+        postMessageWithInvalidRect();
+        return;
       }
     }
 
