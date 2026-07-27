@@ -256,20 +256,17 @@ internal class EpubNavigatorViewModel(
     fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
         server.shouldInterceptRequest(request, css.value)
 
-    /**
-     * Warms the web view server's resource cache for the given publication [hrefs] (and the
-     * assets their HTML references) in the background, so the WebViews' first requests are
-     * served from already-built Resources. See [WebViewServer.prewarm].
-     */
-    /**
-     * The page box declared by the fixed-layout resource at [href], used to give its web view the
-     * page's aspect ratio. Returns without suspending once the resource has been prewarmed.
-     */
+    /** The page box declared by the fixed-layout resource at [href]. */
     internal suspend fun fixedLayoutViewport(href: AbsoluteUrl): FixedLayoutViewport? {
         val relative = (baseUrl.relativize(href) as? RelativeUrl) ?: return null
         return server.fixedLayoutViewport(relative)
     }
 
+    /**
+     * Warms the web view server's resource cache for the given publication [hrefs] (and the
+     * assets their HTML references) in the background, so the WebViews' first requests are
+     * served from already-built Resources. See [WebViewServer.prewarm].
+     */
     fun prewarmResources(hrefs: List<Url>) {
         viewModelScope.launch(Dispatchers.IO) {
             hrefs.forEach { server.prewarm(it, css.value) }

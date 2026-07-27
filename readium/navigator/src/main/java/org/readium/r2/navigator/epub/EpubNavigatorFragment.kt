@@ -755,10 +755,8 @@ public class EpubNavigatorFragment public constructor(
             }
 
             is RunScriptCommand.Scope.LoadedResource -> {
-                // A publication may place the same resource at more than one position, so
-                // several live fragments can be showing it. Reaching only the first would
-                // leave the others untouched, and a decoration removal has already been
-                // applied to the model by then, so nothing would ever clear them.
+                // Every fragment showing the resource, not just the first: a publication may place
+                // one resource at several positions, and the model is already updated by now.
                 loadedFragmentsForHref(command.scope.href)
                     .filter { it.isLoaded.value }
                     .forEach { it.getWebView(command.scope.href)?.runJavaScript(command.script) }
@@ -1110,10 +1108,7 @@ public class EpubNavigatorFragment public constructor(
         viewModel.clearResourceCache()
     }
 
-    /**
-     * The page box declared by the fixed-layout resource at [url], so a page fragment can give its
-     * web view the page's aspect ratio before the first frame.
-     */
+    /** The page box declared by the fixed-layout resource at [url]. */
     internal suspend fun fixedLayoutViewport(url: AbsoluteUrl): FixedLayoutViewport? =
         viewModel.fixedLayoutViewport(url)
 
@@ -1192,9 +1187,8 @@ public class EpubNavigatorFragment public constructor(
         loadedFragmentsForHref(href).firstOrNull()
 
     /**
-     * Returns every loaded reflowable page fragment showing the given href. A publication may
-     * place one resource at several positions in the reading order, in which case more than one
-     * live fragment displays it.
+     * Returns every loaded reflowable page fragment showing the given href — a publication may
+     * place one resource at several positions in the reading order.
      */
     private fun loadedFragmentsForHref(href: Url): List<R2EpubPageFragment> {
         val adapter = r2PagerAdapter ?: return emptyList()

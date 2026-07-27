@@ -8,13 +8,8 @@ import { DEBUG_MODE, log as logNative } from "./utils";
 
 const debug = false;
 
-// Android.getViewportWidth() crosses the JS/Java bridge, which costs far more
-// than the conversion it feeds, so the ratio it produces is cached. The CSS
-// viewport is not a sufficient key on its own: a fixed-layout resource pins its
-// own size via <meta viewport>, so neither innerWidth nor the body ResizeObserver
-// changes when the WebView itself is resized. MAX_AGE_MS bounds how long a ratio
-// can outlive such a resize; at any realistic word rate it still collapses many
-// conversions onto one bridge call.
+// Bounds how long a cached ratio can outlive a WebView resize that the CSS viewport cannot
+// observe: a fixed-layout resource pins its own size, so innerWidth never changes.
 const MAX_AGE_MS = 1000;
 
 let cachedInnerWidth = -1;
@@ -40,10 +35,8 @@ function viewportRatio() {
     return cachedViewportRatio;
   }
 
-  // getViewportWidth() is the View's measured width, which is 0 until the WebView
-  // has been laid out. Caching that would make every rect collapse to zero size
-  // for the lifetime of the resource, so leave the previous ratio in place and
-  // retry on the next conversion instead.
+  // The View's measured width is 0 until it is laid out; caching that would collapse every
+  // rect, so keep the previous ratio and retry on the next conversion.
   const viewportWidth = Android.getViewportWidth();
   if (!(viewportWidth > 0) || !(innerWidth > 0)) {
     return cachedViewportRatio;

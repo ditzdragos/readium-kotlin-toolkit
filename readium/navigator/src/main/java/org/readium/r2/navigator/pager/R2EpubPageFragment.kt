@@ -312,14 +312,8 @@ internal class R2EpubPageFragment : Fragment() {
         webViewRight?.let { setupWebView(it, rightResourceUrl) }
 
         if (fixedLayout) {
-            // The page has to be the right size on its first frame, not resized afterwards. The
-            // resource is normally already prewarmed, in which case nothing here suspends and the
-            // load starts in this same dispatch; only a cold-open page pays a resource read, and
-            // that read is the one the WebView is about to make anyway.
-            //
-            // The guard is on the view this call inflated, not on getView(): the fragment manager
-            // does not publish getView() until onCreateView returns, so a non-suspending run --
-            // the common, prewarmed one -- would see it null and skip the load entirely.
+            // Guard on the inflated view, not getView(): it is still null here, and a prewarmed
+            // page never suspends, so this whole block runs before onCreateView returns.
             val spread = containerView
             lifecycleScope.launch {
                 applyFixedLayoutAspectRatio()
@@ -339,16 +333,8 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     /**
-     * Starts the spread's load, or defers it.
-     *
-     * At cold open, ViewPager materialises the current AND the two adjacent spreads at once, so
-     * three spreads' worth of LCP decrypt + image decode compete for CPU and heap — that
-     * contention slows first paint and triggers GC churn on memory-constrained devices
-     * (Chromebook). When this fragment is an offscreen neighbour of a spread that is still
-     * loading, defer loadUrl until the navigator releases it (visible spread ready), or until a
-     * fallback delay so neighbour preloading still happens if the visible page never finishes.
-     * When the visible spread is already loaded (steady-state swiping), neighbours load
-     * immediately as before.
+     * Starts the spread's load, or defers it while a visible spread is still loading so cold open
+     * doesn't decrypt and decode three spreads at once.
      */
     private fun startLoadingResources() {
         if (navigator?.shouldDeferPageLoad(this) == true) {
@@ -365,13 +351,8 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     /**
-     * Sizes this spread's web view(s) to the aspect ratio of the page each one will show.
-     *
-     * The web view's own fit — `loadWithOverviewMode` — only fits the width, which is what leaves
-     * a page taller than its slot anchored at the top with its bottom edge cut off. Both
-     * dimensions are MATCH_CONSTRAINT in the spread layouts, so constraining the ratio makes the
-     * web view take the largest size that fits its slot at the page's proportions, centred by the
-     * ConstraintLayout — and fitting the width of a web view already that shape is a contain fit.
+     * Sizes this spread's web view(s) to the aspect ratio of the page each one will show, which
+     * turns `loadWithOverviewMode`'s width-only fit into a contain fit.
      */
     private suspend fun applyFixedLayoutAspectRatio() {
         val navigator = navigator ?: return
@@ -474,9 +455,8 @@ internal class R2EpubPageFragment : Fragment() {
     )
 
     /**
-     * Will run the given [action] when the content of the [WebView] is loaded, or
-     * [onDiscarded] if the fragment is torn down first and the action will never run.
-     * Anything awaiting the action's result has to be told, or it waits forever.
+     * Will run the given [action] when the content of the [WebView] is loaded, or [onDiscarded] if
+     * the fragment is torn down first — anything awaiting a result has to be told.
      */
     fun whenPageFinished(onDiscarded: (() -> Unit)? = null, action: () -> Unit) {
         if (isPageFinished) {
@@ -752,10 +732,8 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     /**
-     * Runs [script] in every [WebView] this fragment still holds, reporting through
-     * [onExhausted] when none of them produced a result — either because the fragment
-     * was torn down before the script could be dispatched, or because every WebView
-     * has since answered without one.
+     * Runs [script] in every [WebView] this fragment still holds, calling [onExhausted] when none
+     * of them produced a result.
      */
     fun runJavaScript(
         script: String,
@@ -783,11 +761,8 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     /**
-     * A spread dispatches the script to both of its WebViews and only one of them holds
-     * the resource, so the other answers with the "null" sentinel; that answer is skipped
-     * rather than returned. Returns null once every WebView has answered that way, or if
-     * the fragment went away before any of them could — waiting for a result that is not
-     * coming would suspend the caller for the rest of the session.
+     * Skips the "null" sentinel from the WebView of a spread that doesn't hold the resource, and
+     * returns null once none is left to answer rather than suspending the caller forever.
      */
     suspend fun runJavaScriptSuspend(javascript: String): String? = suspendCoroutine { cont ->
         var isResumed = false

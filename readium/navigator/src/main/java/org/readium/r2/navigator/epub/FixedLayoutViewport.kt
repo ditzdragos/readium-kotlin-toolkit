@@ -6,25 +6,15 @@
 
 package org.readium.r2.navigator.epub
 
-/**
- * The page box a fixed-layout resource declares for itself, in CSS pixels.
- *
- * Giving the web view this aspect ratio turns its own `loadWithOverviewMode` fit — which is
- * width-only, and so leaves a taller page anchored at the top with its bottom edge cut off —
- * into an exact contain fit, before the first frame and without any script.
- */
+/** The page box a fixed-layout resource declares for itself, in CSS pixels. */
 internal data class FixedLayoutViewport(
     val width: Double,
     val height: Double,
 )
 
 /**
- * Reads the declared page box out of a fixed-layout resource's markup.
- *
- * EPUB 3 requires a fixed-layout XHTML document to state its size in a `<meta name="viewport">`,
- * but image-only pages in the wild often state it only on the wrapping `<svg>` instead, so both
- * are read. Returns null when neither gives two usable lengths; the caller then leaves the web
- * view full-bleed rather than guessing a ratio.
+ * Reads the page box declared by `<meta name="viewport">`, falling back to the wrapping `<svg>`
+ * for image-only pages that only state it there. Null when neither gives two usable lengths.
  */
 internal object FixedLayoutViewportParser {
 
@@ -60,10 +50,7 @@ internal object FixedLayoutViewportParser {
         return if (width != null && height != null) FixedLayoutViewport(width, height) else null
     }
 
-    /**
-     * Matches `width=1200`, but not the `width=` inside `device-width` or `min-width`, and accepts
-     * the fractional values some publications declare.
-     */
+    /** Matches `width=1200`, but not the `width=` inside `device-width` or `min-width`. */
     private fun viewportLength(content: String, name: String): Double? =
         Regex("""(?:^|[;,\s])$name\s*=\s*($NUMBER)""", RegexOption.IGNORE_CASE)
             .find(content)

@@ -95,10 +95,8 @@ internal class WebViewServer(
             }
         }
 
-    // Page box per fixed-layout resource. Two doubles per page and never invalidated — the
-    // declared box is a property of the markup, so it cannot go stale while the publication is
-    // open, and it must survive clearResourceCache() or a memory-pressure drop would cost every
-    // visible page a re-read on the load path.
+    // Deliberately outlives clearResourceCache(): a declared box cannot go stale while the
+    // publication is open, and re-reading it would land on the load path.
     private val fxlViewports: MutableMap<Url, FixedLayoutViewport?> = mutableMapOf()
 
     private fun cachedResource(url: Url, build: () -> Resource): Resource {
@@ -176,11 +174,7 @@ internal class WebViewServer(
 
     /**
      * The page box declared by the fixed-layout resource at [href], or null when it declares none.
-     *
-     * Reads and parses on the first call for a resource and caches the result — including the
-     * "declares none" answer, so a page without a usable box is not re-read on every swipe. Warm
-     * calls return without suspending, which is what lets [R2EpubPageFragment] size its web view
-     * from the same dispatch that creates it.
+     * Caches both answers; a prewarmed page returns without suspending.
      */
     internal suspend fun fixedLayoutViewport(href: Url): FixedLayoutViewport? {
         val pageUrl = href.removeFragment()
@@ -191,12 +185,8 @@ internal class WebViewServer(
         val link = publication.linkWithHref(pageUrl) ?: return null
         if (link.mediaType?.isHtml != true) return null
 
-        // Only a page that was never prewarmed reaches here, and its read is a zip inflate plus,
-        // for an LCP title, a decrypt — so it goes off the main thread. The cache check above stays
-        // on the caller's thread, which is what keeps the warm path free of a suspension.
-        //
-        // A read failure is deliberately not cached: the WebView is about to request the same
-        // resource, and a transient failure should not pin this page full-bleed for the session.
+        // Only a page that was never prewarmed reaches here: a zip inflate plus, for an LCP title,
+        // a decrypt. A read failure is left uncached so a transient one doesn't pin the page.
         val html = withContext(Dispatchers.IO) {
             publication.get(pageUrl)
                 ?.use { it.read().getOrNull() }

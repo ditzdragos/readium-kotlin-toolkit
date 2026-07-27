@@ -312,12 +312,8 @@ export function snapCurrentOffset() {
 // once per word lookup.
 let elementTextCache = new LRUCache(10); // Key: cssSelector, Value: { element, text }
 
-// The cached text is a snapshot, so any mutation that changes a text node while
-// leaving its element attached would leave the snapshot describing characters the
-// DOM no longer has, and offsets derived from it would land on the wrong ones.
-// Decoration highlights insert and remove elements constantly, so only text-node
-// changes invalidate here — reacting to every childList mutation would keep the
-// cache permanently cold during reading.
+// The cached text is a snapshot, so a text-node mutation invalidates it. Only those do:
+// decoration highlights add and remove elements constantly, which would keep the cache cold.
 let textMutationObserver = null;
 
 function mutationTouchesText(mutation) {
@@ -372,9 +368,8 @@ function cachedElementFor(cssSelector) {
 }
 
 /**
- * Builds a range spanning the [start, end) character offsets of `root`'s text.
- * `root` may be an element or a text node, and the offsets may span several of
- * its text nodes. Returns null when they fall outside the root's text.
+ * Builds a range spanning the [start, end) character offsets of `root`'s text, which may span
+ * several of its text nodes. Null when they fall outside it.
  *
  * @param {Node} root
  * @param {number} start
@@ -392,13 +387,8 @@ function rangeFromTextOffsets(root, start, end) {
 class AmbiguousLocatorError extends Error {}
 
 /**
- * Resolves the locator's character offsets against the body text and returns the
- * range only if the text it lands on, and the text on either side of it, agree
- * with the locator. Returns null when it cannot be corroborated, so the caller can
- * fall back rather than underline whatever those offsets happened to hit.
- *
- * The offsets are body-relative, so this walks the body's text nodes; it is worth
- * the walk only once the cheaper element-scoped lookup has failed.
+ * Resolves the locator's body-relative offsets, returning the range only if the text there and
+ * on either side agrees with the locator — otherwise the caller should fall back.
  */
 function rangeFromOffsetsWithContext(locations, text) {
   const exact = rangeFromTextOffsets(
@@ -423,8 +413,8 @@ function rangeFromOffsetsWithContext(locations, text) {
   }
 
   if (text.after) {
-    // A locator at the very end of the resource has no text after it to compare
-    // against, which is a failure to corroborate rather than a contradiction.
+    // No range at all means the locator sits at the end of the resource, which contradicts
+    // nothing; only text that disagrees does.
     const afterRange = rangeFromTextOffsets(
       document.body,
       locations.end,
@@ -439,10 +429,8 @@ function rangeFromOffsetsWithContext(locations, text) {
 }
 
 /**
- * Whether the text surrounding `highlightIndex` agrees with the locator's
- * before/after context. This is what distinguishes the intended occurrence of a
- * short repeated word from its neighbours (RR-8486); a locator carrying neither
- * side offers nothing to check, so any occurrence satisfies it.
+ * Whether the text around `highlightIndex` agrees with the locator's before/after context, which
+ * is what tells a short repeated word from its neighbours (RR-8486).
  */
 function contextMatchesAt(entireText, highlightIndex, highlight, locatorText) {
   const before = locatorText.before;
@@ -506,16 +494,12 @@ function rangeFromCachedLocator(locator) {
     throw new Error("Locator range could not be calculated");
   }
 
-  // Several occurrences satisfy the context equally well, so this element's text
-  // cannot say which one was meant. The caller's offsets can, so defer to them
-  // rather than guessing at the first.
+  // Several occurrences fit the context equally well, so defer to the caller's offsets rather
+  // than guessing at the first.
   if (matchCount > 1) {
     throw new AmbiguousLocatorError();
   }
 
-  // Resolving the offsets against the element's text nodes has to account for
-  // the match landing in any of them, and for start and end landing in
-  // different ones.
   const range = rangeFromTextOffsets(
     cached.element,
     foundIndex,
@@ -537,10 +521,8 @@ export function rangeFromLocator(locator) {
     let locations = locator.locations;
     let text = locator.text;
     if (text && text.highlight) {
-      // Resolving within the locator's own element only walks that element's text
-      // nodes and reuses a cached concatenation of them, so it is tried before the
-      // offset path, which has to walk the whole body. It gives up rather than
-      // guessing when its context check cannot single out one occurrence.
+      // Tried first because it only walks the locator's own element, reusing a cached
+      // concatenation of its text, where the offset path below walks the whole body.
       var root;
       let ambiguousInElement = false;
       if (locations && locations.cssSelector) {
@@ -559,11 +541,8 @@ export function rangeFromLocator(locator) {
         }
       }
 
-      // The locator usually carries the exact character offsets of the word within
-      // the body text, which is the strongest evidence available for which
-      // occurrence was meant. Verify the surrounding context before trusting them,
-      // because the offsets are only accurate to within a few characters and a
-      // short repeated word resolves to a plausible neighbour otherwise (RR-8486).
+      // The context check is not redundant: these offsets are only accurate to within a few
+      // characters, so a short repeated word resolves to a plausible neighbour (RR-8486).
       if (
         locations &&
         Number.isFinite(locations.start) &&
@@ -578,8 +557,8 @@ export function rangeFromLocator(locator) {
         }
       }
 
-      // Neither the element's text nor the offsets could name a single occurrence,
-      // so the windowed search below would only pick one arbitrarily.
+      // Neither path could name a single occurrence, so the windowed search below would only
+      // pick one arbitrarily.
       if (ambiguousInElement) {
         throw new Error("Locator range could not be calculated");
       }
@@ -1069,9 +1048,8 @@ export function calculateHorizontalPageRanges() {
   function processTextContent(element, textContent) {
     const pageRightEdge = (currentPage + 1) * pageWidthValue;
 
-    // Split the text by spaces or dashes, keeping the delimiters, and record
-    // where each token starts so a token's rect can be resolved from its
-    // offsets rather than searched for by its text.
+    // Keeping the delimiters preserves each token's offset, so its rect resolves from that
+    // rather than from a search for its text.
     const tokens = [];
     let tokenOffset = 0;
     for (const part of textContent.split(/(\s|[-–—―‒])/g)) {
@@ -1109,9 +1087,8 @@ export function calculateHorizontalPageRanges() {
       );
     }
 
-    // Tokens flow left to right and wrap into later columns, so "extends past
-    // the page" only ever flips from false to true along the token order. That
-    // makes the split point a binary search instead of a walk back from the end.
+    // Tokens wrap into later columns in order, so "past the page edge" only ever flips false to
+    // true — the split point is a binary search, not a walk back from the end.
     let low = 0;
     let high = measurable.length - 1;
     let lastFitting = -1;

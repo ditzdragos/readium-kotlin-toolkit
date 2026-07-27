@@ -227,11 +227,8 @@ export function registerTemplates(newStyles) {
 }
 
 /**
- * A <br> contributes a line break when rendered but nothing at all to
- * textContent, so the word before it and the word after it arrive at the text
- * extractor stitched into one unmatchable token. Give each one an explicit
- * newline in the DOM, which — unlike rewriting innerHTML — does not depend on
- * whether the document serializes void elements as <br> or <br />.
+ * A <br> contributes nothing to textContent, so the words either side of it reach the extractor
+ * stitched into one unmatchable token. Give each one an explicit newline node.
  */
 function separateLineBreaks() {
   const lineBreaks = document.body.querySelectorAll("br");
