@@ -25,6 +25,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.os.BundleCompat
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
@@ -38,6 +39,7 @@ import androidx.webkit.WebResourceErrorCompat
 import androidx.webkit.WebViewClientCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.math.roundToInt
@@ -55,6 +57,7 @@ import org.readium.r2.navigator.R2WebView
 import org.readium.r2.navigator.Selection
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubNavigatorViewModel
+import org.readium.r2.navigator.epub.FixedLayoutViewport
 import org.readium.r2.navigator.epub.isJavascriptNullResult
 import org.readium.r2.navigator.extensions.htmlId
 import org.readium.r2.navigator.extensions.optRectF
@@ -94,6 +97,7 @@ internal class R2EpubPageFragment : Fragment() {
         private set
 
     private lateinit var containerView: View
+    private var viewDestroyed = false
     private val viewModel: EpubNavigatorViewModel by viewModels(
         ownerProducer = { requireParentFragment() }
     )
@@ -122,9 +126,6 @@ internal class R2EpubPageFragment : Fragment() {
             when (view) {
                 webView -> {
                     isLoading = false
-                    if (fixedLayout) {
-//                        view.let { injectCenteringJavaScript(it) }
-                    }
                     this@R2EpubPageFragment.onPageFinished() // Call the fragment's onPageFinished
                     link?.let {
                         webView?.listener?.onResourceLoaded(webView!!, it)
@@ -147,9 +148,6 @@ internal class R2EpubPageFragment : Fragment() {
 
                 webViewRight -> {
                     isLoadingRight = false
-                    if (fixedLayout) {
-//                        view.let { injectCenteringJavaScript(it) }
-                    }
                     rightLink?.let {
                         webViewRight?.listener?.onResourceLoaded(webViewRight!!, it)
                     }
@@ -274,6 +272,7 @@ internal class R2EpubPageFragment : Fragment() {
         }
 
         containerView = inflater.inflate(layoutRes, container, false)
+        viewDestroyed = false
 
         this.webView = containerView.findViewById(R.id.webView)
 
@@ -312,14 +311,46 @@ internal class R2EpubPageFragment : Fragment() {
         webView?.let { setupWebView(it, resourceUrl) }
         webViewRight?.let { setupWebView(it, rightResourceUrl) }
 
-        // At cold open, ViewPager materialises the current AND the two adjacent spreads at once,
-        // so three spreads' worth of LCP decrypt + image decode compete for CPU and heap — that
-        // contention slows first paint and triggers GC churn on memory-constrained devices
-        // (Chromebook). When this fragment is an offscreen neighbour of a spread that is still
-        // loading, defer loadUrl until the navigator releases it (visible spread ready), or until
-        // a fallback delay so neighbour preloading still happens if the visible page never
-        // finishes. When the visible spread is already loaded (steady-state swiping), neighbours
-        // load immediately as before.
+        if (fixedLayout) {
+            // The page has to be the right size on its first frame, not resized afterwards. The
+            // resource is normally already prewarmed, in which case nothing here suspends and the
+            // load starts in this same dispatch; only a cold-open page pays a resource read, and
+            // that read is the one the WebView is about to make anyway.
+            //
+            // The guard is on the view this call inflated, not on getView(): the fragment manager
+            // does not publish getView() until onCreateView returns, so a non-suspending run --
+            // the common, prewarmed one -- would see it null and skip the load entirely.
+            val spread = containerView
+            lifecycleScope.launch {
+                applyFixedLayoutAspectRatio()
+                if (!viewDestroyed && containerView === spread) startLoadingResources()
+            }
+        } else {
+            startLoadingResources()
+        }
+
+        // Forward a tap event when the web view is not ready to propagate the taps. This allows
+        // to toggle a navigation UI while a page is loading, for example.
+        containerView.setOnClickListenerWithPoint { _, point ->
+            webView?.listener?.onTap(point)
+        }
+
+        return containerView
+    }
+
+    /**
+     * Starts the spread's load, or defers it.
+     *
+     * At cold open, ViewPager materialises the current AND the two adjacent spreads at once, so
+     * three spreads' worth of LCP decrypt + image decode compete for CPU and heap — that
+     * contention slows first paint and triggers GC churn on memory-constrained devices
+     * (Chromebook). When this fragment is an offscreen neighbour of a spread that is still
+     * loading, defer loadUrl until the navigator releases it (visible spread ready), or until a
+     * fallback delay so neighbour preloading still happens if the visible page never finishes.
+     * When the visible spread is already loaded (steady-state swiping), neighbours load
+     * immediately as before.
+     */
+    private fun startLoadingResources() {
         if (navigator?.shouldDeferPageLoad(this) == true) {
             deferredLoadPending = true
             // The fallback delay guarantees neighbour preloading at cold open if the visible spread
@@ -331,14 +362,34 @@ internal class R2EpubPageFragment : Fragment() {
         } else {
             loadResources()
         }
+    }
 
-        // Forward a tap event when the web view is not ready to propagate the taps. This allows
-        // to toggle a navigation UI while a page is loading, for example.
-        containerView.setOnClickListenerWithPoint { _, point ->
-            webView?.listener?.onTap(point)
+    /**
+     * Sizes this spread's web view(s) to the aspect ratio of the page each one will show.
+     *
+     * The web view's own fit — `loadWithOverviewMode` — only fits the width, which is what leaves
+     * a page taller than its slot anchored at the top with its bottom edge cut off. Both
+     * dimensions are MATCH_CONSTRAINT in the spread layouts, so constraining the ratio makes the
+     * web view take the largest size that fits its slot at the page's proportions, centred by the
+     * ConstraintLayout — and fitting the width of a web view already that shape is a contain fit.
+     */
+    private suspend fun applyFixedLayoutAspectRatio() {
+        val navigator = navigator ?: return
+        webView?.let { view ->
+            resourceUrl?.let { applyAspectRatio(view, navigator.fixedLayoutViewport(it)) }
         }
+        webViewRight?.let { view ->
+            rightResourceUrl?.let { applyAspectRatio(view, navigator.fixedLayoutViewport(it)) }
+        }
+    }
 
-        return containerView
+    /** Leaves the web view filling its slot when the page declares no usable box. */
+    private fun applyAspectRatio(webView: R2WebView, viewport: FixedLayoutViewport?) {
+        if (viewport == null) return
+        val params = webView.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        params.dimensionRatio =
+            String.format(Locale.ROOT, "%.5f:%.5f", viewport.width, viewport.height)
+        webView.layoutParams = params
     }
 
     /** Starts loading the spread's resource(s) in the web view(s). */
@@ -406,9 +457,7 @@ internal class R2EpubPageFragment : Fragment() {
         if (fixedLayout) {
             webView.setBackgroundColor(Color.WHITE)
             webView.settings.textZoom = 100
-            webView.setInitialScale(1)
             webView.overScrollMode = View.OVER_SCROLL_NEVER
-            webView.zoomOut()
         } else {
             webView.settings.textZoom = textZoom
         }
@@ -492,6 +541,7 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        viewDestroyed = true
         webView?.listener = null
         webViewRight?.listener = null
 

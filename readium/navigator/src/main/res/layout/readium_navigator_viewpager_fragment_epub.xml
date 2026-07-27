@@ -11,11 +11,18 @@
     android:layout_gravity="center"
     android:focusable="false">
 
+    <!--
+      Both dimensions are MATCH_CONSTRAINT with all four sides constrained, so the web view fills
+      the slot until R2EpubPageFragment constrains its ratio to a fixed-layout page's declared box
+      — from then on it takes the largest size that still fits, centred.
+    -->
     <org.readium.r2.navigator.R2WebView
         android:id="@+id/webView"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

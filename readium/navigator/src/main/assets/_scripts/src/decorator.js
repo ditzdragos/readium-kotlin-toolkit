@@ -9,7 +9,6 @@ import {
   rectContainsPoint,
   toNativeRect,
 } from "./rect";
-import { setupScalingListeners } from "./scaling.js";
 import {
   DEBUG_MODE,
   getOCRCorrectedRect,
@@ -109,7 +108,6 @@ function setupViewportRelayoutListeners() {
 
   const onViewportChanged = () => requestGroupsLayout();
 
-  window.addEventListener("readium:viewport-changed", onViewportChanged);
   window.addEventListener("orientationchange", onViewportChanged, {
     passive: true,
   });
@@ -225,8 +223,6 @@ export function registerTemplates(newStyles) {
 
   processSpansForTextSpacing();
 
-  // Setup scaling listeners after initial DOM modifications
-  setupScalingListeners();
   setupViewportRelayoutListeners();
 }
 

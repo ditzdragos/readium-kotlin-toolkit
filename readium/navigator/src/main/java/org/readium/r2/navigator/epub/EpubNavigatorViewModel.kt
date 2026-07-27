@@ -261,6 +261,15 @@ internal class EpubNavigatorViewModel(
      * assets their HTML references) in the background, so the WebViews' first requests are
      * served from already-built Resources. See [WebViewServer.prewarm].
      */
+    /**
+     * The page box declared by the fixed-layout resource at [href], used to give its web view the
+     * page's aspect ratio. Returns without suspending once the resource has been prewarmed.
+     */
+    internal suspend fun fixedLayoutViewport(href: AbsoluteUrl): FixedLayoutViewport? {
+        val relative = (baseUrl.relativize(href) as? RelativeUrl) ?: return null
+        return server.fixedLayoutViewport(relative)
+    }
+
     fun prewarmResources(hrefs: List<Url>) {
         viewModelScope.launch(Dispatchers.IO) {
             hrefs.forEach { server.prewarm(it, css.value) }
@@ -492,6 +501,7 @@ internal class EpubNavigatorViewModel(
                 server = WebViewServer(
                     application,
                     publication,
+                    isFixedLayout = layout == EpubLayout.FIXED,
                     servedAssets = config.servedAssets,
                     disableSelectionWhenProtected = config.disableSelectionWhenProtected,
                     onResourceLoadFailed = { url, error ->
