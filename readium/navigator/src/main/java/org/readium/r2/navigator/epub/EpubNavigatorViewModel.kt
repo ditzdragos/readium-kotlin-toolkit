@@ -398,10 +398,13 @@ internal class EpubNavigatorViewModel(
 
     fun removeDecoration(group: String, id: DecorationId): RunScriptCommand {
         val decorations = this.decorations[group] ?: emptyList()
+        val href = decorations.firstOrNull { it.id == id }?.locator?.href
         this.decorations[group] = decorations.filter { it.id != id }
         return RunScriptCommand(
             script = "requestAnimationFrame(function () { readium.getDecorations('$group').clearEnhanced('$id');});",
-            scope = RunScriptCommand.Scope.LoadedResources
+            scope = href
+                ?.let { RunScriptCommand.Scope.LoadedResource(it) }
+                ?: RunScriptCommand.Scope.LoadedResources
         )
     }
 
