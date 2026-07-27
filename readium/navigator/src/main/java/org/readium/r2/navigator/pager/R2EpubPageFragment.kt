@@ -95,6 +95,7 @@ internal class R2EpubPageFragment : Fragment() {
         private set
 
     private lateinit var containerView: View
+    private var viewDestroyed = false
     private val viewModel: EpubNavigatorViewModel by viewModels(
         ownerProducer = { requireParentFragment() }
     )
@@ -269,6 +270,7 @@ internal class R2EpubPageFragment : Fragment() {
         }
 
         containerView = inflater.inflate(layoutRes, container, false)
+        viewDestroyed = false
 
         this.webView = containerView.findViewById(R.id.webView)
 
@@ -312,9 +314,14 @@ internal class R2EpubPageFragment : Fragment() {
             // resource is normally already prewarmed, in which case nothing here suspends and the
             // load starts in this same dispatch; only a cold-open page pays a resource read, and
             // that read is the one the WebView is about to make anyway.
+            //
+            // The guard is on the view this call inflated, not on getView(): the fragment manager
+            // does not publish getView() until onCreateView returns, so a non-suspending run --
+            // the common, prewarmed one -- would see it null and skip the load entirely.
+            val spread = containerView
             lifecycleScope.launch {
                 applyFixedLayoutAspectRatio()
-                if (view != null) startLoadingResources()
+                if (!viewDestroyed && containerView === spread) startLoadingResources()
             }
         } else {
             startLoadingResources()
@@ -518,6 +525,7 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        viewDestroyed = true
         webView?.listener = null
         webViewRight?.listener = null
 

@@ -191,12 +191,17 @@ internal class WebViewServer(
         val link = publication.linkWithHref(pageUrl) ?: return null
         if (link.mediaType?.isHtml != true) return null
 
+        // Only a page that was never prewarmed reaches here, and its read is a zip inflate plus,
+        // for an LCP title, a decrypt — so it goes off the main thread. The cache check above stays
+        // on the caller's thread, which is what keeps the warm path free of a suspension.
+        //
         // A read failure is deliberately not cached: the WebView is about to request the same
         // resource, and a transient failure should not pin this page full-bleed for the session.
-        val html = publication.get(pageUrl)
-            ?.use { it.read().getOrNull() }
-            ?.decodeToString()
-            ?: return null
+        val html = withContext(Dispatchers.IO) {
+            publication.get(pageUrl)
+                ?.use { it.read().getOrNull() }
+                ?.decodeToString()
+        } ?: return null
 
         return cacheFixedLayoutViewport(pageUrl, html)
     }
