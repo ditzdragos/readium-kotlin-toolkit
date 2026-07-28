@@ -5,16 +5,21 @@ import {
   isPageNumberText,
   isTitleNumber,
   isExplicitPageBreak,
+  isOcrOverlayNumber,
   shouldSkipPageNumber,
 } from "../src/pageNumber.mjs";
 
 const EPUB_OPS_NAMESPACE = "http://www.idpf.org/2007/ops";
 
-function element(tagName, { text = "", attributes = {}, parent = null } = {}) {
+function element(
+  tagName,
+  { text = "", attributes = {}, parent = null, className = "" } = {}
+) {
   return {
     tagName: tagName.toUpperCase(),
     textContent: text,
     parentElement: parent,
+    className,
     getAttribute: (name) => attributes[name] ?? null,
     getAttributeNS: (namespace, name) =>
       namespace === EPUB_OPS_NAMESPACE
@@ -199,6 +204,74 @@ describe("shouldSkipPageNumber", () => {
         isAtTopOrBottom: true,
       }),
       false
+    );
+  });
+});
+
+/**
+ * The markup below is the chapter opener of "Eerie Elementary #1: The School is
+ * Alive!" (9780545623940), page_0020.xhtml, read off a device: a scanned page
+ * whose every word is its own invisible overlay over the page image. The "3" of
+ * the chapter heading is printed at 13% of the page height, inside the top band.
+ */
+function ocrOverlay(text) {
+  const body = element("body", { text, className: "even book-type-fixed" });
+  const image = element("div", {
+    text,
+    className: "image-container",
+    parent: body,
+  });
+  const container = element("div", {
+    text,
+    className: "ocr-container",
+    parent: image,
+  });
+  return element("div", { text, className: "text-overlay", parent: container });
+}
+
+describe("isOcrOverlayNumber", () => {
+  it("matches a text overlay inside an OCR container", () => {
+    assert.equal(isOcrOverlayNumber(ocrOverlay("3")), true);
+  });
+
+  it("ignores an overlay that is not part of an OCR layer", () => {
+    const div = element("div", { text: "3", className: "text-overlay" });
+    assert.equal(isOcrOverlayNumber(div), false);
+  });
+
+  it("ignores ordinary markup", () => {
+    assert.equal(isOcrOverlayNumber(element("p", { text: "23" })), false);
+  });
+});
+
+describe("shouldSkipPageNumber in a scanned picture book", () => {
+  it("reads the chapter numeral of an OCR page (RR-7944)", () => {
+    assert.equal(
+      shouldSkipPageNumber({
+        text: "3",
+        before: "tick TOCK, tick TOCK\n",
+        after: "\nSam slammed his locker shut.",
+        element: ocrOverlay("3"),
+        isAtTopOrBottom: true,
+      }),
+      false
+    );
+  });
+
+  it("still skips a number the publication marks as a page break", () => {
+    const overlay = ocrOverlay("3");
+    overlay.getAttribute = (name) =>
+      name === "epub:type" ? "pagebreak" : null;
+
+    assert.equal(
+      shouldSkipPageNumber({
+        text: "3",
+        before: "",
+        after: "",
+        element: overlay,
+        isAtTopOrBottom: true,
+      }),
+      true
     );
   });
 });
