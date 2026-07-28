@@ -275,6 +275,20 @@ describe("evaluateSubstitution", () => {
     assert.equal(evaluateSubstitution(injectedDefaultFits).improves, false);
   });
 
+  it("gives pair-kerning back when the page was laid out with it", () => {
+    // The same stylesheet turns kerning off for every overlay. A book whose
+    // baked artwork was kerned is widened by that, by a fraction of a per cent
+    // per pair rather than by a whole face.
+    const unkernedTooWide = [1.012, 1.014, 1.011, 1.013].map((ratio) =>
+      sample({
+        boxWidth: 300,
+        textWidth: 300 * ratio,
+        substituteTextWidth: 300,
+      })
+    );
+    assert.equal(evaluateSubstitution(unkernedTooWide).improves, true);
+  });
+
   it("judges on the median, so one odd line cannot swing the page", () => {
     const mostlyFitting = [
       sample({ boxWidth: 300, textWidth: 300, substituteTextWidth: 273 }),
