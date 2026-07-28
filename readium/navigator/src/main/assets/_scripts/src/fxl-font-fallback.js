@@ -243,12 +243,27 @@ function unrenderableOverlays(context, textLines) {
   return groups;
 }
 
+/* How many rows a line is broken across as the page actually lays it out. */
+function rowCount(range, element) {
+  const tops = new Set();
+  range.selectNodeContents(element);
+  for (const rect of range.getClientRects()) {
+    if (rect.width > 1 && rect.height > 1) {
+      tops.add(Math.round(rect.top));
+    }
+  }
+  return Math.max(tops.size, 1);
+}
+
 /*
- * Natural width of each line and the width of the box holding it, laid out in
- * the given family. `nowrap` keeps a line that overflows its box measurable
- * instead of folding it onto a second row, and it is also what gives away a box
- * that merely shrinks to fit its text: that box moves between the two passes,
- * an authored one does not.
+ * How each line sits in its box, laid out as the given declarations ask for.
+ *
+ * Two observations, and they have to be taken in this order. First the page as
+ * it stands, to count the rows a line is broken across — the wrap is the damage,
+ * so it has to be measured where it happens. Then again under `nowrap`, which
+ * keeps a line that overflows measurable instead of folding it onto a second
+ * row, and which is also what gives away a box that merely shrinks to fit its
+ * text: that box moves between the passes, an authored one does not.
  */
 function measureLines(group, declarations) {
   const properties = declarations ? Object.keys(declarations) : [];
@@ -263,17 +278,22 @@ function measureLines(group, declarations) {
     whiteSpace: box.style.getPropertyValue("white-space"),
     whiteSpacePriority: box.style.getPropertyPriority("white-space"),
   }));
-  for (const { element, box } of group) {
-    box.style.setProperty("white-space", "nowrap", "important");
+  for (const { element } of group) {
     for (const property of properties) {
       element.style.setProperty(property, declarations[property], "important");
     }
   }
 
   const range = document.createRange();
-  const measurements = group.map(({ element, box, edges }) => {
+  const rows = group.map(({ element }) => rowCount(range, element));
+
+  for (const { box } of group) {
+    box.style.setProperty("white-space", "nowrap", "important");
+  }
+  const measurements = group.map(({ element, box, edges }, index) => {
     range.selectNodeContents(element);
     return {
+      rows: rows[index],
       boxWidth: contentWidth(box, edges),
       textWidth: range.getBoundingClientRect().width,
     };
@@ -300,13 +320,15 @@ function measureLines(group, declarations) {
   return measurements;
 }
 
-/* How each line fills its box now, against how it would fill it laid out this way. */
+/* How each line sits in its box now, against how it would sit laid out this way. */
 function fitAgainst(group, declarations) {
   const current = measureLines(group, null);
   const alternative = measureLines(group, declarations);
   return current.map((measurement, index) => ({
+    rows: measurement.rows,
     boxWidth: measurement.boxWidth,
     textWidth: measurement.textWidth,
+    substituteRows: alternative[index].rows,
     substituteBoxWidth: alternative[index].boxWidth,
     substituteTextWidth: alternative[index].textWidth,
   }));
@@ -401,6 +423,11 @@ function revertPageDefaultIfItHurts(textLines) {
  * one that reaches a publication rendering in a font it embeds itself, which
  * both font substitutions leave alone. A book whose artwork *was* kerned is
  * widened by it, so the same question is put to the same authored boxes.
+ *
+ * Asked last, once the page is wearing the face it is going to keep. Kerning
+ * moves a line by a fraction of a percent; a page overflowing because its font
+ * is 8% too wide would let it fire as a stand-in for the decision that actually
+ * belongs to the font, and then be judged on a rendering that no longer exists.
  */
 function kerningIsSuppressed() {
   return (
@@ -486,30 +513,30 @@ function correctOverlayMetrics() {
     return Promise.resolve();
   }
 
-  const textLines = textElements();
-  revertPageDefaultIfItHurts(textLines);
-  restoreKerningIfItHelps(textLines);
+  revertPageDefaultIfItHurts(textElements());
 
-  /* Re-read the page: the two corrections above may have changed what it wears. */
+  /* Re-read the page: the correction above may have changed what it wears. */
   const groups = unrenderableOverlays(context, textElements());
   if (groups.size === 0) {
-    return Promise.resolve();
+    return Promise.resolve(restoreKerningIfItHelps(textElements()));
   }
 
-  return loadAll(cloneFaces(MEASUREMENT_FAMILY, directory)).then(() => {
-    const substituted = [];
-    for (const [family, group] of groups) {
-      if (
-        fitsBetter(group, { "font-family": quoteFamily(MEASUREMENT_FAMILY) })
-      ) {
-        substituted.push.apply(substituted, cloneFaces(family, directory));
+  return loadAll(cloneFaces(MEASUREMENT_FAMILY, directory))
+    .then(() => {
+      const substituted = [];
+      for (const [family, group] of groups) {
+        if (
+          fitsBetter(group, { "font-family": quoteFamily(MEASUREMENT_FAMILY) })
+        ) {
+          substituted.push.apply(substituted, cloneFaces(family, directory));
+        }
       }
-    }
-    if (substituted.length === 0) {
-      return undefined;
-    }
-    return loadAll(substituted).then(() => document.fonts.ready);
-  });
+      if (substituted.length === 0) {
+        return undefined;
+      }
+      return loadAll(substituted).then(() => document.fonts.ready);
+    })
+    .then(() => restoreKerningIfItHelps(textElements()));
 }
 
 /*

@@ -19,8 +19,28 @@ function sample({
   textWidth = 300,
   substituteBoxWidth = boxWidth,
   substituteTextWidth = textWidth,
+  rows = 1,
+  substituteRows = 1,
 } = {}) {
-  return { boxWidth, textWidth, substituteBoxWidth, substituteTextWidth };
+  return {
+    boxWidth,
+    textWidth,
+    substituteBoxWidth,
+    substituteTextWidth,
+    rows,
+    substituteRows,
+  };
+}
+
+/* A line as the page lays it out: it wraps exactly when it overruns its box. */
+function line({ boxWidth = 300, fill, substituteFill }) {
+  return sample({
+    boxWidth,
+    textWidth: boxWidth * fill,
+    substituteTextWidth: boxWidth * substituteFill,
+    rows: fill > 1 ? 2 : 1,
+    substituteRows: substituteFill > 1 ? 2 : 1,
+  });
 }
 
 describe("parseFamilyList", () => {
@@ -297,5 +317,40 @@ describe("evaluateSubstitution", () => {
       sample({ boxWidth: 300, textWidth: 420, substituteTextWidth: 300 }),
     ];
     assert.equal(evaluateSubstitution(mostlyFitting).improves, false);
+  });
+
+  it("takes the rendering that wraps fewer lines, whatever the median says", () => {
+    // Measured on page_0011 of the book RR-7953 was reported against: nine
+    // justified lines, four of them overrunning their box and three wrapping,
+    // and every line ~9% narrower under the clone, which wraps none of them.
+    //
+    // The median cannot see that. These boxes are justified, so a line narrower
+    // than its box is stretched back out to fill it and the fill of the six
+    // lines that were never in trouble is what the median reports — 0.995 now
+    // against 0.918 with the clone. Going by that alone keeps the rendering
+    // that wraps, which is the whole of the bug.
+    const blackLagoon = [
+      0.906, 0.914, 0.927, 0.937, 0.995, 1.012, 1.046, 1.071, 1.074,
+    ].map((fill) => line({ fill, substituteFill: fill * 0.9083 }));
+
+    const verdict = evaluateSubstitution(blackLagoon);
+    assert.equal(verdict.wrapped, 4);
+    assert.equal(verdict.wrappedAfter, 0);
+    assert.equal(verdict.currentError < verdict.substituteError, true);
+    assert.equal(verdict.improves, true);
+  });
+
+  it("will not trade a fill it likes for a line that wraps", () => {
+    // The same rule read the other way: an alternative that sits closer to the
+    // authored width is still the wrong one if getting there overruns the box.
+    const wouldOverflow = [0.93, 0.94, 0.93, 0.935].map((fill) =>
+      line({ fill, substituteFill: fill * 1.09 })
+    );
+
+    const verdict = evaluateSubstitution(wouldOverflow);
+    assert.equal(verdict.wrapped, 0);
+    assert.equal(verdict.wrappedAfter, 4);
+    assert.equal(verdict.substituteError < verdict.currentError, true);
+    assert.equal(verdict.improves, false);
   });
 });

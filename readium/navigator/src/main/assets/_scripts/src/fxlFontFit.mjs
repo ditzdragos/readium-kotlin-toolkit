@@ -200,8 +200,16 @@ export function fitError(ratios) {
 }
 
 /**
- * Whether re-pointing these overlays at the clone measurably improves how well
- * their text fills the boxes the publisher authored.
+ * Whether re-pointing these overlays at the clone measurably improves how they
+ * sit in the boxes the publisher authored.
+ *
+ * Lines that wrap decide it first. A line whose text overruns its box folds its
+ * last word onto a second row and takes every following word with it, which is
+ * the failure RR-7953 chased; a line merely narrower than its box is off by the
+ * slack, and on the justified overlays these books use most of that slack is
+ * taken back by the stretching the layout does anyway. So a rendering that
+ * wraps fewer lines wins outright, however each one fills its box, and only
+ * when both wrap the same number does the closer fill decide.
  *
  * Returns `null` when the page offers no authored box to judge against, as with
  * overlays that size themselves to their text. Substituting then is a guess,
@@ -216,6 +224,10 @@ export function evaluateSubstitution(
   if (usable.length === 0) {
     return null;
   }
+  const wrapped = usable.filter((sample) => sample.rows > 1).length;
+  const wrappedAfter = usable.filter(
+    (sample) => sample.substituteRows > 1
+  ).length;
   const currentError = fitError(
     usable.map((sample) => sample.textWidth / sample.boxWidth)
   );
@@ -224,8 +236,13 @@ export function evaluateSubstitution(
   );
   return {
     samples: usable.length,
+    wrapped,
+    wrappedAfter,
     currentError,
     substituteError,
-    improves: substituteError + minImprovement < currentError,
+    improves:
+      wrappedAfter === wrapped
+        ? substituteError + minImprovement < currentError
+        : wrappedAfter < wrapped,
   };
 }
