@@ -842,12 +842,9 @@ export function logError(message) {
 /**
  * Resolves the page box the OCR overlay percentages are relative to.
  *
- * Titles that lay the overlays over an `<img>` give the reference directly. Others wrap
- * the page in an `.ocr-container` whose children are all absolutely positioned, leaving
- * the container itself with no in-flow content and a 0x0 box; the page box is then the
- * container's own sized child, which carries both the page dimensions and the container's
- * offset. Falling back to an ancestor keeps a usable reference for any other markup, at
- * the cost of that offset.
+ * An `.ocr-container` whose children are all absolutely positioned has no in-flow content
+ * and a 0x0 box; its sized child then carries both the page dimensions and the container's
+ * offset. An ancestor is a last resort, as it loses that offset.
  *
  * @param {Element} ocrContainer
  * @returns {DOMRect | null}
