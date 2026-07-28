@@ -14,6 +14,62 @@ matchAll.shim();
 
 const debug = true;
 
+// Last stationary press, used to resolve the word under the finger when a selection
+// starts. Registered eagerly rather than on `load`, so that a press landing before the
+// resource finished loading is still recorded.
+let lastPress = null;
+
+const PRESS_MOVE_TOLERANCE = 10;
+
+// The engine selects the pressed word first and only then widens the selection, so the
+// snap has to stay armed for a moment after the press.
+const PRESS_SNAP_WINDOW_MS = 1500;
+
+function onPressStart(x, y) {
+  lastPress = { x, y, moved: false, time: Date.now() };
+}
+
+function onPressMove(x, y) {
+  if (!lastPress || lastPress.moved) return;
+  if (
+    Math.abs(x - lastPress.x) > PRESS_MOVE_TOLERANCE ||
+    Math.abs(y - lastPress.y) > PRESS_MOVE_TOLERANCE
+  ) {
+    lastPress.moved = true;
+  }
+}
+
+const PRESS_LISTENER_OPTIONS = { capture: true, passive: true };
+
+document.addEventListener(
+  "touchstart",
+  (event) => {
+    const touch = event.touches[0];
+    if (touch) onPressStart(touch.clientX, touch.clientY);
+  },
+  PRESS_LISTENER_OPTIONS
+);
+document.addEventListener(
+  "touchmove",
+  (event) => {
+    const touch = event.touches[0];
+    if (touch) onPressMove(touch.clientX, touch.clientY);
+  },
+  PRESS_LISTENER_OPTIONS
+);
+document.addEventListener(
+  "mousedown",
+  (event) => onPressStart(event.clientX, event.clientY),
+  PRESS_LISTENER_OPTIONS
+);
+document.addEventListener(
+  "mousemove",
+  (event) => onPressMove(event.clientX, event.clientY),
+  PRESS_LISTENER_OPTIONS
+);
+
+document.addEventListener("selectionchange", snapSelectionToPressedWord);
+
 // Notify native code that the selection changes.
 window.addEventListener(
   "load",
@@ -35,6 +91,75 @@ window.addEventListener(
   },
   false
 );
+
+const WORD_CHARACTER_REGEX = /[\p{L}\p{N}'’-]/u;
+const LETTER_OR_DIGIT_REGEX = /[\p{L}\p{N}]/u;
+
+function isWordCharacter(character) {
+  return character !== undefined && WORD_CHARACTER_REGEX.test(character);
+}
+
+// A long press over a block whose text is a single node makes the engine select the whole
+// block instead of a word. Reduce such a selection to the word that was actually pressed.
+function snapSelectionToPressedWord() {
+  try {
+    if (!isPressStationary()) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      return;
+    }
+    if (!/\s/.test(selection.toString().trim())) {
+      return;
+    }
+    const word = pressedWord();
+    if (!word) {
+      return;
+    }
+    // Ignore a press that no longer points inside what is selected.
+    if (selection.getRangeAt(0).comparePoint(word.node, word.start) !== 0) {
+      return;
+    }
+    selection.setBaseAndExtent(word.node, word.start, word.node, word.end);
+  } catch (e) {
+    if (DEBUG_MODE) logError(e);
+  }
+}
+
+function isPressStationary() {
+  return (
+    lastPress !== null &&
+    !lastPress.moved &&
+    Date.now() - lastPress.time <= PRESS_SNAP_WINDOW_MS
+  );
+}
+
+function pressedWord() {
+  if (!document.caretRangeFromPoint) {
+    return null;
+  }
+  const caret = document.caretRangeFromPoint(lastPress.x, lastPress.y);
+  if (!caret || caret.startContainer.nodeType !== Node.TEXT_NODE) {
+    return null;
+  }
+  const node = caret.startContainer;
+  const text = node.data;
+  let index = caret.startOffset;
+  if (!isWordCharacter(text[index]) && isWordCharacter(text[index - 1])) {
+    index -= 1;
+  }
+  if (!isWordCharacter(text[index])) {
+    return null;
+  }
+  let start = index;
+  let end = index + 1;
+  while (start > 0 && isWordCharacter(text[start - 1])) start -= 1;
+  while (end < text.length && isWordCharacter(text[end])) end += 1;
+  while (start < end && !LETTER_OR_DIGIT_REGEX.test(text[start])) start += 1;
+  while (end > start && !LETTER_OR_DIGIT_REGEX.test(text[end - 1])) end -= 1;
+  return start < end ? { node, start, end } : null;
+}
 
 export function getCurrentSelection() {
   const text = getCurrentSelectionText();
