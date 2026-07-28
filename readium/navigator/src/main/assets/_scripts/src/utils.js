@@ -840,6 +840,48 @@ export function logError(message) {
 }
 
 /**
+ * Resolves the page box the OCR overlay percentages are relative to.
+ *
+ * An `.ocr-container` whose children are all absolutely positioned has no in-flow content
+ * and a 0x0 box; its sized child then carries both the page dimensions and the container's
+ * offset. An ancestor is a last resort, as it loses that offset.
+ *
+ * @param {Element} ocrContainer
+ * @returns {DOMRect | null}
+ */
+function getOCRReferenceRect(ocrContainer) {
+  const hasArea = (rect) => rect.width > 0 && rect.height > 0;
+
+  const img = ocrContainer.querySelector("img");
+  if (img && hasArea(img.getBoundingClientRect())) {
+    return img.getBoundingClientRect();
+  }
+
+  const containerRect = ocrContainer.getBoundingClientRect();
+  if (hasArea(containerRect)) {
+    return containerRect;
+  }
+
+  for (const child of ocrContainer.children) {
+    const childRect = child.getBoundingClientRect();
+    if (hasArea(childRect)) {
+      return childRect;
+    }
+  }
+
+  let element = ocrContainer.parentElement;
+  while (element) {
+    const rect = element.getBoundingClientRect();
+    if (hasArea(rect)) {
+      return rect;
+    }
+    element = element.parentElement;
+  }
+
+  return null;
+}
+
+/**
  * Calculates corrected viewport coordinates for OCR text-overlay elements.
  *
  * Returns null when the range is not inside an OCR overlay.
@@ -870,10 +912,10 @@ export function getOCRCorrectedRect(range) {
     return null;
   }
 
-  const img = ocrContainer.querySelector("img");
-  const containerRect = img
-    ? img.getBoundingClientRect()
-    : ocrContainer.getBoundingClientRect();
+  const containerRect = getOCRReferenceRect(ocrContainer);
+  if (!containerRect) {
+    return null;
+  }
 
   const styleTop = textOverlayElement.style.top;
   const styleLeft = textOverlayElement.style.left;
