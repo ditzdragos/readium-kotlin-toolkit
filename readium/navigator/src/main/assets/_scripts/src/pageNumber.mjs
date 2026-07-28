@@ -33,6 +33,9 @@ const TITLE_EPUB_TYPES = new Set([
 const PAGE_BREAK_ROLES = new Set(["doc-pagebreak"]);
 const PAGE_BREAK_EPUB_TYPES = new Set(["pagebreak", "page-break"]);
 
+const OCR_OVERLAY_CLASS = "text-overlay";
+const OCR_CONTAINER_CLASS = "ocr-container";
+
 export function isPageNumberText(text) {
   return !!text && PAGE_NUMBER_REGEX.test(text.trim());
 }
@@ -94,6 +97,31 @@ export function isTitleNumber(element) {
   );
 }
 
+function hasClass(element, name) {
+  const value = element.className;
+  if (typeof value !== "string") return false;
+  return value.trim().split(/\s+/).includes(name);
+}
+
+/**
+ * A number inside the invisible OCR text layer that scanned picture books lay
+ * over the page image: a `.text-overlay` within an `.ocr-container`.
+ *
+ * Every word of such a page is its own absolutely positioned overlay, so the
+ * isolation tests below are true of the whole page and carry no information —
+ * they would reduce the decision to "a digit somewhere near the top or bottom",
+ * which is where a chapter's numeral is printed. Those books keep their folio
+ * in the page image rather than the text layer, so nothing is lost by reading
+ * every digit the OCR did capture.
+ */
+export function isOcrOverlayNumber(element) {
+  if (!element) return false;
+  return (
+    matchesAncestor(element, (node) => hasClass(node, OCR_OVERLAY_CLASS)) &&
+    matchesAncestor(element, (node) => hasClass(node, OCR_CONTAINER_CLASS))
+  );
+}
+
 function isDomIsolated(element, text) {
   if (!element || typeof element.textContent !== "string") return false;
   const elementText = element.textContent.trim();
@@ -148,7 +176,10 @@ export function shouldSkipPageNumber({
   isAtTopOrBottom = false,
 }) {
   if (!isPageNumberText(text)) return false;
-  if (!isExplicitPageBreak(element) && isTitleNumber(element)) return false;
+  if (!isExplicitPageBreak(element)) {
+    if (isTitleNumber(element)) return false;
+    if (isOcrOverlayNumber(element)) return false;
+  }
   if (!isAtTopOrBottom) return false;
   return isIsolatedPageNumber({ text, before, after, element });
 }
