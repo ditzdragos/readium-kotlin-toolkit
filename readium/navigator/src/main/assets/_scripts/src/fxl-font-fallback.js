@@ -41,6 +41,13 @@
  * walks the underline left of the word instead of right of it. No authored
  * width to measure against means no evidence, and no evidence means leaving the
  * page as it is.
+ *
+ * The same second question is owed to `fxl-default-serif.css`, which makes the
+ * clone the page-wide default for overlays that name no font at all (RR-6369).
+ * That default is the same bet on Times metrics, made without measuring, so a
+ * book whose artwork is set in a sans face is moved off its artwork by it. Once
+ * the page has been measured, a default that fits worse than what the WebView
+ * would have used is put back.
  */
 
 import {
@@ -156,7 +163,7 @@ function contentWidth(box, edges) {
   return width - edges * scale;
 }
 
-/* Every element holding text of its own, with the families it asks for. */
+/* Every element holding text of its own, with the families it ends up asking for. */
 function textElements() {
   const found = [];
   const elements = document.body ? document.body.querySelectorAll("*") : [];
@@ -167,19 +174,32 @@ function textElements() {
     }
     const style = window.getComputedStyle(element);
     const families = parseFamilyList(style.fontFamily).filter(isNamedFamily);
-    if (families.length > 0) {
-      found.push({ element, style, families, text });
-    }
+    found.push({ element, style, families, text });
   }
   return found;
+}
+
+/* A line, and the box to measure it against, ready for `measureLines`. */
+function sampleFor(element, style) {
+  const box = boxElementFor(element);
+  if (!box) {
+    return null;
+  }
+  return {
+    element,
+    box,
+    edges: horizontalEdges(
+      box === element ? style : window.getComputedStyle(box)
+    ),
+  };
 }
 
 /*
  * Overlay lines that cannot render in any face they name, grouped by the name
  * to register the clone under — the first, so the registration wins the stack.
  */
-function unrenderableOverlays(context) {
-  const candidates = textElements();
+function unrenderableOverlays(context, textLines) {
+  const candidates = textLines.filter(({ families }) => families.length > 0);
 
   /*
    * A publication that wraps each word in its own span leaves too few
@@ -208,19 +228,13 @@ function unrenderableOverlays(context) {
     if (families.some(renders)) {
       continue;
     }
-    const box = boxElementFor(element);
-    if (!box) {
+    const sample = sampleFor(element, style);
+    if (!sample) {
       continue;
     }
     const group = groups.get(families[0]) || [];
     if (group.length < MAX_SAMPLES_PER_FAMILY) {
-      group.push({
-        element,
-        box,
-        edges: horizontalEdges(
-          box === element ? style : window.getComputedStyle(box)
-        ),
-      });
+      group.push(sample);
       groups.set(families[0], group);
     }
   }
@@ -293,6 +307,93 @@ function fitSamples(group) {
   }));
 }
 
+/* What `fxl-default-serif.css` leaves as the page's font-family. */
+const INJECTED_DEFAULT = ["times new roman", "serif"];
+
+/* What the WebView would have drawn the unstyled text in without it. */
+const USER_AGENT_DEFAULT = "initial";
+
+function pageDefaultIsInjected() {
+  const families = parseFamilyList(
+    window.getComputedStyle(document.documentElement).fontFamily
+  ).map((family) => family.toLowerCase());
+  return (
+    families.length === INJECTED_DEFAULT.length &&
+    families.every((family, index) => family === INJECTED_DEFAULT[index])
+  );
+}
+
+function setRootFamily(value, priority) {
+  if (value) {
+    document.documentElement.style.setProperty("font-family", value, priority);
+  } else {
+    document.documentElement.style.removeProperty("font-family");
+  }
+}
+
+/*
+ * The lines wearing the page default, found by moving the root's family and
+ * seeing which lines move with it. Asked that way rather than by matching the
+ * default's name, so a publication that asks for Times itself is left holding
+ * its own choice.
+ */
+function linesInheritingPageDefault(textLines) {
+  const before = textLines.map(
+    ({ element }) => window.getComputedStyle(element).fontFamily
+  );
+  const saved = {
+    value: document.documentElement.style.getPropertyValue("font-family"),
+    priority: document.documentElement.style.getPropertyPriority("font-family"),
+  };
+  setRootFamily(USER_AGENT_DEFAULT, "important");
+  const moved = textLines.filter(
+    ({ element }, index) =>
+      window.getComputedStyle(element).fontFamily !== before[index]
+  );
+  setRootFamily(saved.value, saved.priority);
+
+  const samples = [];
+  for (const { element, style } of moved) {
+    const sample = sampleFor(element, style);
+    if (sample) {
+      samples.push(sample);
+    }
+    if (samples.length === MAX_SAMPLES_PER_FAMILY) {
+      break;
+    }
+  }
+  return samples;
+}
+
+/*
+ * Hands the page default back to the WebView where the publication's unstyled
+ * lines fill their authored boxes better without the injected one. Set inline
+ * on the root, which supplies only what the publication left unsaid: a family
+ * the page declares for itself still wins, exactly as it did before.
+ */
+function revertPageDefaultIfItHurts(textLines) {
+  if (!pageDefaultIsInjected()) {
+    return;
+  }
+  const group = linesInheritingPageDefault(textLines);
+  if (group.length === 0) {
+    return;
+  }
+  const current = measureLines(group, null);
+  const reverted = measureLines(group, USER_AGENT_DEFAULT);
+  const verdict = evaluateSubstitution(
+    current.map((measurement, index) => ({
+      boxWidth: measurement.boxWidth,
+      textWidth: measurement.textWidth,
+      substituteBoxWidth: reverted[index].boxWidth,
+      substituteTextWidth: reverted[index].textWidth,
+    }))
+  );
+  if (verdict && verdict.improves) {
+    setRootFamily(USER_AGENT_DEFAULT, "");
+  }
+}
+
 function cloneFaces(family, directory) {
   const faces = [];
   for (const face of CLONE_FACES) {
@@ -341,14 +442,17 @@ function stylesheetsSettled() {
   return Promise.all(pending);
 }
 
-function substituteWhereItFits() {
+function correctOverlayMetrics() {
   const directory = cloneFontDirectory();
   const context = document.createElement("canvas").getContext("2d");
   if (!directory || !context) {
     return Promise.resolve();
   }
 
-  const groups = unrenderableOverlays(context);
+  const textLines = textElements();
+  revertPageDefaultIfItHurts(textLines);
+
+  const groups = unrenderableOverlays(context, textLines);
   if (groups.size === 0) {
     return Promise.resolve();
   }
@@ -368,9 +472,21 @@ function substituteWhereItFits() {
   });
 }
 
+/*
+ * Nothing can be measured, or asked to render, until the faces the page and the
+ * injected default point at have finished loading: a face still in flight
+ * measures as whatever is standing in for it.
+ */
+function fontsSettled() {
+  return document.fonts.ready.catch(() => {});
+}
+
 export function applyFontFallback() {
   if (typeof FontFace === "undefined" || !document.fonts) {
     return Promise.resolve();
   }
-  return documentParsed().then(stylesheetsSettled).then(substituteWhereItFits);
+  return documentParsed()
+    .then(stylesheetsSettled)
+    .then(fontsSettled)
+    .then(correctOverlayMetrics);
 }
