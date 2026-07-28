@@ -47,7 +47,9 @@
  * That default is the same bet on Times metrics, made without measuring, so a
  * book whose artwork is set in a sans face is moved off its artwork by it. Once
  * the page has been measured, a default that fits worse than what the WebView
- * would have used is put back.
+ * would have used is put back — as is the pair-kerning the same stylesheet
+ * turns off, which is the one correction that reaches a publication rendering
+ * in a font it embeds itself.
  */
 
 import {
@@ -248,19 +250,23 @@ function unrenderableOverlays(context, textLines) {
  * that merely shrinks to fit its text: that box moves between the two passes,
  * an authored one does not.
  */
-function measureLines(group, family) {
+function measureLines(group, declarations) {
+  const properties = declarations ? Object.keys(declarations) : [];
   const restore = group.map(({ element, box }) => ({
     element,
     box,
-    fontFamily: element.style.getPropertyValue("font-family"),
-    fontPriority: element.style.getPropertyPriority("font-family"),
+    declared: properties.map((property) => ({
+      property,
+      value: element.style.getPropertyValue(property),
+      priority: element.style.getPropertyPriority(property),
+    })),
     whiteSpace: box.style.getPropertyValue("white-space"),
     whiteSpacePriority: box.style.getPropertyPriority("white-space"),
   }));
   for (const { element, box } of group) {
     box.style.setProperty("white-space", "nowrap", "important");
-    if (family) {
-      element.style.setProperty("font-family", family, "important");
+    for (const property of properties) {
+      element.style.setProperty(property, declarations[property], "important");
     }
   }
 
@@ -274,14 +280,12 @@ function measureLines(group, family) {
   });
 
   for (const saved of restore) {
-    if (saved.fontFamily) {
-      saved.element.style.setProperty(
-        "font-family",
-        saved.fontFamily,
-        saved.fontPriority
-      );
-    } else {
-      saved.element.style.removeProperty("font-family");
+    for (const { property, value, priority } of saved.declared) {
+      if (value) {
+        saved.element.style.setProperty(property, value, priority);
+      } else {
+        saved.element.style.removeProperty(property);
+      }
     }
     if (saved.whiteSpace) {
       saved.box.style.setProperty(
@@ -296,15 +300,21 @@ function measureLines(group, family) {
   return measurements;
 }
 
-function fitSamples(group) {
+/* How each line fills its box now, against how it would fill it laid out this way. */
+function fitAgainst(group, declarations) {
   const current = measureLines(group, null);
-  const substitute = measureLines(group, quoteFamily(MEASUREMENT_FAMILY));
+  const alternative = measureLines(group, declarations);
   return current.map((measurement, index) => ({
     boxWidth: measurement.boxWidth,
     textWidth: measurement.textWidth,
-    substituteBoxWidth: substitute[index].boxWidth,
-    substituteTextWidth: substitute[index].textWidth,
+    substituteBoxWidth: alternative[index].boxWidth,
+    substituteTextWidth: alternative[index].textWidth,
   }));
+}
+
+function fitsBetter(group, declarations) {
+  const verdict = evaluateSubstitution(fitAgainst(group, declarations));
+  return verdict !== null && verdict.improves;
 }
 
 /* What `fxl-default-serif.css` leaves as the page's font-family. */
@@ -376,22 +386,49 @@ function revertPageDefaultIfItHurts(textLines) {
     return;
   }
   const group = linesInheritingPageDefault(textLines);
-  if (group.length === 0) {
-    return;
-  }
-  const current = measureLines(group, null);
-  const reverted = measureLines(group, USER_AGENT_DEFAULT);
-  const verdict = evaluateSubstitution(
-    current.map((measurement, index) => ({
-      boxWidth: measurement.boxWidth,
-      textWidth: measurement.textWidth,
-      substituteBoxWidth: reverted[index].boxWidth,
-      substituteTextWidth: reverted[index].textWidth,
-    }))
-  );
-  if (verdict && verdict.improves) {
+  if (
+    group.length > 0 &&
+    fitsBetter(group, { "font-family": USER_AGENT_DEFAULT })
+  ) {
     setRootFamily(USER_AGENT_DEFAULT, "");
   }
+}
+
+/*
+ * `fxl-default-serif.css` also turns pair-kerning off for every overlay, on the
+ * evidence of a book whose baked artwork was laid out without it (RR-6369).
+ * That is another metric imposed on the page without asking it — and the only
+ * one that reaches a publication rendering in a font it embeds itself, which
+ * both font substitutions leave alone. A book whose artwork *was* kerned is
+ * widened by it, so the same question is put to the same authored boxes.
+ */
+function kerningIsSuppressed() {
+  return (
+    !!document.body &&
+    window.getComputedStyle(document.body).fontKerning === "none"
+  );
+}
+
+function restoreKerningIfItHelps(textLines) {
+  if (!kerningIsSuppressed()) {
+    return;
+  }
+  const group = [];
+  for (const { element, style } of textLines) {
+    const sample = sampleFor(element, style);
+    if (sample) {
+      group.push(sample);
+    }
+    if (group.length === MAX_SAMPLES_PER_FAMILY) {
+      break;
+    }
+  }
+  if (group.length === 0 || !fitsBetter(group, { "font-kerning": "normal" })) {
+    return;
+  }
+  const override = document.createElement("style");
+  override.textContent = "* { font-kerning: normal; }";
+  (document.head || document.documentElement).appendChild(override);
 }
 
 function cloneFaces(family, directory) {
@@ -451,8 +488,10 @@ function correctOverlayMetrics() {
 
   const textLines = textElements();
   revertPageDefaultIfItHurts(textLines);
+  restoreKerningIfItHelps(textLines);
 
-  const groups = unrenderableOverlays(context, textLines);
+  /* Re-read the page: the two corrections above may have changed what it wears. */
+  const groups = unrenderableOverlays(context, textElements());
   if (groups.size === 0) {
     return Promise.resolve();
   }
@@ -460,8 +499,9 @@ function correctOverlayMetrics() {
   return loadAll(cloneFaces(MEASUREMENT_FAMILY, directory)).then(() => {
     const substituted = [];
     for (const [family, group] of groups) {
-      const verdict = evaluateSubstitution(fitSamples(group));
-      if (verdict && verdict.improves) {
+      if (
+        fitsBetter(group, { "font-family": quoteFamily(MEASUREMENT_FAMILY) })
+      ) {
         substituted.push.apply(substituted, cloneFaces(family, directory));
       }
     }
