@@ -247,6 +247,34 @@ describe("evaluateSubstitution", () => {
     assert.equal(evaluateSubstitution([]), null);
   });
 
+  it("hands the page default back when the injected serif runs narrow", () => {
+    // RR-6369 makes the Times clone the default for text the publication left
+    // unstyled. A book whose artwork is set in a sans face is dragged off it:
+    // here the clone covers 92% of each authored box and what the WebView would
+    // have used covers all of it.
+    const injectedDefaultTooNarrow = [0.92, 0.918, 0.923, 0.921].map((ratio) =>
+      sample({
+        boxWidth: 300,
+        textWidth: 300 * ratio,
+        substituteTextWidth: 300,
+      })
+    );
+    assert.equal(evaluateSubstitution(injectedDefaultTooNarrow).improves, true);
+  });
+
+  it("keeps the page default on the books it was added for", () => {
+    // The same measurement on Times-metric artwork: the clone fills the boxes
+    // and the WebView's own sans overruns them by ~8%.
+    const injectedDefaultFits = [1.0, 0.999, 1.001, 1.0].map((ratio) =>
+      sample({
+        boxWidth: 300,
+        textWidth: 300 * ratio,
+        substituteTextWidth: 300 * 1.087,
+      })
+    );
+    assert.equal(evaluateSubstitution(injectedDefaultFits).improves, false);
+  });
+
   it("judges on the median, so one odd line cannot swing the page", () => {
     const mostlyFitting = [
       sample({ boxWidth: 300, textWidth: 300, substituteTextWidth: 273 }),
