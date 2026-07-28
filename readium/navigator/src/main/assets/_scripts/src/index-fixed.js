@@ -7,5 +7,8 @@
 // Script used for fixed layouts resources.
 
 import "./index";
+import { applyFontFallback } from "./fxl-font-fallback";
 
 window.readium.isFixedLayout = true;
+
+applyFontFallback();
