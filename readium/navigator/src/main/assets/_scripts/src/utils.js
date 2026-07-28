@@ -840,6 +840,51 @@ export function logError(message) {
 }
 
 /**
+ * Resolves the page box the OCR overlay percentages are relative to.
+ *
+ * Titles that lay the overlays over an `<img>` give the reference directly. Others wrap
+ * the page in an `.ocr-container` whose children are all absolutely positioned, leaving
+ * the container itself with no in-flow content and a 0x0 box; the page box is then the
+ * container's own sized child, which carries both the page dimensions and the container's
+ * offset. Falling back to an ancestor keeps a usable reference for any other markup, at
+ * the cost of that offset.
+ *
+ * @param {Element} ocrContainer
+ * @returns {DOMRect | null}
+ */
+function getOCRReferenceRect(ocrContainer) {
+  const hasArea = (rect) => rect.width > 0 && rect.height > 0;
+
+  const img = ocrContainer.querySelector("img");
+  if (img && hasArea(img.getBoundingClientRect())) {
+    return img.getBoundingClientRect();
+  }
+
+  const containerRect = ocrContainer.getBoundingClientRect();
+  if (hasArea(containerRect)) {
+    return containerRect;
+  }
+
+  for (const child of ocrContainer.children) {
+    const childRect = child.getBoundingClientRect();
+    if (hasArea(childRect)) {
+      return childRect;
+    }
+  }
+
+  let element = ocrContainer.parentElement;
+  while (element) {
+    const rect = element.getBoundingClientRect();
+    if (hasArea(rect)) {
+      return rect;
+    }
+    element = element.parentElement;
+  }
+
+  return null;
+}
+
+/**
  * Calculates corrected viewport coordinates for OCR text-overlay elements.
  *
  * Returns null when the range is not inside an OCR overlay.
@@ -870,10 +915,10 @@ export function getOCRCorrectedRect(range) {
     return null;
   }
 
-  const img = ocrContainer.querySelector("img");
-  const containerRect = img
-    ? img.getBoundingClientRect()
-    : ocrContainer.getBoundingClientRect();
+  const containerRect = getOCRReferenceRect(ocrContainer);
+  if (!containerRect) {
+    return null;
+  }
 
   const styleTop = textOverlayElement.style.top;
   const styleLeft = textOverlayElement.style.left;
