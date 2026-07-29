@@ -109,6 +109,34 @@ export function isNamedFamily(family) {
 }
 
 /**
+ * Which of the four bundled clone faces a line would be drawn in.
+ *
+ * Substituting a family changes neither the weight nor the slope the page asked
+ * for, so a page whose overlay is set entirely in one face has no use for the
+ * other three. Registering a family *without* a face some line asks for is not
+ * neutral, though: the WebView then synthesises it from the face that is there,
+ * and a synthetically emboldened regular carries neither the clone's metrics
+ * nor the artwork's — so this has to answer for every line, not just the
+ * sampled ones.
+ *
+ * 600 is the CSS threshold at which `font-weight` selects a bold face; a
+ * computed weight is always a number, and an unparseable one is treated as
+ * regular rather than guessed at.
+ */
+export function faceFor(style) {
+  const weight = parseInt(style.fontWeight, 10);
+  return {
+    weight: weight >= 600 ? "700" : "400",
+    style: /italic|oblique/.test(style.fontStyle) ? "italic" : "normal",
+  };
+}
+
+/** Identity of a face, for comparing what a page needs against what is bundled. */
+export function faceKey(face) {
+  return face.weight + " " + face.style;
+}
+
+/**
  * Probe text built from the characters the page actually shows.
  *
  * The obvious probe — a fixed string of wide and narrow glyphs — misreads a

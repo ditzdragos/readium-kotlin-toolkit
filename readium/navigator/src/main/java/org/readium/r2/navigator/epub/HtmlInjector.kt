@@ -59,7 +59,7 @@ internal fun Resource.injectHtml(
             injectables.add(
                 preloadFont(
                     baseHref.resolve(
-                        Url("readium/fonts/fxl-default-serif/NimbusRoman.woff")!!
+                        Url("readium/fonts/fxl-default-serif/NimbusRoman.woff2")!!
                     )
                 )
             )
@@ -135,7 +135,7 @@ private fun stylesheet(href: Url): String =
 private fun preloadFont(href: Url): String =
     // FXL pages are XHTML, parsed as strict XML — a bare boolean `crossorigin`
     // attribute is invalid and fails the whole document parse, so give it a value.
-    """<link rel="preload" as="font" type="font/woff" href="$href" crossorigin="anonymous"/>"""
+    """<link rel="preload" as="font" type="font/woff2" href="$href" crossorigin="anonymous"/>"""
 
 internal fun String.injectReadiumContent(
     injectableContent: String,

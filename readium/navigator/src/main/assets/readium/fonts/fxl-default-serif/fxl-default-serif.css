@@ -32,25 +32,25 @@
  */
 @font-face {
   font-family: "Times New Roman";
-  src: url("NimbusRoman.woff") format("woff");
+  src: url("NimbusRoman.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
 }
 @font-face {
   font-family: "Times New Roman";
-  src: url("NimbusRoman-Italic.woff") format("woff");
+  src: url("NimbusRoman-Italic.woff2") format("woff2");
   font-weight: normal;
   font-style: italic;
 }
 @font-face {
   font-family: "Times New Roman";
-  src: url("NimbusRoman-Bold.woff") format("woff");
+  src: url("NimbusRoman-Bold.woff2") format("woff2");
   font-weight: bold;
   font-style: normal;
 }
 @font-face {
   font-family: "Times New Roman";
-  src: url("NimbusRoman-BoldItalic.woff") format("woff");
+  src: url("NimbusRoman-BoldItalic.woff2") format("woff2");
   font-weight: bold;
   font-style: italic;
 }

@@ -5,6 +5,8 @@ import {
   MIN_FIT_IMPROVEMENT,
   SYNTHETIC_PROBE_TEXT,
   evaluateSubstitution,
+  faceFor,
+  faceKey,
   fitError,
   isGenericFamily,
   isNamedFamily,
@@ -352,5 +354,58 @@ describe("evaluateSubstitution", () => {
     assert.equal(verdict.wrappedAfter, 4);
     assert.equal(verdict.substituteError < verdict.currentError, true);
     assert.equal(verdict.improves, false);
+  });
+});
+
+describe("faceFor", () => {
+  it("picks the regular face for normal upright text", () => {
+    assert.deepEqual(faceFor({ fontWeight: "400", fontStyle: "normal" }), {
+      weight: "400",
+      style: "normal",
+    });
+  });
+
+  it("picks the bold face from 600 up, which is where CSS selects one", () => {
+    assert.equal(
+      faceFor({ fontWeight: "500", fontStyle: "normal" }).weight,
+      "400"
+    );
+    assert.equal(
+      faceFor({ fontWeight: "600", fontStyle: "normal" }).weight,
+      "700"
+    );
+    assert.equal(
+      faceFor({ fontWeight: "900", fontStyle: "normal" }).weight,
+      "700"
+    );
+  });
+
+  it("treats oblique as italic, since one italic face serves both", () => {
+    assert.equal(
+      faceFor({ fontWeight: "400", fontStyle: "oblique" }).style,
+      "italic"
+    );
+    assert.equal(
+      faceFor({ fontWeight: "400", fontStyle: "oblique 14deg" }).style,
+      "italic"
+    );
+  });
+
+  it("falls back to regular rather than guessing at an unreadable weight", () => {
+    assert.deepEqual(faceFor({ fontWeight: "", fontStyle: "" }), {
+      weight: "400",
+      style: "normal",
+    });
+  });
+
+  it("keys a face so a page's needs compare against what is bundled", () => {
+    assert.equal(
+      faceKey(faceFor({ fontWeight: "700", fontStyle: "italic" })),
+      "700 italic"
+    );
+    assert.notEqual(
+      faceKey(faceFor({ fontWeight: "700", fontStyle: "normal" })),
+      faceKey(faceFor({ fontWeight: "400", fontStyle: "normal" }))
+    );
   });
 });

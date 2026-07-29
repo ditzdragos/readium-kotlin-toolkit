@@ -55,16 +55,18 @@
 import {
   SYNTHETIC_PROBE_TEXT,
   evaluateSubstitution,
+  faceFor,
+  faceKey,
   isNamedFamily,
   parseFamilyList,
   probeTextFrom,
 } from "./fxlFontFit.mjs";
 
 const CLONE_FACES = [
-  { file: "NimbusRoman.woff", weight: "400", style: "normal" },
-  { file: "NimbusRoman-Italic.woff", weight: "400", style: "italic" },
-  { file: "NimbusRoman-Bold.woff", weight: "700", style: "normal" },
-  { file: "NimbusRoman-BoldItalic.woff", weight: "700", style: "italic" },
+  { file: "NimbusRoman.woff2", weight: "400", style: "normal" },
+  { file: "NimbusRoman-Italic.woff2", weight: "400", style: "italic" },
+  { file: "NimbusRoman-Bold.woff2", weight: "700", style: "normal" },
+  { file: "NimbusRoman-BoldItalic.woff2", weight: "700", style: "italic" },
 ];
 
 /* Named by no publication, so measuring under it cannot collide with the page. */
@@ -165,16 +167,37 @@ function contentWidth(box, edges) {
   return width - edges * scale;
 }
 
+/*
+ * Elements whose text content is source rather than something the page draws.
+ * Their characters must not reach the availability probe: a `<script>` body
+ * contributes `{ } ; @ #`, which no publication sets in its overlay font, and
+ * probing an embedded subset with characters it was never asked to carry is
+ * exactly how a font that renders perfectly gets reported missing.
+ */
+const NON_RENDERED_TAGS = new Set([
+  "SCRIPT",
+  "STYLE",
+  "NOSCRIPT",
+  "TEMPLATE",
+  "TITLE",
+]);
+
 /* Every element holding text of its own, with the families it ends up asking for. */
 function textElements() {
   const found = [];
   const elements = document.body ? document.body.querySelectorAll("*") : [];
   for (const element of elements) {
+    if (NON_RENDERED_TAGS.has(element.tagName)) {
+      continue;
+    }
     const text = ownText(element);
     if (text.trim().length < 2) {
       continue;
     }
     const style = window.getComputedStyle(element);
+    if (style.display === "none") {
+      continue;
+    }
     const families = parseFamilyList(style.fontFamily).filter(isNamedFamily);
     found.push({ element, style, families, text });
   }
@@ -190,6 +213,7 @@ function sampleFor(element, style) {
   return {
     element,
     box,
+    face: faceFor(style),
     edges: horizontalEdges(
       box === element ? style : window.getComputedStyle(box)
     ),
@@ -230,14 +254,25 @@ function unrenderableOverlays(context, textLines) {
     if (families.some(renders)) {
       continue;
     }
-    const sample = sampleFor(element, style);
-    if (!sample) {
-      continue;
+    const name = families[0];
+    let group = groups.get(name);
+    if (!group) {
+      group = { samples: [], faces: new Set() };
+      groups.set(name, group);
     }
-    const group = groups.get(families[0]) || [];
-    if (group.length < MAX_SAMPLES_PER_FAMILY) {
-      group.push(sample);
-      groups.set(families[0], group);
+    /* Every line wearing the family, so no face it draws goes unregistered. */
+    group.faces.add(faceKey(faceFor(style)));
+
+    const sample = sampleFor(element, style);
+    if (sample && group.samples.length < MAX_SAMPLES_PER_FAMILY) {
+      group.samples.push(sample);
+    }
+  }
+
+  /* A family with no measurable line carries no evidence to decide on. */
+  for (const [name, group] of groups) {
+    if (group.samples.length === 0) {
+      groups.delete(name);
     }
   }
   return groups;
@@ -278,46 +313,59 @@ function measureLines(group, declarations) {
     whiteSpace: box.style.getPropertyValue("white-space"),
     whiteSpacePriority: box.style.getPropertyPriority("white-space"),
   }));
-  for (const { element } of group) {
-    for (const property of properties) {
-      element.style.setProperty(property, declarations[property], "important");
-    }
-  }
-
-  const range = document.createRange();
-  const rows = group.map(({ element }) => rowCount(range, element));
-
-  for (const { box } of group) {
-    box.style.setProperty("white-space", "nowrap", "important");
-  }
-  const measurements = group.map(({ element, box, edges }, index) => {
-    range.selectNodeContents(element);
-    return {
-      rows: rows[index],
-      boxWidth: contentWidth(box, edges),
-      textWidth: range.getBoundingClientRect().width,
-    };
-  });
-
-  for (const saved of restore) {
-    for (const { property, value, priority } of saved.declared) {
-      if (value) {
-        saved.element.style.setProperty(property, value, priority);
-      } else {
-        saved.element.style.removeProperty(property);
+  /*
+   * Between here and the restore the real overlay carries `!important`
+   * declarations that are not the publication's. Anything thrown in that window
+   * — a node detached by a page turn, a WebView torn down mid-measurement —
+   * would otherwise leave them applied for the life of the document, which is
+   * the very misalignment this module exists to remove. So the restore runs on
+   * the way out either way.
+   */
+  try {
+    for (const { element } of group) {
+      for (const property of properties) {
+        element.style.setProperty(
+          property,
+          declarations[property],
+          "important"
+        );
       }
     }
-    if (saved.whiteSpace) {
-      saved.box.style.setProperty(
-        "white-space",
-        saved.whiteSpace,
-        saved.whiteSpacePriority
-      );
-    } else {
-      saved.box.style.removeProperty("white-space");
+
+    const range = document.createRange();
+    const rows = group.map(({ element }) => rowCount(range, element));
+
+    for (const { box } of group) {
+      box.style.setProperty("white-space", "nowrap", "important");
+    }
+    return group.map(({ element, box, edges }, index) => {
+      range.selectNodeContents(element);
+      return {
+        rows: rows[index],
+        boxWidth: contentWidth(box, edges),
+        textWidth: range.getBoundingClientRect().width,
+      };
+    });
+  } finally {
+    for (const saved of restore) {
+      for (const { property, value, priority } of saved.declared) {
+        if (value) {
+          saved.element.style.setProperty(property, value, priority);
+        } else {
+          saved.element.style.removeProperty(property);
+        }
+      }
+      if (saved.whiteSpace) {
+        saved.box.style.setProperty(
+          "white-space",
+          saved.whiteSpace,
+          saved.whiteSpacePriority
+        );
+      } else {
+        saved.box.style.removeProperty("white-space");
+      }
     }
   }
-  return measurements;
 }
 
 /* How each line sits in its box now, against how it would sit laid out this way. */
@@ -458,9 +506,20 @@ function restoreKerningIfItHelps(textLines) {
   (document.head || document.documentElement).appendChild(override);
 }
 
-function cloneFaces(family, directory) {
+/*
+ * `needed` holds the weight/slope combinations the page actually draws in this
+ * family, so the faces it never uses are neither fetched nor decoded. It is
+ * gathered from every line wearing the family rather than from the sampled
+ * ones: registering a family without the bold face a line elsewhere on the page
+ * asks for would hand that line a synthetically emboldened regular, whose
+ * metrics are not the clone's and not the artwork's.
+ */
+function cloneFaces(family, directory, needed) {
   const faces = [];
   for (const face of CLONE_FACES) {
+    if (needed && !needed.has(faceKey(face))) {
+      continue;
+    }
     let fontFace;
     try {
       fontFace = new FontFace(family, 'url("' + directory + face.file + '")', {
@@ -521,14 +580,39 @@ function correctOverlayMetrics() {
     return Promise.resolve(restoreKerningIfItHelps(textElements()));
   }
 
-  return loadAll(cloneFaces(MEASUREMENT_FAMILY, directory))
+  const measuring = new Set();
+  for (const { faces } of groups.values()) {
+    for (const key of faces) {
+      measuring.add(key);
+    }
+  }
+  const measurementFaces = cloneFaces(MEASUREMENT_FAMILY, directory, measuring);
+
+  /*
+   * The measurement family has done its job once every group has a verdict, and
+   * a page whose groups were all rejected has no use for it at all. Left
+   * registered its faces stay resident in each of the preloaded spread's
+   * WebViews, for pages the code decided not to touch.
+   */
+  const release = () => {
+    for (const face of measurementFaces) {
+      document.fonts.delete(face);
+    }
+  };
+
+  return loadAll(measurementFaces)
     .then(() => {
       const substituted = [];
-      for (const [family, group] of groups) {
+      for (const [family, { samples, faces }] of groups) {
         if (
-          fitsBetter(group, { "font-family": quoteFamily(MEASUREMENT_FAMILY) })
+          fitsBetter(samples, {
+            "font-family": quoteFamily(MEASUREMENT_FAMILY),
+          })
         ) {
-          substituted.push.apply(substituted, cloneFaces(family, directory));
+          substituted.push.apply(
+            substituted,
+            cloneFaces(family, directory, faces)
+          );
         }
       }
       if (substituted.length === 0) {
@@ -536,6 +620,16 @@ function correctOverlayMetrics() {
       }
       return loadAll(substituted).then(() => document.fonts.ready);
     })
+    .then(
+      (value) => {
+        release();
+        return value;
+      },
+      (error) => {
+        release();
+        throw error;
+      }
+    )
     .then(() => restoreKerningIfItHelps(textElements()));
 }
 
