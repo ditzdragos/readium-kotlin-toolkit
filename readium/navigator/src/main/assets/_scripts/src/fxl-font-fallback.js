@@ -706,7 +706,9 @@ function correctOverlayMetrics() {
   }
 
   return fontsSettled(textLines)
-    .then(() => pageIsMeasurable(context, textLines, MAX_FRAMES_WAITED))
+    .then(() =>
+      pageIsMeasurable(context, textLines, Date.now() + MEASURABLE_WAIT_MS)
+    )
     .then((measurable) =>
       measurable
         ? correctMeasuredOverlays(context, directory, textLines)
@@ -714,18 +716,39 @@ function correctOverlayMetrics() {
     );
 }
 
-function nextFrame() {
+/*
+ * A tick that an unpainted page still gets.
+ *
+ * Fixed-layout resources are opened ahead of the one on screen, and a WebView
+ * that is not being composited has its animation frames throttled — often
+ * parked entirely until it is displayed. Waiting on `requestAnimationFrame`
+ * alone therefore stalls on precisely the pages that most need correcting, so
+ * a timer runs it to whichever arrives first.
+ */
+function nextTick() {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
     if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => resolve());
-    } else {
-      setTimeout(resolve, 16);
+      requestAnimationFrame(finish);
     }
+    setTimeout(finish, TICK_MS);
   });
 }
 
-/* Long enough for a page to lay out, short enough not to outlive one. */
-const MAX_FRAMES_WAITED = 30;
+const TICK_MS = 32;
+
+/*
+ * Measured in time rather than in frames, because frames are exactly what an
+ * offscreen page is denied. Long enough for a preloaded resource to be given
+ * its size, and idle polling either way.
+ */
+const MEASURABLE_WAIT_MS = 3000;
 
 /*
  * Holds off until the page can actually answer the two questions put to it.
@@ -740,7 +763,7 @@ const MAX_FRAMES_WAITED = 30;
  * enough. It is not a layout barrier and never was, so the wait is now for the
  * thing actually needed, and gives up rather than spinning if it never arrives.
  */
-function pageIsMeasurable(context, textLines, framesLeft) {
+function pageIsMeasurable(context, textLines, deadline) {
   const text = probeTextFrom(textLines[0].text);
   const ready =
     probeDiscriminates(context, text) &&
@@ -748,12 +771,10 @@ function pageIsMeasurable(context, textLines, framesLeft) {
   if (ready) {
     return Promise.resolve(true);
   }
-  if (framesLeft <= 0) {
+  if (Date.now() >= deadline) {
     return Promise.resolve(false);
   }
-  return nextFrame().then(() =>
-    pageIsMeasurable(context, textLines, framesLeft - 1)
-  );
+  return nextTick().then(() => pageIsMeasurable(context, textLines, deadline));
 }
 
 function correctMeasuredOverlays(context, directory, textLines) {
