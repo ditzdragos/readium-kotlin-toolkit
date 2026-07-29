@@ -323,8 +323,11 @@ describe("evaluateSubstitution", () => {
 
   it("takes the rendering that wraps fewer lines, whatever the median says", () => {
     // Measured on page_0011 of the book RR-7953 was reported against: nine
-    // justified lines, four of them overrunning their box and three wrapping,
-    // and every line ~9% narrower under the clone, which wraps none of them.
+    // justified lines, four of them overrunning their box, and every line ~9%
+    // narrower under the clone, which overruns none of them. (On the page three
+    // of the four folded a word onto a second row; the fourth overran into the
+    // slack a neighbouring box left. `line` cannot model that and wraps all
+    // four, which is the same verdict for the same reason.)
     //
     // The median cannot see that. These boxes are justified, so a line narrower
     // than its box is stretched back out to fill it and the fill of the six
@@ -354,6 +357,56 @@ describe("evaluateSubstitution", () => {
     assert.equal(verdict.wrappedAfter, 4);
     assert.equal(verdict.substituteError < verdict.currentError, true);
     assert.equal(verdict.improves, false);
+  });
+
+  it("saves a single wrapped line when the rest of the page does not mind", () => {
+    const oneWrap = [
+      line({ fill: 1.05, substituteFill: 0.99 }),
+      line({ fill: 0.8, substituteFill: 0.98 }),
+      line({ fill: 0.82, substituteFill: 1.0 }),
+      line({ fill: 0.81, substituteFill: 0.99 }),
+    ];
+
+    const verdict = evaluateSubstitution(oneWrap);
+    assert.equal(verdict.wrapped, 1);
+    assert.equal(verdict.wrappedAfter, 0);
+    assert.equal(verdict.substituteError <= verdict.currentError, true);
+    assert.equal(verdict.improves, true);
+  });
+
+  it("will not rebuild a whole page around one line that wraps on rounding", () => {
+    // Every line sits within a percent of its authored width and one of them
+    // happens to land the wrong side of 1 — the next layout could as easily
+    // round it the other way. Going by the wrap alone would move the page onto
+    // a face that fits every other line far worse, and would do it differently
+    // on different loads of the same book.
+    const borderline = [
+      line({ fill: 1.01, substituteFill: 0.7 }),
+      line({ fill: 0.99, substituteFill: 0.69 }),
+      line({ fill: 0.98, substituteFill: 0.68 }),
+      line({ fill: 1.0, substituteFill: 0.7 }),
+    ];
+
+    const verdict = evaluateSubstitution(borderline);
+    assert.equal(verdict.wrapped, 1);
+    assert.equal(verdict.wrappedAfter, 0);
+    assert.equal(verdict.substituteError > verdict.currentError, true);
+    assert.equal(verdict.improves, false);
+  });
+
+  it("lets two wrapped lines decide on their own, whatever the fill says", () => {
+    // Two lines folding a word onto a second row is the failure itself, not
+    // rounding, so it carries the page even though the clone measures well
+    // short of the authored widths.
+    const twoWraps = [1.01, 1.02, 0.99, 0.98].map((fill) =>
+      line({ fill, substituteFill: fill * 0.8 })
+    );
+
+    const verdict = evaluateSubstitution(twoWraps);
+    assert.equal(verdict.wrapped, 2);
+    assert.equal(verdict.wrappedAfter, 0);
+    assert.equal(verdict.substituteError > verdict.currentError, true);
+    assert.equal(verdict.improves, true);
   });
 });
 

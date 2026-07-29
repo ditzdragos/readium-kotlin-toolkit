@@ -72,6 +72,9 @@ const CLONE_FACES = [
 /* Named by no publication, so measuring under it cannot collide with the page. */
 const MEASUREMENT_FAMILY = "Readium FXL Metric Clone";
 
+/* Identifies what `HtmlInjector` injected, among the publication's own sheets. */
+const INJECTED_DEFAULT_PATH = "fxl-default-serif/";
+
 const PROBE_SIZE = "72px";
 
 /* Enough lines for a stable median without walking a whole comic spread. */
@@ -79,9 +82,11 @@ const MAX_SAMPLES_PER_FAMILY = 40;
 
 function cloneFontDirectory() {
   const link =
-    document.querySelector('link[rel="preload"][href*="fxl-default-serif/"]') ||
     document.querySelector(
-      'link[rel="stylesheet"][href*="fxl-default-serif/"]'
+      'link[rel="preload"][href*="' + INJECTED_DEFAULT_PATH + '"]'
+    ) ||
+    document.querySelector(
+      'link[rel="stylesheet"][href*="' + INJECTED_DEFAULT_PATH + '"]'
     );
   if (!link || !link.href) {
     return null;
@@ -113,6 +118,27 @@ function familyRenders(context, family, text) {
   const withSansSerif = measure(quoted + ", sans-serif");
   const withSerif = measure(quoted + ", serif");
   return withMonospace === withSansSerif && withSansSerif === withSerif;
+}
+
+/* Named by no publication either, and this one is meant never to resolve. */
+const IMPOSSIBLE_FAMILY = "Readium No Such Family 8f3a";
+
+/*
+ * Whether the availability probe can tell anything yet.
+ *
+ * `familyRenders` reads "all three generics measured the same" as "the family
+ * drew the text itself". Before the page has laid anything out that reasoning
+ * silently inverts: the generics have nothing to draw with either, so they too
+ * measure alike, every family on the page reports as present, and the
+ * correction concludes there is nothing to correct — which is indistinguishable
+ * from success and is how RR-7953 came back.
+ *
+ * Asking the same question about a family that cannot exist says which of the
+ * two situations this is: its generics have to disagree, and if they do not,
+ * nothing measured here means anything yet.
+ */
+function probeDiscriminates(context, text) {
+  return !familyRenders(context, IMPOSSIBLE_FAMILY, text);
 }
 
 function ownText(element) {
@@ -160,9 +186,20 @@ function horizontalEdges(style) {
  * client rect, so a page the publisher put under a transform reports both in
  * the same space, and so the box is not rounded to whole pixels the way
  * `clientWidth` would round it.
+ *
+ * The padding has to be taken off in that same space, which means knowing what
+ * the transform did. `offsetWidth` would answer that to the nearest whole pixel
+ * — on a narrow padded box, a layout width of 10.4 reports 10 and puts the
+ * scale out by 4% — so the used width is read from the computed style, which is
+ * not rounded. It is the content width already, whatever `box-sizing` says, so
+ * the border box to scale against is that plus the edges.
  */
-function contentWidth(box, edges) {
+function contentWidth(box, style, edges) {
   const width = box.getBoundingClientRect().width;
+  const used = parseFloat(style.width);
+  if (used > 0) {
+    return width * (used / (used + edges));
+  }
   const scale = box.offsetWidth > 0 ? width / box.offsetWidth : 1;
   return width - edges * scale;
 }
@@ -182,7 +219,24 @@ const NON_RENDERED_TAGS = new Set([
   "TITLE",
 ]);
 
-/* Every element holding text of its own, with the families it ends up asking for. */
+/* The shortest own text that can tell two faces apart when measured. */
+const MIN_MEASURABLE_CHARACTERS = 2;
+
+/*
+ * Every element holding text of its own.
+ *
+ * Walked once per page and handed to each step in turn: `getComputedStyle`
+ * returns a live declaration, so a record stays true across the corrections
+ * below, and re-reading the DOM for each of them would cost another
+ * `querySelectorAll("*")` and another style resolution per element — thousands
+ * of both on an OCR page carrying a span per word.
+ *
+ * Text too short to measure is kept rather than dropped. It cannot be a sample
+ * — one character says nothing about which face fits a line — but it still
+ * wears a family and still draws a weight, and a page whose only bold is a
+ * one-letter drop cap needs that bold face registered like any other: leaving
+ * it out is what makes the WebView synthesise it.
+ */
 function textElements() {
   const found = [];
   const elements = document.body ? document.body.querySelectorAll("*") : [];
@@ -191,32 +245,45 @@ function textElements() {
       continue;
     }
     const text = ownText(element);
-    if (text.trim().length < 2) {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
       continue;
     }
     const style = window.getComputedStyle(element);
     if (style.display === "none") {
       continue;
     }
-    const families = parseFamilyList(style.fontFamily).filter(isNamedFamily);
-    found.push({ element, style, families, text });
+    found.push({
+      element,
+      style,
+      text,
+      measurable: trimmed.length >= MIN_MEASURABLE_CHARACTERS,
+    });
   }
   return found;
 }
 
+/* The named families a line ends up asking for, as the page currently stands. */
+function familiesOf(style) {
+  return parseFamilyList(style.fontFamily).filter(isNamedFamily);
+}
+
 /* A line, and the box to measure it against, ready for `measureLines`. */
-function sampleFor(element, style) {
+function sampleFor({ element, style, measurable }) {
+  if (!measurable) {
+    return null;
+  }
   const box = boxElementFor(element);
   if (!box) {
     return null;
   }
+  const boxStyle = box === element ? style : window.getComputedStyle(box);
   return {
     element,
     box,
+    boxStyle,
     face: faceFor(style),
-    edges: horizontalEdges(
-      box === element ? style : window.getComputedStyle(box)
-    ),
+    edges: horizontalEdges(boxStyle),
   };
 }
 
@@ -225,7 +292,13 @@ function sampleFor(element, style) {
  * to register the clone under — the first, so the registration wins the stack.
  */
 function unrenderableOverlays(context, textLines) {
-  const candidates = textLines.filter(({ families }) => families.length > 0);
+  const candidates = [];
+  for (const line of textLines) {
+    const families = familiesOf(line.style);
+    if (families.length > 0) {
+      candidates.push({ line, families });
+    }
+  }
 
   /*
    * A publication that wraps each word in its own span leaves too few
@@ -233,14 +306,17 @@ function unrenderableOverlays(context, textLines) {
    * everything on the page set in the same family instead.
    */
   const familyText = new Map();
-  for (const { families, text } of candidates) {
-    familyText.set(families[0], (familyText.get(families[0]) || "") + text);
+  for (const { line, families } of candidates) {
+    familyText.set(
+      families[0],
+      (familyText.get(families[0]) || "") + line.text
+    );
   }
 
   const groups = new Map();
   const rendered = new Map();
-  for (const { element, style, families, text } of candidates) {
-    let probe = probeTextFrom(text);
+  for (const { line, families } of candidates) {
+    let probe = probeTextFrom(line.text);
     if (probe === SYNTHETIC_PROBE_TEXT) {
       probe = probeTextFrom(familyText.get(families[0]));
     }
@@ -261,11 +337,13 @@ function unrenderableOverlays(context, textLines) {
       groups.set(name, group);
     }
     /* Every line wearing the family, so no face it draws goes unregistered. */
-    group.faces.add(faceKey(faceFor(style)));
+    group.faces.add(faceKey(faceFor(line.style)));
 
-    const sample = sampleFor(element, style);
-    if (sample && group.samples.length < MAX_SAMPLES_PER_FAMILY) {
-      group.samples.push(sample);
+    if (group.samples.length < MAX_SAMPLES_PER_FAMILY) {
+      const sample = sampleFor(line);
+      if (sample) {
+        group.samples.push(sample);
+      }
     }
   }
 
@@ -278,16 +356,41 @@ function unrenderableOverlays(context, textLines) {
   return groups;
 }
 
-/* How many rows a line is broken across as the page actually lays it out. */
+/* Below this, two rects are the same row however their baselines differ. */
+const MIN_ROW_SEPARATION = 4;
+
+/*
+ * How many rows a line is broken across as the page actually lays it out.
+ *
+ * Counting distinct tops is not enough. An overlay line carrying a nested span
+ * — a different size, a superscript, anything sitting a pixel or two off its
+ * neighbours' baseline — hands back two tops for text that is plainly on one
+ * row, and that miscount is a wrap this module would then try to cure. A row
+ * below is a whole line-height below, so tops are grouped by a share of the
+ * tallest rect on the line rather than by equality.
+ */
 function rowCount(range, element) {
-  const tops = new Set();
   range.selectNodeContents(element);
+  const tops = [];
+  let tallest = 0;
   for (const rect of range.getClientRects()) {
     if (rect.width > 1 && rect.height > 1) {
-      tops.add(Math.round(rect.top));
+      tops.push(rect.top);
+      tallest = Math.max(tallest, rect.height);
     }
   }
-  return Math.max(tops.size, 1);
+  if (tops.length === 0) {
+    return 1;
+  }
+  tops.sort((a, b) => a - b);
+  const separation = Math.max(tallest / 2, MIN_ROW_SEPARATION);
+  let rows = 1;
+  for (let index = 1; index < tops.length; index++) {
+    if (tops[index] - tops[index - 1] > separation) {
+      rows++;
+    }
+  }
+  return rows;
 }
 
 /*
@@ -338,11 +441,11 @@ function measureLines(group, declarations) {
     for (const { box } of group) {
       box.style.setProperty("white-space", "nowrap", "important");
     }
-    return group.map(({ element, box, edges }, index) => {
+    return group.map(({ element, box, boxStyle, edges }, index) => {
       range.selectNodeContents(element);
       return {
         rows: rows[index],
-        boxWidth: contentWidth(box, edges),
+        boxWidth: contentWidth(box, boxStyle, edges),
         textWidth: range.getBoundingClientRect().width,
       };
     });
@@ -387,20 +490,41 @@ function fitsBetter(group, declarations) {
   return verdict !== null && verdict.improves;
 }
 
-/* What `fxl-default-serif.css` leaves as the page's font-family. */
-const INJECTED_DEFAULT = ["times new roman", "serif"];
+function injectedDefaultStyleSheet() {
+  for (const sheet of document.styleSheets) {
+    if ((sheet.href || "").indexOf(INJECTED_DEFAULT_PATH) !== -1) {
+      return sheet;
+    }
+  }
+  return null;
+}
 
-/* What the WebView would have drawn the unstyled text in without it. */
-const USER_AGENT_DEFAULT = "initial";
-
-function pageDefaultIsInjected() {
-  const families = parseFamilyList(
-    window.getComputedStyle(document.documentElement).fontFamily
-  ).map((family) => family.toLowerCase());
-  return (
-    families.length === INJECTED_DEFAULT.length &&
-    families.every((family, index) => family === INJECTED_DEFAULT[index])
-  );
+/*
+ * What the root would compute to had `fxl-default-serif.css` not been injected
+ * — the family to hand back if the injected one turns out to fit worse.
+ *
+ * Asked by switching the stylesheet off and reading the page again, rather than
+ * by recognising the default by its name. A publication is perfectly entitled
+ * to ask for Times on `html` itself, and a name match cannot tell that apart
+ * from ours; reverting it would then throw away the publication's own choice
+ * for the user agent's, which is a correction nobody asked for. Switching the
+ * sheet off answers with whatever the page says for itself, which is the only
+ * thing there is to give back.
+ *
+ * `null` means there is nothing of ours in force: no injected sheet, or a page
+ * that overrides it anyway.
+ */
+function familyWithoutInjectedDefault() {
+  const sheet = injectedDefaultStyleSheet();
+  if (!sheet) {
+    return null;
+  }
+  const root = document.documentElement;
+  const current = window.getComputedStyle(root).fontFamily;
+  sheet.disabled = true;
+  const without = window.getComputedStyle(root).fontFamily;
+  sheet.disabled = false;
+  return without === current ? null : without;
 }
 
 function setRootFamily(value, priority) {
@@ -417,24 +541,21 @@ function setRootFamily(value, priority) {
  * default's name, so a publication that asks for Times itself is left holding
  * its own choice.
  */
-function linesInheritingPageDefault(textLines) {
-  const before = textLines.map(
-    ({ element }) => window.getComputedStyle(element).fontFamily
-  );
+function linesInheritingPageDefault(textLines, withoutInjected) {
+  const before = textLines.map(({ style }) => style.fontFamily);
   const saved = {
     value: document.documentElement.style.getPropertyValue("font-family"),
     priority: document.documentElement.style.getPropertyPriority("font-family"),
   };
-  setRootFamily(USER_AGENT_DEFAULT, "important");
+  setRootFamily(withoutInjected, "important");
   const moved = textLines.filter(
-    ({ element }, index) =>
-      window.getComputedStyle(element).fontFamily !== before[index]
+    (line, index) => line.style.fontFamily !== before[index]
   );
   setRootFamily(saved.value, saved.priority);
 
   const samples = [];
-  for (const { element, style } of moved) {
-    const sample = sampleFor(element, style);
+  for (const line of moved) {
+    const sample = sampleFor(line);
     if (sample) {
       samples.push(sample);
     }
@@ -452,15 +573,16 @@ function linesInheritingPageDefault(textLines) {
  * the page declares for itself still wins, exactly as it did before.
  */
 function revertPageDefaultIfItHurts(textLines) {
-  if (!pageDefaultIsInjected()) {
+  const withoutInjected = familyWithoutInjectedDefault();
+  if (withoutInjected === null) {
     return;
   }
-  const group = linesInheritingPageDefault(textLines);
+  const group = linesInheritingPageDefault(textLines, withoutInjected);
   if (
     group.length > 0 &&
-    fitsBetter(group, { "font-family": USER_AGENT_DEFAULT })
+    fitsBetter(group, { "font-family": withoutInjected })
   ) {
-    setRootFamily(USER_AGENT_DEFAULT, "");
+    setRootFamily(withoutInjected, "");
   }
 }
 
@@ -489,8 +611,8 @@ function restoreKerningIfItHelps(textLines) {
     return;
   }
   const group = [];
-  for (const { element, style } of textLines) {
-    const sample = sampleFor(element, style);
+  for (const line of textLines) {
+    const sample = sampleFor(line);
     if (sample) {
       group.push(sample);
     }
@@ -572,12 +694,74 @@ function correctOverlayMetrics() {
     return Promise.resolve();
   }
 
-  revertPageDefaultIfItHurts(textElements());
+  /*
+   * The one walk of the page. Each step below re-reads the same records, whose
+   * computed styles are live and so answer for the page as the previous step
+   * left it — including `unrenderableOverlays`, which has to see whatever the
+   * page default was just changed to.
+   */
+  const textLines = textElements();
+  if (textLines.length === 0) {
+    return Promise.resolve();
+  }
 
-  /* Re-read the page: the correction above may have changed what it wears. */
-  const groups = unrenderableOverlays(context, textElements());
+  return fontsSettled(textLines)
+    .then(() => pageIsMeasurable(context, textLines, MAX_FRAMES_WAITED))
+    .then((measurable) =>
+      measurable
+        ? correctMeasuredOverlays(context, directory, textLines)
+        : undefined
+    );
+}
+
+function nextFrame() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 16);
+    }
+  });
+}
+
+/* Long enough for a page to lay out, short enough not to outlive one. */
+const MAX_FRAMES_WAITED = 30;
+
+/*
+ * Holds off until the page can actually answer the two questions put to it.
+ *
+ * Neither has an answer before layout: the availability probe reports every
+ * family present (see `probeDiscriminates`), and a line whose box has no width
+ * yet offers no authored width to judge a face against, so it is dropped as
+ * unmeasurable. Both failures read as "nothing to correct" rather than as
+ * "ask again", which is exactly how a page keeps the wrong metrics.
+ *
+ * Waiting on `document.fonts.ready` used to hide this by happening to take long
+ * enough. It is not a layout barrier and never was, so the wait is now for the
+ * thing actually needed, and gives up rather than spinning if it never arrives.
+ */
+function pageIsMeasurable(context, textLines, framesLeft) {
+  const text = probeTextFrom(textLines[0].text);
+  const ready =
+    probeDiscriminates(context, text) &&
+    textLines.some(({ element }) => boxElementFor(element) !== null);
+  if (ready) {
+    return Promise.resolve(true);
+  }
+  if (framesLeft <= 0) {
+    return Promise.resolve(false);
+  }
+  return nextFrame().then(() =>
+    pageIsMeasurable(context, textLines, framesLeft - 1)
+  );
+}
+
+function correctMeasuredOverlays(context, directory, textLines) {
+  revertPageDefaultIfItHurts(textLines);
+
+  const groups = unrenderableOverlays(context, textLines);
   if (groups.size === 0) {
-    return Promise.resolve(restoreKerningIfItHelps(textElements()));
+    return Promise.resolve(restoreKerningIfItHelps(textLines));
   }
 
   const measuring = new Set();
@@ -630,24 +814,55 @@ function correctOverlayMetrics() {
         throw error;
       }
     )
-    .then(() => restoreKerningIfItHelps(textElements()));
+    .then(() => restoreKerningIfItHelps(textLines));
 }
 
 /*
- * Nothing can be measured, or asked to render, until the faces the page and the
- * injected default point at have finished loading: a face still in flight
- * measures as whatever is standing in for it.
+ * Nothing can be measured, or asked to render, until the faces the page draws
+ * have finished loading: a face still in flight measures as whatever is
+ * standing in for it, and the whole question here is which face is drawing.
+ *
+ * `document.fonts.ready` alone does not settle that. It promises only that the
+ * faces the page has *asked* for have resolved, and at this point — straight
+ * after parsing, before anything has been laid out on screen — a page may not
+ * have asked for any of them. It then resolves immediately, with the
+ * publication's own embedded faces still unfetched, and the probe reports a
+ * font the book carries as missing: the clone is registered over a face that
+ * would have drawn the page correctly. `font-display: swap`, which
+ * `HtmlInjector` forces onto every publisher `@font-face`, makes that reading
+ * doubly wrong, because the stand-in it measures is a real rendering that the
+ * comparison then judges the substitution against.
+ *
+ * So the faces are asked for rather than waited on. Only the families the text
+ * actually draws are requested — a face no line wears is one the page would
+ * never have fetched, and fetching it here would put back the download this
+ * module goes out of its way not to make.
  */
-function fontsSettled() {
-  return document.fonts.ready.catch(() => {});
+function drawnFacesRequested(textLines) {
+  const drawn = new Set();
+  for (const { style } of textLines) {
+    for (const family of parseFamilyList(style.fontFamily)) {
+      drawn.add(family.toLowerCase());
+    }
+  }
+  const pending = [];
+  document.fonts.forEach((face) => {
+    if (face.status === "unloaded" && drawn.has(face.family.toLowerCase())) {
+      pending.push(face.load().catch(() => {}));
+    }
+  });
+  return Promise.all(pending);
+}
+
+function fontsSettled(textLines) {
+  return drawnFacesRequested(textLines)
+    .then(() => document.fonts.ready)
+    .catch(() => {});
 }
 
 export function applyFontFallback() {
   if (typeof FontFace === "undefined" || !document.fonts) {
     return Promise.resolve();
   }
-  return documentParsed()
-    .then(stylesheetsSettled)
-    .then(fontsSettled)
-    .then(correctOverlayMetrics);
+  return documentParsed().then(stylesheetsSettled).then(correctOverlayMetrics);
 }

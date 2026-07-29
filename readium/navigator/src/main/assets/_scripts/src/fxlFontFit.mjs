@@ -239,6 +239,15 @@ export function fitError(ratios) {
  * wraps fewer lines wins outright, however each one fills its box, and only
  * when both wrap the same number does the closer fill decide.
  *
+ * One line is not a majority, though. A line sitting at a fill of almost
+ * exactly 1 wraps or does not on sub-pixel rounding, and letting that single
+ * line carry the whole family means the same book can be drawn in a different
+ * font from one layout to the next. So a lone wrap is asked to agree with the
+ * fill before it decides: it still wins when the substitution is no worse
+ * across the page, and is refused when it would have to make every other line
+ * fit worse to save that one. Two or more wraps are the failure itself, and
+ * decide on their own.
+ *
  * Returns `null` when the page offers no authored box to judge against, as with
  * overlays that size themselves to their text. Substituting then is a guess,
  * and a guess that lands on a book whose artwork is set in a sans or display
@@ -271,6 +280,7 @@ export function evaluateSubstitution(
     improves:
       wrappedAfter === wrapped
         ? substituteError + minImprovement < currentError
-        : wrappedAfter < wrapped,
+        : wrappedAfter < wrapped &&
+          (wrapped - wrappedAfter > 1 || substituteError <= currentError),
   };
 }

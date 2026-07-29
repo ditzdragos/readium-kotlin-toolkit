@@ -8,9 +8,9 @@
   "scripts": {
     "bundle": "webpack",
     "test": "node --test 'test/**/*.test.mjs'",
-    "lint": "eslint src",
-    "checkformat": "prettier --check '**/*.js'",
-    "format": "prettier --list-different --write '**/*.js'"
+    "lint": "eslint src --ext .js,.mjs",
+    "checkformat": "prettier --check '**/*.{js,mjs}'",
+    "format": "prettier --list-different --write '**/*.{js,mjs}'"
   },
   "browserslist": [
     "Android >= 4"
