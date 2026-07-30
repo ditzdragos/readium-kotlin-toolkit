@@ -111,18 +111,44 @@ function setupViewportRelayoutListeners() {
   }
   viewportListenersAttached = true;
 
-  const onViewportChanged = () => requestGroupsLayout();
+  // Relayout recreates every decoration element, restarting any CSS animation it
+  // carries, so same-size resize events must not reach requestGroupsLayout.
+  let lastViewportSignature = viewportSignature();
 
-  window.addEventListener("orientationchange", onViewportChanged, {
+  const onViewportResized = () => {
+    const signature = viewportSignature();
+    if (signature === lastViewportSignature) {
+      return;
+    }
+    lastViewportSignature = signature;
+    requestGroupsLayout();
+  };
+
+  const onOrientationChanged = () => {
+    lastViewportSignature = viewportSignature();
+    requestGroupsLayout();
+  };
+
+  window.addEventListener("orientationchange", onOrientationChanged, {
     passive: true,
   });
-  window.addEventListener("resize", onViewportChanged, { passive: true });
+  window.addEventListener("resize", onViewportResized, { passive: true });
 
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", onViewportChanged, {
+    window.visualViewport.addEventListener("resize", onViewportResized, {
       passive: true,
     });
   }
+}
+
+function viewportSignature() {
+  const visual = window.visualViewport;
+  return [
+    window.innerWidth,
+    window.innerHeight,
+    visual ? Math.round(visual.width) : -1,
+    visual ? Math.round(visual.height) : -1,
+  ].join("x");
 }
 
 /**
