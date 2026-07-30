@@ -22,6 +22,7 @@ import {
   isTitleNumber,
   shouldSkipPageNumber,
 } from "./pageNumber.mjs";
+import { ocrOverlayGeometry, overlayRotationDegrees } from "./ocrOverlay.mjs";
 
 let styles = new Map();
 let groups = new Map();
@@ -158,44 +159,42 @@ function getContainingElement(node) {
   return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
 }
 
-function rotationDegreesFromTransform(transform) {
-  if (!transform || transform === "none") {
-    return undefined;
+/**
+ * Rotates a positioned decoration element, returning the element to append.
+ */
+function rotateElement(element, rotationAngle) {
+  const supportsIndependentRotate =
+    typeof CSS !== "undefined" &&
+    typeof CSS.supports === "function" &&
+    CSS.supports("rotate", "1deg");
+
+  if (supportsIndependentRotate) {
+    // Keep any existing template transform/animation (eg moving-container),
+    // and compose rotation through the independent rotate property.
+    element.style.rotate = `${rotationAngle}deg`;
+    element.style.transformOrigin = "center";
+    return element;
   }
 
-  const rotateMatch = transform.match(/rotate\(([-\d.]+)deg\)/);
-  if (rotateMatch) {
-    const angle = parseFloat(rotateMatch[1]);
-    return Number.isFinite(angle) ? angle : undefined;
-  }
+  // Fallback for engines without CSS rotate support:
+  // wrap the element so template transforms stay on child while wrapper rotates.
+  const wrapper = document.createElement("div");
+  wrapper.style.position = element.style.position;
+  wrapper.style.left = element.style.left;
+  wrapper.style.top = element.style.top;
+  wrapper.style.width = element.style.width;
+  wrapper.style.height = element.style.height;
+  wrapper.style.pointerEvents = "none";
+  wrapper.style.transform = `rotate(${rotationAngle}deg)`;
+  wrapper.style.transformOrigin = "center";
 
-  try {
-    const matrix = new DOMMatrixReadOnly(transform);
-    const angle = (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
-    if (Number.isFinite(angle) && Math.abs(angle) > 0.01) {
-      return angle;
-    }
-  } catch (error) {
-    return undefined;
-  }
-
-  return undefined;
-}
-
-function getClosestRotationDegrees(node, boundaryElement = null) {
-  let element = getContainingElement(node);
-  while (element) {
-    const style = window.getComputedStyle(element);
-    const angle = rotationDegreesFromTransform(style.transform);
-    if (angle !== undefined) {
-      return angle;
-    }
-    if (boundaryElement && element === boundaryElement) {
-      break;
-    }
-    element = element.parentElement;
-  }
-  return undefined;
+  element.style.position = "absolute";
+  element.style.left = "0px";
+  element.style.top = "0px";
+  element.style.width = "100%";
+  element.style.height = "100%";
+  wrapper.append(element);
+  return wrapper;
 }
 
 /**
@@ -611,6 +610,8 @@ export function DecorationGroup(groupId, groupName) {
     const pageSize =
       (isVertical ? viewportHeight : viewportWidth) / columnCount;
 
+    let ocrGeometry = { box: null, rotationAngle: undefined };
+
     function positionElement(element, rect, boundingRect, writingMode) {
       element.style.position = "absolute";
       const isVerticalRL = writingMode === "vertical-rl";
@@ -668,10 +669,11 @@ export function DecorationGroup(groupId, groupName) {
         }
       } else {
         if (style.width === "wrap") {
-          element.style.width = `${rect.width}px`;
-          element.style.height = `${rect.height}px`;
-          element.style.left = `${rect.left + xOffset}px`;
-          element.style.top = `${rect.top + yOffset}px`;
+          const box = ocrGeometry.box ?? rect;
+          element.style.width = `${box.width}px`;
+          element.style.height = `${box.height}px`;
+          element.style.left = `${box.left + xOffset}px`;
+          element.style.top = `${box.top + yOffset}px`;
         } else if (style.width === "viewport") {
           element.style.width = `${viewportWidth}px`;
           element.style.height = `${rect.height}px`;
@@ -691,6 +693,12 @@ export function DecorationGroup(groupId, groupName) {
           element.style.top = `${rect.top + yOffset}px`;
         }
       }
+
+      if (ocrGeometry.rotationAngle !== undefined) {
+        return rotateElement(element, ocrGeometry.rotationAngle);
+      }
+
+      return element;
     }
 
     let boundingRect = item.range.getBoundingClientRect();
@@ -731,20 +739,28 @@ export function DecorationGroup(groupId, groupName) {
         }
       });
 
+      ocrGeometry = ocrOverlayGeometry(
+        item.range,
+        getOCRCorrectedRect(item.range),
+        clientRects.length
+      );
+
       for (let clientRect of clientRects) {
         const line = elementTemplate.cloneNode(true);
         line.style.pointerEvents = "none";
         line.dataset.writingMode = decoratorWritingMode;
-        positionElement(line, clientRect, boundingRect, documentWritingMode);
-        itemContainer.append(line);
+        itemContainer.append(
+          positionElement(line, clientRect, boundingRect, documentWritingMode)
+        );
       }
     } else if (style.layout === "bounds") {
       const bounds = elementTemplate.cloneNode(true);
       bounds.style.pointerEvents = "none";
       bounds.dataset.writingMode = documentWritingMode;
-      positionElement(bounds, boundingRect, boundingRect, documentWritingMode);
 
-      itemContainer.append(bounds);
+      itemContainer.append(
+        positionElement(bounds, boundingRect, boundingRect, documentWritingMode)
+      );
     } else {
       if (DEBUG_MODE) log("style layout: ", groupName, style.layout);
     }
@@ -886,34 +902,7 @@ export function DecorationGroup(groupId, groupName) {
       computedTop = ocrRect.top;
       computedWidth = `${ocrRect.width}px`;
       computedHeight = `${ocrRect.height}px`;
-
-      let overlayStartNode = item.range.startContainer;
-      if (overlayStartNode && overlayStartNode.nodeType === Node.TEXT_NODE) {
-        overlayStartNode = overlayStartNode.parentElement;
-      }
-      const textOverlayElement = overlayStartNode?.closest(".text-overlay");
-      if (textOverlayElement) {
-        const closestAngle = getClosestRotationDegrees(
-          overlayStartNode,
-          textOverlayElement
-        );
-        if (closestAngle !== undefined) {
-          rotationAngle = closestAngle;
-        }
-
-        const computedStyle = window.getComputedStyle(textOverlayElement);
-        const transform = computedStyle.transform;
-        if (rotationAngle === undefined && transform && transform !== "none") {
-          const inlineAngle = rotationDegreesFromTransform(
-            textOverlayElement.style.transform
-          );
-          if (inlineAngle !== undefined) {
-            rotationAngle = inlineAngle;
-          } else {
-            rotationAngle = rotationDegreesFromTransform(transform);
-          }
-        }
-      }
+      rotationAngle = overlayRotationDegrees(item.range);
     }
 
     let elementTemplate;
@@ -983,38 +972,7 @@ export function DecorationGroup(groupId, groupName) {
       }
 
       if (rotationAngle !== undefined) {
-        const supportsIndependentRotate =
-          typeof CSS !== "undefined" &&
-          typeof CSS.supports === "function" &&
-          CSS.supports("rotate", "1deg");
-
-        if (supportsIndependentRotate) {
-          // Keep any existing template transform/animation (eg moving-container),
-          // and compose rotation through the independent rotate property.
-          element.style.rotate = `${rotationAngle}deg`;
-          element.style.transformOrigin = "center";
-          return element;
-        }
-
-        // Fallback for engines without CSS rotate support:
-        // wrap the element so template transforms stay on child while wrapper rotates.
-        const wrapper = document.createElement("div");
-        wrapper.style.position = element.style.position;
-        wrapper.style.left = element.style.left;
-        wrapper.style.top = element.style.top;
-        wrapper.style.width = element.style.width;
-        wrapper.style.height = element.style.height;
-        wrapper.style.pointerEvents = "none";
-        wrapper.style.transform = `rotate(${rotationAngle}deg)`;
-        wrapper.style.transformOrigin = "center";
-
-        element.style.position = "absolute";
-        element.style.left = "0px";
-        element.style.top = "0px";
-        element.style.width = "100%";
-        element.style.height = "100%";
-        wrapper.append(element);
-        return wrapper;
+        return rotateElement(element, rotationAngle);
       }
 
       return element;
