@@ -5,6 +5,7 @@ import {
   getClosestRotationDegrees,
   ocrOverlayGeometry,
   rotationDegreesFromTransform,
+  textRunsAlongBoxHeight,
 } from "../src/ocrOverlay.mjs";
 
 globalThis.Node = { ELEMENT_NODE: 1, TEXT_NODE: 3 };
@@ -25,13 +26,26 @@ globalThis.window = {
   getComputedStyle: (element) => element.computedStyle ?? { transform: "none" },
 };
 
-function element({ className = "", transform = "", parent = null } = {}) {
+function element({
+  className = "",
+  transform = "",
+  parent = null,
+  box = null,
+  textWidth = 0,
+} = {}) {
   const el = {
     nodeType: 1,
     className,
     parentElement: parent,
     style: { transform },
-    computedStyle: { transform: transform || "none" },
+    computedStyle: {
+      transform: transform || "none",
+      fontSize: "16px",
+      lineHeight: "19.2px",
+    },
+    clientWidth: box ? box.w : 0,
+    clientHeight: box ? box.h : 0,
+    scrollWidth: Math.max(textWidth, box ? box.w : 0),
   };
   el.closest = (selector) => {
     const wanted = selector.replace(".", "");
@@ -52,6 +66,12 @@ function rangeInside(parent) {
 // "See You Later, Alligator" (9781510704855), page 004_Chapter001_0003.html,
 // the word "I'll": a hand-lettered line sloping down to the right.
 const OCR_BOX = { left: 256.8, top: 392, width: 42.9, height: 51.4 };
+
+// Measured on "See You Later, Alligator" (9781510704855) at a 16px reader font
+// with a 19.2px line height. Only `kangaroo` is authored a quarter turn off;
+// the rest are the near-misses a coarser rule gets wrong.
+const KANGAROO = { box: { w: 44, h: 257 }, textWidth: 72 };
+const KANGAROO_RECT = { left: 100, top: 200, width: 44, height: 257 };
 
 describe("rotationDegreesFromTransform", () => {
   it("reads the inline degrees form authored by OCR overlays", () => {
@@ -135,5 +155,69 @@ describe("ocrOverlayGeometry", () => {
 
     assert.equal(geometry.box, null);
     assert.equal(geometry.rotationAngle, undefined);
+  });
+
+  it("turns a swapped overlay onto the axis the word reads along", () => {
+    const container = element({ className: "ocr-container" });
+    const overlay = element({
+      className: "text-overlay",
+      transform: "rotate(-35.7686deg)",
+      parent: container,
+      box: KANGAROO.box,
+      textWidth: KANGAROO.textWidth,
+    });
+
+    const geometry = ocrOverlayGeometry(rangeInside(overlay), KANGAROO_RECT, 1);
+
+    assert.deepEqual(geometry.box, {
+      left: 100 + (44 - 257) / 2,
+      top: 200 + (257 - 44) / 2,
+      width: 257,
+      height: 44,
+    });
+    assert.ok(Math.abs(geometry.rotationAngle - 54.2314) < 0.001);
+  });
+
+  it("keeps the turn upright for an overlay tilted the other way", () => {
+    const container = element({ className: "ocr-container" });
+    const overlay = element({
+      className: "text-overlay",
+      transform: "rotate(35.7686deg)",
+      parent: container,
+      box: KANGAROO.box,
+      textWidth: KANGAROO.textWidth,
+    });
+
+    const geometry = ocrOverlayGeometry(rangeInside(overlay), KANGAROO_RECT, 1);
+
+    assert.ok(Math.abs(geometry.rotationAngle + 54.2314) < 0.001);
+  });
+});
+
+describe("textRunsAlongBoxHeight", () => {
+  const cases = [
+    ["kangaroo", { w: 44, h: 257 }, 72, true],
+    ["a", { w: 8, h: 13 }, 9, false],
+    ["be", { w: 16, h: 19 }, 18, false],
+    ["while", { w: 38, h: 20 }, 43, false],
+    ["crocodile", { w: 93, h: 45 }, 93, false],
+    ["Toodle", { w: 109, h: 51 }, 109, false],
+    ["oo", { w: 39, h: 38 }, 39, false],
+  ];
+
+  for (const [word, box, textWidth, expected] of cases) {
+    it(`${expected ? "turns" : "leaves"} "${word}"`, () => {
+      const overlay = element({
+        className: "text-overlay",
+        box,
+        textWidth,
+      });
+
+      assert.equal(textRunsAlongBoxHeight(overlay), expected);
+    });
+  }
+
+  it("ignores an overlay it cannot measure", () => {
+    assert.equal(textRunsAlongBoxHeight(null), false);
   });
 });

@@ -22,7 +22,7 @@ import {
   isTitleNumber,
   shouldSkipPageNumber,
 } from "./pageNumber.mjs";
-import { ocrOverlayGeometry, overlayRotationDegrees } from "./ocrOverlay.mjs";
+import { ocrOverlayGeometry, ocrOverlayPlacement } from "./ocrOverlay.mjs";
 
 let styles = new Map();
 let groups = new Map();
@@ -888,7 +888,11 @@ export function DecorationGroup(groupId, groupName) {
     itemContainer.dataset.style = item.decoration.style;
     itemContainer.style.pointerEvents = "none";
 
-    const ocrRect = getOCRCorrectedRect(item.range);
+    const ocrPlacement = ocrOverlayPlacement(
+      item.range,
+      getOCRCorrectedRect(item.range)
+    );
+    const ocrRect = ocrPlacement.rect;
     let ocrLayout = false;
     let computedLeft = undefined;
     let computedTop = undefined;
@@ -902,7 +906,7 @@ export function DecorationGroup(groupId, groupName) {
       computedTop = ocrRect.top;
       computedWidth = `${ocrRect.width}px`;
       computedHeight = `${ocrRect.height}px`;
-      rotationAngle = overlayRotationDegrees(item.range);
+      rotationAngle = ocrPlacement.rotationAngle;
     }
 
     let elementTemplate;
