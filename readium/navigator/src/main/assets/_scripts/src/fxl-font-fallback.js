@@ -55,6 +55,7 @@
 import {
   SYNTHETIC_PROBE_TEXT,
   evaluateSubstitution,
+  evidenceIsMissing,
   faceFor,
   faceKey,
   isNamedFamily,
@@ -225,11 +226,16 @@ const MIN_MEASURABLE_CHARACTERS = 2;
 /*
  * Every element holding text of its own.
  *
- * Walked once per page and handed to each step in turn: `getComputedStyle`
- * returns a live declaration, so a record stays true across the corrections
- * below, and re-reading the DOM for each of them would cost another
- * `querySelectorAll("*")` and another style resolution per element — thousands
- * of both on an OCR page carrying a span per word.
+ * Walked afresh by each step that follows a wait, and shared only within one.
+ * The records look durable — `getComputedStyle` hands back a live declaration,
+ * so a line answers for the page as the previous step left it — but they are
+ * only as durable as the nodes themselves, and Readium's own page setup replaces
+ * the overlay's markup wholesale after this module has first seen it. A record
+ * held across that replacement points at a detached element, which reports no
+ * width and an empty computed style: no authored box to judge a face against and
+ * no family to judge, which every question below reads as "nothing to correct".
+ * That is RR-7953 surviving its own fix — a page measured through stale
+ * references looks exactly like a page that was already right.
  *
  * Text too short to measure is kept rather than dropped. It cannot be a sample
  * — one character says nothing about which face fits a line — but it still
@@ -347,7 +353,14 @@ function unrenderableOverlays(context, textLines) {
     }
   }
 
-  /* A family with no measurable line carries no evidence to decide on. */
+  /*
+   * A family with no measurable line carries no evidence to decide on. Dropped
+   * rather than asked again: a line reaches here without a box because nothing
+   * holds it to a width the publisher authored — an overlay left to shrink to
+   * fit its own text — and no amount of waiting turns that into an authored
+   * width. A page that has laid out nothing at all is a different matter, and
+   * the caller looks for that before asking anything.
+   */
   for (const [name, group] of groups) {
     if (group.samples.length === 0) {
       groups.delete(name);
@@ -694,25 +707,10 @@ function correctOverlayMetrics() {
     return Promise.resolve();
   }
 
-  /*
-   * The one walk of the page. Each step below re-reads the same records, whose
-   * computed styles are live and so answer for the page as the previous step
-   * left it — including `unrenderableOverlays`, which has to see whatever the
-   * page default was just changed to.
-   */
-  const textLines = textElements();
-  if (textLines.length === 0) {
-    return Promise.resolve();
-  }
-
-  return fontsSettled(textLines)
-    .then(() =>
-      pageIsMeasurable(context, textLines, Date.now() + MEASURABLE_WAIT_MS)
-    )
+  return fontsSettled(textElements())
+    .then(() => pageIsMeasurable(context, Date.now() + MEASURABLE_WAIT_MS))
     .then((measurable) =>
-      measurable
-        ? correctMeasuredOverlays(context, directory, textLines)
-        : undefined
+      measurable ? correctMeasuredOverlays(context, directory) : undefined
     );
 }
 
@@ -751,6 +749,14 @@ const TICK_MS = 32;
 const MEASURABLE_WAIT_MS = 3000;
 
 /*
+ * The decision gets a budget of its own rather than what is left of the one
+ * above. A page slow enough to spend that first budget becoming measurable is
+ * precisely the page whose first measurement is worth repeating, and handing it
+ * the remainder would leave it none.
+ */
+const DECISION_WAIT_MS = 3000;
+
+/*
  * Holds off until the page can actually answer the two questions put to it.
  *
  * Neither has an answer before layout: the availability probe reports every
@@ -763,10 +769,11 @@ const MEASURABLE_WAIT_MS = 3000;
  * enough. It is not a layout barrier and never was, so the wait is now for the
  * thing actually needed, and gives up rather than spinning if it never arrives.
  */
-function pageIsMeasurable(context, textLines, deadline) {
-  const text = probeTextFrom(textLines[0].text);
+function pageIsMeasurable(context, deadline) {
+  const textLines = textElements();
   const ready =
-    probeDiscriminates(context, text) &&
+    textLines.length > 0 &&
+    probeDiscriminates(context, probeTextFrom(textLines[0].text)) &&
     textLines.some(({ element }) => boxElementFor(element) !== null);
   if (ready) {
     return Promise.resolve(true);
@@ -774,15 +781,84 @@ function pageIsMeasurable(context, textLines, deadline) {
   if (Date.now() >= deadline) {
     return Promise.resolve(false);
   }
-  return nextTick().then(() => pageIsMeasurable(context, textLines, deadline));
+  return nextTick().then(() => pageIsMeasurable(context, deadline));
 }
 
-function correctMeasuredOverlays(context, directory, textLines) {
+function correctMeasuredOverlays(context, directory) {
+  return substituteWhereItHelps(
+    context,
+    directory,
+    Date.now() + DECISION_WAIT_MS
+  ).then(() => restoreKerningIfItHelps(textElements()));
+}
+
+/*
+ * Backing off rather than polling every tick, because a decision is not a
+ * cheap question: it lays the page out twice over, once as it stands and once
+ * under the clone. A page that cannot answer yet needs longer than a frame
+ * before it can, so asking every frame would spend the whole budget on
+ * measurement and starve the layout it is waiting for.
+ */
+const FIRST_RETRY_MS = 32;
+
+function after(delay) {
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+/*
+ * Substitutes the clone wherever the page says it helps, asking again for as
+ * long as the page has yet to say anything at all.
+ *
+ * `pageIsMeasurable` already holds off until the page can answer, but it settles
+ * for *a* line with a width, which a box that shrink-wraps its own text supplies
+ * before the authored ones have been laid out — and it answers for the page as
+ * it stood then, not as it stands now. The decision then measures lines that
+ * cannot yet be judged, every sample is discarded, and the empty result is
+ * indistinguishable from a page with nothing to correct — so the overlay keeps
+ * Roboto's metrics, its lines keep overflowing the boxes they were authored
+ * into, and the underline sits under the wrong word for the life of the page.
+ * That is RR-7953 as QA still sees it, on the page the ticket was filed about.
+ *
+ * A decided answer — either way — ends it. Only the absence of one is retried,
+ * so a book that measures and says "leave me alone" is left alone the first
+ * time it says so, and is never talked into a substitution by a later attempt.
+ */
+function substituteWhereItHelps(context, directory, deadline, delay) {
+  const askAgain = () => {
+    const wait = delay || FIRST_RETRY_MS;
+    return Date.now() + wait < deadline
+      ? after(wait).then(() =>
+          substituteWhereItHelps(context, directory, deadline, wait * 2)
+        )
+      : Promise.resolve();
+  };
+
+  /*
+   * Walked here rather than passed in, so an attempt made after a wait reads the
+   * page as it is now. Both steps below need the same walk, and in this order:
+   * `unrenderableOverlays` has to see whatever the page default was just
+   * changed to.
+   */
+  const textLines = textElements();
+
+  /*
+   * Nothing on the page has been given a width, so nothing on it can be judged
+   * — the state `pageIsMeasurable` waited out, reached again because the markup
+   * it was waiting on is not the markup here now. Asked again before any of the
+   * work below, none of which can answer anything on a page in this state.
+   */
+  if (
+    textLines.length === 0 ||
+    !textLines.some(({ element }) => boxElementFor(element) !== null)
+  ) {
+    return askAgain();
+  }
+
   revertPageDefaultIfItHurts(textLines);
 
   const groups = unrenderableOverlays(context, textLines);
   if (groups.size === 0) {
-    return Promise.resolve(restoreKerningIfItHelps(textLines));
+    return Promise.resolve();
   }
 
   const measuring = new Set();
@@ -805,37 +881,35 @@ function correctMeasuredOverlays(context, directory, textLines) {
     }
   };
 
-  return loadAll(measurementFaces)
-    .then(() => {
-      const substituted = [];
+  return loadAll(measurementFaces).then(() => {
+    const substituted = [];
+    const verdicts = [];
+    try {
       for (const [family, { samples, faces }] of groups) {
-        if (
-          fitsBetter(samples, {
+        const verdict = evaluateSubstitution(
+          fitAgainst(samples, {
             "font-family": quoteFamily(MEASUREMENT_FAMILY),
           })
-        ) {
+        );
+        verdicts.push(verdict);
+        if (verdict !== null && verdict.improves) {
           substituted.push.apply(
             substituted,
             cloneFaces(family, directory, faces)
           );
         }
       }
-      if (substituted.length === 0) {
-        return undefined;
-      }
-      return loadAll(substituted).then(() => document.fonts.ready);
-    })
-    .then(
-      (value) => {
-        release();
-        return value;
-      },
-      (error) => {
-        release();
-        throw error;
-      }
-    )
-    .then(() => restoreKerningIfItHelps(textLines));
+    } finally {
+      release();
+    }
+    if (evidenceIsMissing(verdicts)) {
+      return askAgain();
+    }
+    if (substituted.length === 0) {
+      return undefined;
+    }
+    return loadAll(substituted).then(() => document.fonts.ready);
+  });
 }
 
 /*

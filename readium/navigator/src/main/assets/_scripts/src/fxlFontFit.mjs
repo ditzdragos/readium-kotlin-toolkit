@@ -284,3 +284,19 @@ export function evaluateSubstitution(
           (wrapped - wrappedAfter > 1 || substituteError <= currentError),
   };
 }
+
+/**
+ * Whether a page has yet to answer what was asked of it.
+ *
+ * `evaluateSubstitution` returns `null` for a group whose lines offered no
+ * usable width to judge a face against. That is the right answer for overlays
+ * which size themselves to their text, and the wrong one for a page asked
+ * before it had laid those lines out — and at the moment of asking the two look
+ * identical. Only the second changes with time, so a set of verdicts that
+ * decided nothing is treated as a question still open rather than as a page
+ * with nothing to correct: the alternative is what RR-7953 keeps returning as,
+ * an empty measurement mistaken for a clean bill of health and never repeated.
+ */
+export function evidenceIsMissing(verdicts) {
+  return verdicts.length > 0 && verdicts.every((verdict) => verdict === null);
+}

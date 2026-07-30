@@ -5,6 +5,7 @@ import {
   MIN_FIT_IMPROVEMENT,
   SYNTHETIC_PROBE_TEXT,
   evaluateSubstitution,
+  evidenceIsMissing,
   faceFor,
   faceKey,
   fitError,
@@ -407,6 +408,31 @@ describe("evaluateSubstitution", () => {
     assert.equal(verdict.wrappedAfter, 0);
     assert.equal(verdict.substituteError > verdict.currentError, true);
     assert.equal(verdict.improves, true);
+  });
+});
+
+describe("evidenceIsMissing", () => {
+  it("leaves the question open when a group yielded no usable sample", () => {
+    // RR-7953 came back this way: the page was measured before it could answer,
+    // every sample was rejected, and the empty answer was taken for "nothing to
+    // correct" — so the overlay kept the wrong metrics for the life of the page.
+    assert.equal(evidenceIsMissing([null]), true);
+  });
+
+  it("takes a decided no for an answer", () => {
+    assert.equal(evidenceIsMissing([{ improves: false }]), false);
+  });
+
+  it("takes a decided yes for an answer", () => {
+    assert.equal(evidenceIsMissing([{ improves: true }]), false);
+  });
+
+  it("is answered once any one group has measured", () => {
+    assert.equal(evidenceIsMissing([null, { improves: false }]), false);
+  });
+
+  it("has nothing to wait for when the page named no missing family", () => {
+    assert.equal(evidenceIsMissing([]), false);
   });
 });
 
