@@ -6,6 +6,8 @@
 
 package org.readium.r2.navigator.pager
 
+import java.util.Locale
+
 /**
  * Collection of JavaScript functions to be injected into WebView.
  * Separating these scripts from the main fragment class reduces complexity.
@@ -42,4 +44,26 @@ internal object WebViewScripts {
             (document.head || document.documentElement).appendChild(style);
         })();
     """.trimIndent()
+
+    /**
+     * Restates a fixed-layout page's scale as `initial-scale` on its own viewport meta, which is
+     * what makes it refit — Chromium resolves `loadWithOverviewMode` only once. No-op when the page
+     * is already at that scale, so a correct fit is never disturbed.
+     */
+    fun getFixedLayoutScaleScript(width: Double, height: Double, scale: Double): String {
+        val w = format(width)
+        val h = format(height)
+        val s = format(scale)
+        return """
+            (function() {
+                var meta = document.querySelector('meta[name=viewport]');
+                if (!meta) { return; }
+                var current = window.visualViewport ? window.visualViewport.scale : 0;
+                if (Math.abs(current - $s) < 0.002) { return; }
+                meta.setAttribute('content', 'width=$w, height=$h, initial-scale=$s');
+            })();
+        """.trimIndent()
+    }
+
+    private fun format(value: Double): String = String.format(Locale.ROOT, "%.5f", value)
 }

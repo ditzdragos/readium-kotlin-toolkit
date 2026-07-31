@@ -27,6 +27,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.os.BundleCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -43,6 +44,7 @@ import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -107,6 +109,13 @@ internal class R2EpubPageFragment : Fragment() {
     private val _isLoaded = MutableStateFlow(false)
     private var deferredLoadPending = false
 
+    // Sticky: the release can arrive while the page box is still being read.
+    private var deferredLoadReleased = false
+
+    // Held for the life of the view so the fit can be restated on every resize.
+    private var viewport: FixedLayoutViewport? = null
+    private var rightViewport: FixedLayoutViewport? = null
+
     private var webViewClient = object : WebViewClientCompat() {
         override fun shouldOverrideUrlLoading(
             view: WebView,
@@ -126,6 +135,7 @@ internal class R2EpubPageFragment : Fragment() {
             when (view) {
                 webView -> {
                     isLoading = false
+                    viewport?.let { applyFixedLayoutScale(view as R2WebView, it) }
                     this@R2EpubPageFragment.onPageFinished() // Call the fragment's onPageFinished
                     link?.let {
                         webView?.listener?.onResourceLoaded(webView!!, it)
@@ -148,6 +158,7 @@ internal class R2EpubPageFragment : Fragment() {
 
                 webViewRight -> {
                     isLoadingRight = false
+                    rightViewport?.let { applyFixedLayoutScale(view as R2WebView, it) }
                     rightLink?.let {
                         webViewRight?.listener?.onResourceLoaded(webViewRight!!, it)
                     }
@@ -312,6 +323,7 @@ internal class R2EpubPageFragment : Fragment() {
         webViewRight?.let { setupWebView(it, rightResourceUrl) }
 
         if (fixedLayout) {
+            deferredLoadReleased = false
             // Guard on the inflated view, not getView(): it is still null here, and a prewarmed
             // page never suspends, so this whole block runs before onCreateView returns.
             val spread = containerView
@@ -337,7 +349,7 @@ internal class R2EpubPageFragment : Fragment() {
      * doesn't decrypt and decode three spreads at once.
      */
     private fun startLoadingResources() {
-        if (navigator?.shouldDeferPageLoad(this) == true) {
+        if (!deferredLoadReleased && navigator?.shouldDeferPageLoad(this) == true) {
             deferredLoadPending = true
             // The fallback delay guarantees neighbour preloading at cold open if the visible spread
             // never finishes. On memory-constrained hosts neighbours must stay deferred until swiped
@@ -355,26 +367,72 @@ internal class R2EpubPageFragment : Fragment() {
      * turns `loadWithOverviewMode`'s width-only fit into a contain fit.
      */
     private suspend fun applyFixedLayoutAspectRatio() {
-        val navigator = navigator ?: return
-        webView?.let { view ->
-            resourceUrl?.let { applyAspectRatio(view, navigator.fixedLayoutViewport(it)) }
+        viewport = webView?.let { view ->
+            resourceUrl?.let { applyAspectRatio(view, fixedLayoutViewport(it)) }
         }
-        webViewRight?.let { view ->
-            rightResourceUrl?.let { applyAspectRatio(view, navigator.fixedLayoutViewport(it)) }
+        rightViewport = webViewRight?.let { view ->
+            rightResourceUrl?.let { applyAspectRatio(view, fixedLayoutViewport(it)) }
         }
     }
 
+    /** Null on failure: the box only decides the fit, so it must never block the load. */
+    private suspend fun fixedLayoutViewport(url: AbsoluteUrl): FixedLayoutViewport? =
+        try {
+            navigator?.fixedLayoutViewport(url)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w(e, "Could not read the fixed-layout page box of $url")
+            null
+        }
+
     /** Leaves the web view filling its slot when the page declares no usable box. */
-    private fun applyAspectRatio(webView: R2WebView, viewport: FixedLayoutViewport?) {
-        if (viewport == null) return
-        val params = webView.layoutParams as? ConstraintLayout.LayoutParams ?: return
+    private fun applyAspectRatio(
+        webView: R2WebView,
+        viewport: FixedLayoutViewport?,
+    ): FixedLayoutViewport? {
+        if (viewport == null) return null
+        val params = webView.layoutParams as? ConstraintLayout.LayoutParams ?: return null
         params.dimensionRatio =
             String.format(Locale.ROOT, "%.5f:%.5f", viewport.width, viewport.height)
         webView.layoutParams = params
+        webView.addOnLayoutChangeListener { view, l, t, r, b, oldL, oldT, oldR, oldB ->
+            if (r - l != oldR - oldL || b - t != oldB - oldT) {
+                applyFixedLayoutScale(view as R2WebView, viewport)
+            }
+        }
+        return viewport
     }
 
-    /** Starts loading the spread's resource(s) in the web view(s). */
+    /**
+     * Refits the page: `loadWithOverviewMode` resolves its fit once, at first layout, and Chromium
+     * keeps that scale through every later resize. The web view already has the page's ratio, so
+     * fitting width is a contain fit and the scale is one width over the other.
+     */
+    private fun applyFixedLayoutScale(webView: R2WebView, viewport: FixedLayoutViewport) {
+        val density = resources.displayMetrics.density
+        if (webView.width <= 0 || density <= 0f) return
+        val scale = webView.width / density / viewport.width
+        webView.evaluateJavascript(
+            WebViewScripts.getFixedLayoutScaleScript(viewport.width, viewport.height, scale),
+            null
+        )
+    }
+
+    /**
+     * Starts loading the spread's resource(s) in the web view(s). A fixed-layout page loaded into a
+     * web view with no box yet gets Chromium's 980px fallback width and stays a corner-sized
+     * fraction of itself, so wait out the layout the aspect-ratio constraint leaves pending.
+     */
     private fun loadResources() {
+        if (fixedLayout) {
+            containerView.doOnLayout { if (!viewDestroyed) loadResourcesNow() }
+        } else {
+            loadResourcesNow()
+        }
+    }
+
+    private fun loadResourcesNow() {
         // Load left page first.
         webView?.let {
             resourceUrl?.let { url ->
@@ -401,6 +459,9 @@ internal class R2EpubPageFragment : Fragment() {
      * visible spread was still loading). Idempotent; no-op when the load already started.
      */
     internal fun startDeferredLoadIfNeeded() {
+        // Recorded even with nothing pending: the load decision is made after the page box has been
+        // read, which can land after this release, and deferring hosts have no fallback timer.
+        deferredLoadReleased = true
         if (!deferredLoadPending) return
         deferredLoadPending = false
         if (view == null) return

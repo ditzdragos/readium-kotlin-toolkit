@@ -99,6 +99,10 @@ internal class WebViewServer(
     // publication is open, and re-reading it would land on the load path.
     private val fxlViewports: MutableMap<Url, FixedLayoutViewport?> = mutableMapOf()
 
+    // A fixed-layout publication is authored at one page size, so a page stating none is better
+    // fitted to that size than left to fill its slot at a size unlike its neighbours'.
+    private var fallbackFxlViewport: FixedLayoutViewport? = null
+
     private fun cachedResource(url: Url, build: () -> Resource): Resource {
         // Fast path: return a live entry. The get() must hold the lock because the map
         // is access-ordered (get() mutates iteration order).
@@ -179,11 +183,13 @@ internal class WebViewServer(
     internal suspend fun fixedLayoutViewport(href: Url): FixedLayoutViewport? {
         val pageUrl = href.removeFragment()
         synchronized(fxlViewports) {
-            if (fxlViewports.containsKey(pageUrl)) return fxlViewports[pageUrl]
+            if (fxlViewports.containsKey(pageUrl)) {
+                return fxlViewports[pageUrl] ?: fallbackFxlViewport
+            }
         }
 
-        val link = publication.linkWithHref(pageUrl) ?: return null
-        if (link.mediaType?.isHtml != true) return null
+        val link = publication.linkWithHref(pageUrl) ?: return fallbackFxlViewport
+        if (link.mediaType?.isHtml != true) return fallbackFxlViewport
 
         // Only a page that was never prewarmed reaches here: a zip inflate plus, for an LCP title,
         // a decrypt. A read failure is left uncached so a transient one doesn't pin the page.
@@ -191,14 +197,19 @@ internal class WebViewServer(
             publication.get(pageUrl)
                 ?.use { it.read().getOrNull() }
                 ?.decodeToString()
-        } ?: return null
+        } ?: return fallbackFxlViewport
 
-        return cacheFixedLayoutViewport(pageUrl, html)
+        return cacheFixedLayoutViewport(pageUrl, html) ?: fallbackFxlViewport
     }
 
     private fun cacheFixedLayoutViewport(pageUrl: Url, html: String): FixedLayoutViewport? {
         val viewport = FixedLayoutViewportParser.parse(html)
-        synchronized(fxlViewports) { fxlViewports[pageUrl] = viewport }
+        synchronized(fxlViewports) {
+            fxlViewports[pageUrl] = viewport
+            if (viewport != null && fallbackFxlViewport == null) {
+                fallbackFxlViewport = viewport
+            }
+        }
         return viewport
     }
 
