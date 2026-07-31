@@ -1421,30 +1421,29 @@ public class EpubNavigatorFragment public constructor(
     }
 
     /**
-     * Adjusts the given RectF based on viewport padding and applies horizontal offset
-     * if it's the right page in a fixed-layout dual-page view.
+     * Adjusts the given RectF based on viewport padding, then moves it out of the web view's own
+     * coordinates and into the spread's, so a view drawn over the spread lands on the word.
+     *
+     * The web view's position covers the right page of a fixed-layout spread as well: it starts
+     * where its half of the spread does.
      */
-    private fun adjustRectForLayout(rect: RectF, locatorHref: Url): RectF {
+    private fun adjustRectForLayout(rect: RectF, webView: R2BasicWebView, locatorHref: Url): RectF {
         val adjustedRect = rect.adjustedToViewport()
         Timber.d("RectF after adjustedToViewport for $locatorHref: $adjustedRect")
 
-        // Check if we are in fixed layout, dual page mode, and the locator is for the right page
-        if (
-            ::resourcePager.isInitialized &&
-            viewModel.layout == EpubLayout.FIXED &&
-            viewModel.dualPageMode == DualPage.ON
-        ) {
-            val pageResource = adapter.getResource(resourcePager.currentItem)
-            if (pageResource is PageResource.EpubFxl && locatorHref == pageResource.rightLink?.url()) {
-                // Calculate the horizontal offset (width of the left page's view area)
-                val horizontalOffset = resourcePager.width / 2f
-                Timber.d("Applying RectF horizontal offset for right page $locatorHref: $horizontalOffset")
-                // Apply the offset
-                adjustedRect.offset(horizontalOffset, 0f)
-                Timber.d("RectF after horizontal offset for $locatorHref: $adjustedRect")
-            }
-        }
-        return adjustedRect
+        val inSpread = SpreadCoordinates.toSpread(
+            rect = SpreadCoordinates.Box(
+                left = adjustedRect.left,
+                top = adjustedRect.top,
+                right = adjustedRect.right,
+                bottom = adjustedRect.bottom
+            ),
+            webViewLeft = webView.left,
+            webViewTop = webView.top
+        )
+        Timber.d("RectF in spread coordinates for $locatorHref: $inSpread")
+
+        return RectF(inSpread.left, inSpread.top, inSpread.right, inSpread.bottom)
     }
 
     private fun hasUsableViewForAsyncCallback(): Boolean =
@@ -1485,7 +1484,13 @@ public class EpubNavigatorFragment public constructor(
             val fragment = loadedFragmentForHref(locator.href)
             Timber.d("getRectForLocator for href ${locator.href} found fragment: ${fragment != null}")
 
-            fragment?.getWebView(locator.href)?.getRectFromLocator(locator) callback@{ result ->
+            val webView = fragment?.getWebView(locator.href)
+            if (webView == null) {
+                resumeDefaultRect("WebView not found")
+                return@suspendCancellableCoroutine
+            }
+
+            webView.getRectFromLocator(locator) callback@{ result ->
                 if (!hasUsableViewForAsyncCallback()) {
                     resumeDefaultRect("navigator view unavailable after WebView result")
                     return@callback
@@ -1494,13 +1499,14 @@ public class EpubNavigatorFragment public constructor(
                 val parsedRect = parseRectFFromJson(result, locator.href)
 
                 if (parsedRect != null) {
-                    resumeRect(adjustRectForLayout(parsedRect, locator.href), "rect adjusted successfully")
+                    resumeRect(
+                        adjustRectForLayout(parsedRect, webView, locator.href),
+                        "rect adjusted successfully"
+                    )
                 } else {
                     // Parsing failed or rect data was invalid
                     resumeDefaultRect("parsing failure")
                 }
-            } ?: run {
-                resumeDefaultRect("WebView not found")
             }
         }
     }
