@@ -95,10 +95,16 @@ public interface LcpService {
      * Injects a [licenseDocument] into the given [publicationFile] package.
      *
      * This is useful if you downloaded the publication yourself instead of using [acquirePublication].
+     *
+     * [checkPublicationDigest] compares [publicationFile] against the digest advertised by the
+     * license, which detects a truncated or corrupted download. Pass `false` when replacing the
+     * license of a publication that already contains one: injecting changes the archive, so its
+     * digest no longer matches the one computed by the LCP server on the original download.
      */
     public suspend fun injectLicenseDocument(
         licenseDocument: LicenseDocument,
         publicationFile: File,
+        checkPublicationDigest: Boolean = true,
     ): Try<Unit, LcpError>
 
     /**
