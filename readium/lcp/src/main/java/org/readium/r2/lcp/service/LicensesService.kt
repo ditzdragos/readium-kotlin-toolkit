@@ -77,8 +77,10 @@ internal class LicensesService(
     override suspend fun injectLicenseDocument(
         licenseDocument: LicenseDocument,
         publicationFile: File,
+        checkPublicationDigest: Boolean,
     ): Try<Unit, LcpError> {
         val hashIsCorrect = licenseDocument.publicationLink.hash
+            ?.takeIf { checkPublicationDigest }
             ?.let { publicationFile.checkSha256(it) }
 
         if (hashIsCorrect == false) {
