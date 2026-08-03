@@ -101,6 +101,8 @@ internal class WebViewServer(
 
     // A fixed-layout publication is authored at one page size, so a page stating none is better
     // fitted to that size than left to fill its slot at a size unlike its neighbours'.
+    // Volatile: written under the fxlViewports lock, but read outside it by the facing page.
+    @Volatile
     private var fallbackFxlViewport: FixedLayoutViewport? = null
 
     private fun cachedResource(url: Url, build: () -> Resource): Resource {
