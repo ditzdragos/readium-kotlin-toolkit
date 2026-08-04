@@ -1,6 +1,6 @@
 [versions]
 
-kotlin = "2.2.0"
+kotlin = "2.2.10"
 agp = "9.2.1"
 desugar_jdk_libs = "2.1.5"
 gradle-maven-publish-plugin = "0.32.0"
@@ -52,7 +52,7 @@ kotlinx-collections-immutable = "0.4.0"
 
 # Make sure to align with the Kotlin version.
 # See https://github.com/google/ksp/releases
-ksp = "2.2.0-2.0.2"
+ksp = "2.2.10-2.0.2"
 
 ktlint = "12.1.1"
 
