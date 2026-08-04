@@ -70,12 +70,12 @@ public data class Decoration<out L : DecorationLocation>(
     public interface Style {
 
         public data class Highlight(
-            @ColorInt override val tint: Int,
+            @param:ColorInt override val tint: Int,
             override val isActive: Boolean = false,
         ) : Style, Tinted, Activable
 
         public data class Underline(
-            @ColorInt override val tint: Int,
+            @param:ColorInt override val tint: Int,
             override val isActive: Boolean = false,
         ) : Style, Tinted, Activable
 
