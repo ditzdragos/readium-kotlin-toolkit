@@ -11,6 +11,7 @@ package org.readium.r2.lcp.service
 
 import android.net.Uri
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
@@ -133,6 +134,7 @@ internal class NetworkService {
                     ?: throw LcpException(LcpError.Network(NetworkException(null)))
 
                 val expectedLength = body.contentLength().toDouble()
+                destination.requireFreeSpaceFor(body.contentLength())
                 var readLength = 0L
                 var lastProgress = 0.0
 
@@ -170,6 +172,34 @@ internal class NetworkService {
     }
 }
 
+/**
+ * Fails the download before a single byte is written when the volume cannot hold the publication.
+ *
+ * Letting the copy run until the filesystem returns ENOSPC leaves a truncated file behind and
+ * wastes the whole transfer, so the announced Content-Length is checked against the free space
+ * up front. Servers that omit Content-Length report -1 and the download proceeds as before,
+ * surfacing ENOSPC from the write instead.
+ */
+private fun File.requireFreeSpaceFor(contentLength: Long) {
+    if (contentLength <= 0) return
+
+    val volume = parentFile ?: return
+    val availableBytes = volume.usableSpace
+    if (availableBytes <= 0) return
+
+    val requiredBytes = contentLength + DOWNLOAD_FREE_SPACE_MARGIN_BYTES
+    if (availableBytes < requiredBytes) {
+        throw LcpException(
+            LcpError.Network(
+                IOException(
+                    "ENOSPC (No space left on device): downloading $contentLength bytes to " +
+                        "$path needs $requiredBytes bytes but only $availableBytes are available"
+                )
+            )
+        )
+    }
+}
+
 private fun Double.roundToDecimals(decimals: Int): Double {
     var multiplier = 1.0
     repeat(decimals) { multiplier *= 10 }
@@ -177,3 +207,7 @@ private fun Double.roundToDecimals(decimals: Int): Double {
 }
 
 private const val DOWNLOAD_READ_BUFFER_BYTES: Long = 64 * 1024
+
+// Headroom the app still needs after the download lands: the license injection rewrites the
+// archive and the caller moves it into place.
+private const val DOWNLOAD_FREE_SPACE_MARGIN_BYTES: Long = 100L * 1024 * 1024
