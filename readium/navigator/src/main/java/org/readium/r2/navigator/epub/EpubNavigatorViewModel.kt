@@ -423,6 +423,18 @@ internal class EpubNavigatorViewModel(
         )
     }
 
+    /**
+     * Rebuilds the rendered elements of [group] from the decorations the web view already holds.
+     *
+     * Enhanced decorations are laid out in viewport coordinates and dropped when off screen, so
+     * they only draw for the page that is visible when the layout runs.
+     */
+    fun requestDecorationLayout(group: String): RunScriptCommand =
+        RunScriptCommand(
+            script = "requestAnimationFrame(function () { readium.getDecorations('$group').requestLayout();});",
+            scope = RunScriptCommand.Scope.LoadedResources
+        )
+
     /** Decoration group listeners, indexed by the group name. */
     private val decorationListeners: MutableMap<String, List<DecorableNavigator.Listener>> =
         mutableMapOf()

@@ -835,6 +835,10 @@ public class EpubNavigatorFragment public constructor(
         run(viewModel.clearEnhancedDecorations(group))
     }
 
+    public fun requestDecorationLayout(group: String) {
+        run(viewModel.requestDecorationLayout(group))
+    }
+
     public override fun addDecoration(group: String, decoration: Decoration) {
         run(viewModel.addDecoration(group, decoration))
     }
