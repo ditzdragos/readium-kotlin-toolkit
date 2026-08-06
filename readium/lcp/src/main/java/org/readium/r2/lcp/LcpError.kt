@@ -202,8 +202,8 @@ public sealed class LcpError(
             Container("Can't read license from container")
 
         /** Can't write the file at given relative path in the Container. */
-        public class WriteFailed(public val url: Url?) :
-            Container("Can't write license in container")
+        public class WriteFailed(public val url: Url?, cause: Error? = null) :
+            Container("Can't write license in container", cause)
     }
 
     /**

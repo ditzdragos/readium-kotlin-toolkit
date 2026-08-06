@@ -18,6 +18,7 @@ import org.readium.r2.lcp.BuildConfig.DEBUG
 import org.readium.r2.lcp.LcpError
 import org.readium.r2.lcp.LcpException
 import org.readium.r2.lcp.license.model.LicenseDocument
+import org.readium.r2.shared.util.ThrowableError
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.zip.FileChannelAdapter
 import org.readium.r2.shared.util.zip.compress.archivers.zip.ZipArchiveEntry
@@ -113,7 +114,7 @@ internal class FileZipLicenseContainer(
         } catch (e: Exception) {
             Timber.e(e, "FileZipLicenseContainer.write failed for %s", pathInZIP)
             tryDelete(tmpZip)
-            throw LcpException(LcpError.Container.WriteFailed(pathInZIP))
+            throw LcpException(LcpError.Container.WriteFailed(pathInZIP, ThrowableError(e)))
         }
     }
 
