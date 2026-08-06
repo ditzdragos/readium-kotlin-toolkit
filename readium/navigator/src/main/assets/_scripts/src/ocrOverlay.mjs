@@ -110,6 +110,33 @@ function lineHeightOf(element) {
 }
 
 /**
+ * The width the overlay's word occupies on one unwrapped line.
+ *
+ * `scrollWidth` cannot answer this: it never reports less than the box, so a
+ * word that fits measures as the box itself. The probe inherits the overlay's
+ * font, so it measures the same run the reader lays out, and `offsetWidth` is a
+ * layout box — unlike a client rect, an overlay's rotation cannot inflate it.
+ */
+function unwrappedTextWidth(element) {
+  const text = element.textContent ? element.textContent.trim() : "";
+  const ownerDocument = element.ownerDocument;
+  if (!text || !ownerDocument) {
+    return 0;
+  }
+
+  const probe = ownerDocument.createElement("span");
+  probe.textContent = text;
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.whiteSpace = "pre";
+
+  element.appendChild(probe);
+  const width = probe.offsetWidth;
+  probe.remove();
+  return width;
+}
+
+/**
  * Some overlays are authored a quarter turn off: the word runs along the box's
  * height rather than its width, because the OCR normalises the angle into a
  * narrow range and emits the equivalent box with its sides swapped. Anchoring a
@@ -118,7 +145,9 @@ function lineHeightOf(element) {
  *
  * Both comparisons are scale-free, so the reader's font size cancels out: a
  * portrait box holding a word that is naturally wider than a line is tall can
- * only be a swapped box.
+ * only be a swapped box. Measure the word, never the box that holds it — a
+ * single letter is naturally portrait, and its box alone is wide enough to pass
+ * for a whole line.
  */
 export function textRunsAlongBoxHeight(element) {
   if (!element) {
@@ -133,7 +162,8 @@ export function textRunsAlongBoxHeight(element) {
 
   const lineHeight = lineHeightOf(element);
   return (
-    lineHeight > 0 && element.scrollWidth > lineHeight * ORIENTATION_MARGIN
+    lineHeight > 0 &&
+    unwrappedTextWidth(element) > lineHeight * ORIENTATION_MARGIN
   );
 }
 
