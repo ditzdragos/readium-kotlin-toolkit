@@ -5,6 +5,7 @@
 //
 
 import { resetViewportRatioCache, toNativeRect } from "./rect";
+import { bestContextMatchIndex, lineBreakSeparator } from "./textOffsets.mjs";
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 import { TextRange } from "./vendor/hypothesis/anchoring/text-range";
 
@@ -457,6 +458,14 @@ function contextMatchesAt(entireText, highlightIndex, highlight, locatorText) {
   );
 }
 
+function rangeFromContextMatch(root, text) {
+  const index = bestContextMatchIndex(root.textContent, text);
+  if (index === -1) {
+    return null;
+  }
+  return rangeFromTextOffsets(root, index, index + text.highlight.length);
+}
+
 // Returns a range from a locator; it first searches for the higher level css element in the cache
 function rangeFromCachedLocator(locator) {
   const cached = cachedElementFor(locator.locations.cssSelector);
@@ -565,6 +574,14 @@ export function rangeFromLocator(locator) {
 
       if (!root) {
         root = document.body;
+      }
+
+      const byContext = rangeFromContextMatch(root, text);
+      if (byContext) {
+        if (DEBUG_MODE) {
+          log("rangeFromLocator: resolved from surrounding context");
+        }
+        return byContext;
       }
 
       let start = null;
@@ -992,6 +1009,11 @@ export function calculateHorizontalPageRanges() {
   let previousElementRect = new DOMRect(0, 0, 0, 0);
   // Track last range key to avoid Object.keys() calls
   let lastRangeKey = null;
+  // A <br> breaks the line without contributing a character, so emitting one here unconditionally
+  // makes this text longer than document.body.textContent — the space every offset resolves in.
+  // Held until the next text arrives, and dropped unless it is the only thing separating two
+  // words (RR-8661).
+  let pendingLineBreak = false;
 
   function processElement(element) {
     if (DEBUG_MODE) log("node name " + element.nodeName);
@@ -1020,8 +1042,8 @@ export function calculateHorizontalPageRanges() {
       processText = true;
       rect = element.getBoundingClientRect();
     } else if (element.nodeName === "br") {
-      if (DEBUG_MODE) log(`adding br as new line`);
-      addTextToRange("\n", rangeIndex);
+      if (DEBUG_MODE) log(`holding br as new line`);
+      pendingLineBreak = true;
     }
 
     if (processText) {
@@ -1185,6 +1207,18 @@ export function calculateHorizontalPageRanges() {
   function addTextToRange(text, range) {
     const rangeKey = range.toString();
     const existingText = rangeData[rangeKey];
+
+    if (pendingLineBreak) {
+      pendingLineBreak = false;
+      const precedingText =
+        existingText !== undefined
+          ? existingText
+          : lastRangeKey !== null
+          ? rangeData[lastRangeKey]
+          : "";
+      text = lineBreakSeparator(precedingText, text) + text;
+    }
+
     if (existingText !== undefined) {
       const newText = existingText + text;
       rangeData[rangeKey] = newText;
