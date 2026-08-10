@@ -182,11 +182,27 @@ internal class EpubNavigatorViewModel(
                 )
             )
 
-            // Applies the decorations.
             val templates = decorationTemplates.toJSON().toString()
                 .replace("\\n", " ")
-            var script = "readium.registerDecorationTemplates($templates);\n"
+            add(
+                RunScriptCommand(
+                    script = "readium.registerDecorationTemplates($templates);",
+                    scope = scope
+                )
+            )
+        }
 
+    /**
+     * Restores the decorations stored for [link], to be run once the web view reports its page
+     * laid out.
+     *
+     * Decorations are positioned from the client rects the page reports, and a fixed-layout page
+     * only settles its scale a layout pass after `onResourceLoaded`. Restoring them any earlier
+     * measures them against the pre-fit box, so they paint compressed in a corner and are then
+     * dragged across the page by later relayouts (RR-8782).
+     */
+    fun restoreDecorations(webView: R2BasicWebView, link: Link): List<RunScriptCommand> =
+        buildList {
             for ((group, decorations) in decorations) {
                 val changes = decorations
                     .filter { it.locator.href == link.url() }
@@ -199,10 +215,13 @@ internal class EpubNavigatorViewModel(
                     }
 
                 val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
-                script += "$groupScript\n"
+                add(
+                    RunScriptCommand(
+                        groupScript,
+                        scope = RunScriptCommand.Scope.WebView(webView)
+                    )
+                )
             }
-
-            add(RunScriptCommand(script, scope = scope))
         }
 
     // Serving resources

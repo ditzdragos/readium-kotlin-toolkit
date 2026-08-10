@@ -866,6 +866,7 @@ public class EpubNavigatorFragment public constructor(
 
         override fun onPageLoaded(webView: R2BasicWebView, link: Link) {
             Timber.d("onPageLoaded: ${link.href} $state")
+            run(viewModel.restoreDecorations(webView, link))
             viewLifecycleOwner.lifecycleScope.launch {
                 paginationListener?.onPageLoaded()
                 val href = link.url()
