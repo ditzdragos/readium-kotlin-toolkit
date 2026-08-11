@@ -940,8 +940,13 @@ export function DecorationGroup(groupId, groupName) {
         useOverlayPosition && computedTop !== undefined
           ? computedTop
           : rect.top;
-      const finalXOffset = useOverlayPosition ? 0 : xOffset;
-      const finalYOffset = useOverlayPosition ? 0 : yOffset;
+      // `.visible-area` sets `contain: layout`, which makes it the containing block for
+      // fixed-position descendants too, so an overlay is placed relative to its own page
+      // rather than the viewport. Both branches therefore have to turn the viewport rect
+      // they measured into a page-relative one, or a relayout that runs while the viewport
+      // sits on another page bakes in the scroll delta (RR-8782).
+      const finalXOffset = xOffset;
+      const finalYOffset = yOffset;
 
       if (width === "wrap") {
         if (
