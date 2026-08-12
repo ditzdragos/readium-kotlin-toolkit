@@ -69,13 +69,24 @@ export function overlayElement(range) {
   return startNode.closest(".text-overlay");
 }
 
+/** The deepest element the overlay's first word starts in. */
+function innermostFirstElement(element) {
+  let innermost = element;
+  while (innermost.firstElementChild) {
+    innermost = innermost.firstElementChild;
+  }
+  return innermost;
+}
+
 function overlayRotationDegrees(textOverlayElement) {
   if (!textOverlayElement) {
     return undefined;
   }
 
+  // Books author the rotation as readily on a wrapper around the word as on the
+  // overlay itself, so the walk has to start inside the overlay.
   const closestAngle = getClosestRotationDegrees(
-    textOverlayElement,
+    innermostFirstElement(textOverlayElement),
     textOverlayElement
   );
   if (closestAngle !== undefined) {
@@ -104,7 +115,8 @@ function overlayRotationDegrees(textOverlayElement) {
  * part of it, and washing that word would read as a highlight running one word
  * long.
  *
- * Returns [] when the range is not inside an OCR overlay.
+ * Returns [] when the range is not inside an OCR overlay, or when it reaches
+ * past the container the scan can see.
  */
 export function overlayElementsInRange(range) {
   const startOverlay = overlayElement(range);
@@ -115,6 +127,13 @@ export function overlayElementsInRange(range) {
   const ocrContainer = startOverlay.closest(".ocr-container");
   if (!ocrContainer || !ocrContainer.ownerDocument) {
     return [startOverlay];
+  }
+
+  // A range reaching past the container covers words this scan cannot see, and
+  // a partial answer is worse than none: the caller drops its client rects as
+  // soon as one box exists, so the tail would go undecorated.
+  if (range.endContainer && !ocrContainer.contains(range.endContainer)) {
+    return [];
   }
 
   const probe = ocrContainer.ownerDocument.createRange();
@@ -250,8 +269,8 @@ export function ocrOverlayPlacementForOverlay(textOverlayElement, ocrRect) {
  * words, which is why the overlays themselves decide: each contributes its own
  * box however many rects its text happened to produce.
  *
- * Returns [] when the range is not inside an OCR overlay, leaving the caller on
- * its client-rect path.
+ * Returns [] — leaving the caller on its client-rect path — unless every
+ * overlay the range covers yields a box.
  */
 export function ocrOverlayBoxes(range, correctedRectForOverlay) {
   if (!range || typeof correctedRectForOverlay !== "function") {
@@ -261,8 +280,11 @@ export function ocrOverlayBoxes(range, correctedRectForOverlay) {
   const boxes = [];
   for (const overlay of overlayElementsInRange(range)) {
     const ocrRect = correctedRectForOverlay(overlay);
+    // One unauthored overlay forfeits the whole span: the caller keeps its
+    // client rects only while there is no box at all, so a partial answer would
+    // leave that word with no decoration rather than a misplaced one.
     if (!ocrRect) {
-      continue;
+      return [];
     }
     boxes.push(ocrOverlayPlacementForOverlay(overlay, ocrRect));
   }

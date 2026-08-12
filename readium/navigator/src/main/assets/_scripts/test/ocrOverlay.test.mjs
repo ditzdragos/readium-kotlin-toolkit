@@ -66,6 +66,17 @@ function element({
       createRange: () => boundaries(0, 0),
     },
     children: [],
+    get firstElementChild() {
+      return el.children[0] ?? null;
+    },
+    contains: (node) => {
+      let current = node?.nodeType === 3 ? node.parentElement : node;
+      while (current) {
+        if (current === el) return true;
+        current = current.parentElement;
+      }
+      return false;
+    },
     querySelectorAll: (selector) => {
       const wanted = selector.replace(".", "");
       return el.children.filter((child) =>
@@ -124,7 +135,7 @@ function ocrPage(words) {
       className: "text-overlay",
       parent: container,
       text: typeof word === "string" ? word : word.text,
-      transform: typeof word === "string" ? "" : (word.transform ?? ""),
+      transform: typeof word === "string" ? "" : word.transform ?? "",
     });
     // Words never touch: a range ending on one cannot spill into the next.
     overlay.start = index * 10;
@@ -138,6 +149,12 @@ function ocrPage(words) {
 function rangeOverWords(overlays, from, to) {
   const range = boundaries(overlays[from].start, overlays[to].end);
   range.startContainer = { nodeType: 3, parentElement: overlays[from] };
+  // Both ends of a restored span land in whitespace between the overlays, whose
+  // parent is the container itself.
+  range.endContainer = {
+    nodeType: 3,
+    parentElement: overlays[to].parentElement,
+  };
   return range;
 }
 
@@ -190,14 +207,7 @@ describe("getClosestRotationDegrees", () => {
 
 describe("overlayElementsInRange", () => {
   it("covers every word a restored reading span reaches", () => {
-    const { overlays } = ocrPage([
-      "YOU'RE",
-      "NOT",
-      "MAKING",
-      "ME",
-      "GO",
-      "TO",
-    ]);
+    const { overlays } = ocrPage(["YOU'RE", "NOT", "MAKING", "ME", "GO", "TO"]);
 
     const covered = overlayElementsInRange(rangeOverWords(overlays, 0, 3));
 
@@ -286,20 +296,49 @@ describe("ocrOverlayBoxes", () => {
   it("stays out of the way of ordinary reflowable text", () => {
     const paragraph = element({ className: "chapter" });
 
-    assert.deepEqual(ocrOverlayBoxes(rangeInside(paragraph), () => null), []);
+    assert.deepEqual(
+      ocrOverlayBoxes(rangeInside(paragraph), () => null),
+      []
+    );
   });
 
-  it("skips a word whose box cannot be resolved", () => {
+  it("forfeits the span when one of its words has no authored box", () => {
     const { overlays } = ocrPage(["I", "HAVE"]);
 
+    // Boxing only "HAVE" would leave "I" undecorated: the caller drops its
+    // client rects as soon as one box comes back.
     const boxes = ocrOverlayBoxes(rangeOverWords(overlays, 0, 1), (overlay) =>
       overlay.textContent === "HAVE" ? OCR_BOX : null
     );
 
+    assert.deepEqual(boxes, []);
+  });
+
+  it("forfeits a span that reaches past its container", () => {
+    const { container, overlays } = ocrPage(["I", "HAVE"]);
+    const range = rangeOverWords(overlays, 0, 1);
+    const elsewhere = element({ className: "caption" });
+    range.endContainer = { nodeType: 3, parentElement: elsewhere };
+
+    assert.equal(container.contains(range.endContainer), false);
     assert.deepEqual(
-      boxes.map((box) => box.rect),
-      [OCR_BOX]
+      ocrOverlayBoxes(range, () => OCR_BOX),
+      []
     );
+  });
+
+  it("finds a rotation authored on a wrapper inside the overlay", () => {
+    const container = element({ className: "ocr-container" });
+    const overlay = element({ className: "text-overlay", parent: container });
+    element({
+      className: "rotated",
+      parent: overlay,
+      transform: "rotate(7.64402deg)",
+    });
+
+    const boxes = ocrOverlayBoxes(rangeInside(overlay), () => OCR_BOX);
+
+    assert.equal(boxes[0].rotationAngle, 7.64402);
   });
 
   it("turns a swapped overlay onto the axis the word reads along", () => {

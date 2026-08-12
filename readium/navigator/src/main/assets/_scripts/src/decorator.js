@@ -610,7 +610,13 @@ export function DecorationGroup(groupId, groupName) {
     const pageSize =
       (isVertical ? viewportHeight : viewportWidth) / columnCount;
 
-    function positionElement(element, rect, boundingRect, writingMode, overlayBox) {
+    function positionElement(
+      element,
+      rect,
+      boundingRect,
+      writingMode,
+      overlayBox
+    ) {
       element.style.position = "absolute";
       const isVerticalRL = writingMode === "vertical-rl";
       const isVerticalLR = writingMode === "vertical-lr";
@@ -982,7 +988,10 @@ export function DecorationGroup(groupId, groupName) {
             }))
           : getClientRectsNoOverlap(item.range, true)
               .sort((rectA, rectB) => rectA.top - rectB.top)
-              .map((clientRect) => ({ rect: clientRect, overlayBox: undefined }));
+              .map((clientRect) => ({
+                rect: clientRect,
+                overlayBox: undefined,
+              }));
 
         for (const placement of placements) {
           const line = elementTemplate.cloneNode(true);
