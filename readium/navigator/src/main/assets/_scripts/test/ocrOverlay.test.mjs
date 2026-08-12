@@ -354,11 +354,19 @@ describe("ocrOverlayBoxes", () => {
 
     const boxes = ocrOverlayBoxes(rangeInside(overlay), () => KANGAROO_RECT);
 
+    // The same eight fields the authored box carries: a caller positioning a
+    // vertical-rl decoration reads `right`, and a missing one lands as NaN.
+    const left = 100 + (44 - 257) / 2;
+    const top = 200 + (257 - 44) / 2;
     assert.deepEqual(boxes[0].rect, {
-      left: 100 + (44 - 257) / 2,
-      top: 200 + (257 - 44) / 2,
+      left,
+      top,
+      right: left + 257,
+      bottom: top + 44,
       width: 257,
       height: 44,
+      x: left,
+      y: top,
     });
     assert.ok(Math.abs(boxes[0].rotationAngle - 54.2314) < 0.001);
   });

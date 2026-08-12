@@ -981,17 +981,21 @@ export function DecorationGroup(groupId, groupName) {
 
     try {
       if (style.layout === "boxes") {
-        const placements = ocrLayout
-          ? overlayBoxes.map((overlayBox) => ({
-              rect: overlayBox.rect,
-              overlayBox,
-            }))
-          : getClientRectsNoOverlap(item.range, true)
-              .sort((rectA, rectB) => rectA.top - rectB.top)
-              .map((clientRect) => ({
-                rect: clientRect,
-                overlayBox: undefined,
-              }));
+        // Only `wrap` takes its geometry from the box it decorates; the other
+        // widths span the viewport or the bounding box, so they stay on one
+        // element per client rect — one per word would stack identical bands.
+        const placements =
+          ocrLayout && style.width === "wrap"
+            ? overlayBoxes.map((overlayBox) => ({
+                rect: overlayBox.rect,
+                overlayBox,
+              }))
+            : getClientRectsNoOverlap(item.range, true)
+                .sort((rectA, rectB) => rectA.top - rectB.top)
+                .map((clientRect) => ({
+                  rect: clientRect,
+                  overlayBox: overlayBoxes[0],
+                }));
 
         for (const placement of placements) {
           const line = elementTemplate.cloneNode(true);

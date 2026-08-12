@@ -226,13 +226,20 @@ export function textRunsAlongBoxHeight(element, boxRect) {
 }
 
 function quarterTurn(rect) {
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
+  const left = rect.left + rect.width / 2 - rect.height / 2;
+  const top = rect.top + rect.height / 2 - rect.width / 2;
+  // The swapped box stands in for the authored one, so it has to carry the same
+  // eight fields: a caller reading `right` off a four-field rect writes NaN into
+  // the position it computes, and the browser drops the declaration.
   return {
-    left: centerX - rect.height / 2,
-    top: centerY - rect.width / 2,
+    left,
+    top,
+    right: left + rect.height,
+    bottom: top + rect.width,
     width: rect.height,
     height: rect.width,
+    x: left,
+    y: top,
   };
 }
 
