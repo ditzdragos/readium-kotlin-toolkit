@@ -8,12 +8,18 @@
 
 import "./index";
 import { applyFontFallback } from "./fxl-font-fallback";
+import { rejoinSplitOcrWords } from "./ocrWordMerge.mjs";
 
 window.readium.isFixedLayout = true;
 
 /*
- * Nothing downstream waits on this — the overlay is corrected in place — so a
+ * Rejoining runs first: it moves overlay boxes, and the font probe decides from
+ * the box each word has to fit in.
+ *
+ * Nothing downstream waits on either — the overlay is corrected in place — so a
  * rejection here has nowhere to surface. Swallow it deliberately rather than
- * leaving an unhandled rejection: the page keeps whatever metrics it had.
+ * leaving an unhandled rejection: the page keeps whatever overlays it had.
  */
-applyFontFallback().catch(() => {});
+rejoinSplitOcrWords()
+  .then(applyFontFallback)
+  .catch(() => {});
