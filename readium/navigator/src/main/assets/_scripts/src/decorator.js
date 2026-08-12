@@ -11,7 +11,7 @@ import {
 } from "./rect";
 import {
   DEBUG_MODE,
-  getOCRCorrectedRect,
+  getOCRCorrectedRectForOverlay,
   log,
   logError,
   rangeFromLocator,
@@ -22,7 +22,7 @@ import {
   isTitleNumber,
   shouldSkipPageNumber,
 } from "./pageNumber.mjs";
-import { ocrOverlayGeometry, ocrOverlayPlacement } from "./ocrOverlay.mjs";
+import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
 
 let styles = new Map();
 let groups = new Map();
@@ -610,9 +610,7 @@ export function DecorationGroup(groupId, groupName) {
     const pageSize =
       (isVertical ? viewportHeight : viewportWidth) / columnCount;
 
-    let ocrGeometry = { box: null, rotationAngle: undefined };
-
-    function positionElement(element, rect, boundingRect, writingMode) {
+    function positionElement(element, rect, boundingRect, writingMode, overlayBox) {
       element.style.position = "absolute";
       const isVerticalRL = writingMode === "vertical-rl";
       const isVerticalLR = writingMode === "vertical-lr";
@@ -669,7 +667,7 @@ export function DecorationGroup(groupId, groupName) {
         }
       } else {
         if (style.width === "wrap") {
-          const box = ocrGeometry.box ?? rect;
+          const box = overlayBox?.rect ?? rect;
           element.style.width = `${box.width}px`;
           element.style.height = `${box.height}px`;
           element.style.left = `${box.left + xOffset}px`;
@@ -694,8 +692,8 @@ export function DecorationGroup(groupId, groupName) {
         }
       }
 
-      if (ocrGeometry.rotationAngle !== undefined) {
-        return rotateElement(element, ocrGeometry.rotationAngle);
+      if (overlayBox?.rotationAngle !== undefined) {
+        return rotateElement(element, overlayBox.rotationAngle);
       }
 
       return element;
@@ -739,18 +737,36 @@ export function DecorationGroup(groupId, groupName) {
         }
       });
 
-      ocrGeometry = ocrOverlayGeometry(
+      const overlayBoxes = ocrOverlayBoxes(
         item.range,
-        getOCRCorrectedRect(item.range),
-        clientRects.length
+        getOCRCorrectedRectForOverlay
       );
+      // Only `wrap` takes its geometry from the box it decorates; the other
+      // widths span the viewport or the bounding box, so they stay on one
+      // element per client rect.
+      const placements =
+        overlayBoxes.length > 0 && style.width === "wrap"
+          ? overlayBoxes.map((overlayBox) => ({
+              rect: overlayBox.rect,
+              overlayBox,
+            }))
+          : clientRects.map((clientRect) => ({
+              rect: clientRect,
+              overlayBox: overlayBoxes[0],
+            }));
 
-      for (let clientRect of clientRects) {
+      for (const placement of placements) {
         const line = elementTemplate.cloneNode(true);
         line.style.pointerEvents = "none";
         line.dataset.writingMode = decoratorWritingMode;
         itemContainer.append(
-          positionElement(line, clientRect, boundingRect, documentWritingMode)
+          positionElement(
+            line,
+            placement.rect,
+            boundingRect,
+            documentWritingMode,
+            placement.overlayBox
+          )
         );
       }
     } else if (style.layout === "bounds") {
@@ -888,26 +904,11 @@ export function DecorationGroup(groupId, groupName) {
     itemContainer.dataset.style = item.decoration.style;
     itemContainer.style.pointerEvents = "none";
 
-    const ocrPlacement = ocrOverlayPlacement(
+    const overlayBoxes = ocrOverlayBoxes(
       item.range,
-      getOCRCorrectedRect(item.range)
+      getOCRCorrectedRectForOverlay
     );
-    const ocrRect = ocrPlacement.rect;
-    let ocrLayout = false;
-    let computedLeft = undefined;
-    let computedTop = undefined;
-    let computedWidth = undefined;
-    let computedHeight = undefined;
-    let rotationAngle = undefined;
-
-    if (ocrRect) {
-      ocrLayout = true;
-      computedLeft = ocrRect.left;
-      computedTop = ocrRect.top;
-      computedWidth = `${ocrRect.width}px`;
-      computedHeight = `${ocrRect.height}px`;
-      rotationAngle = ocrPlacement.rotationAngle;
-    }
+    const ocrLayout = overlayBoxes.length > 0;
 
     let elementTemplate;
     try {
@@ -923,23 +924,12 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    function positionElement(
-      element,
-      rect,
-      elementBoundingRect,
-      useOverlayPosition = false
-    ) {
-      element.style.position = useOverlayPosition ? "fixed" : "absolute";
+    function positionElement(element, rect, elementBoundingRect, overlayBox) {
+      element.style.position = overlayBox ? "fixed" : "absolute";
       const width = style.width;
 
-      const leftPos =
-        useOverlayPosition && computedLeft !== undefined
-          ? computedLeft
-          : rect.left;
-      const topPos =
-        useOverlayPosition && computedTop !== undefined
-          ? computedTop
-          : rect.top;
+      const leftPos = overlayBox ? overlayBox.rect.left : rect.left;
+      const topPos = overlayBox ? overlayBox.rect.top : rect.top;
       // `.visible-area` sets `contain: layout`, which makes it the containing block for
       // fixed-position descendants too, so an overlay is placed relative to its own page
       // rather than the viewport. Both branches therefore have to turn the viewport rect
@@ -949,13 +939,9 @@ export function DecorationGroup(groupId, groupName) {
       const finalYOffset = yOffset;
 
       if (width === "wrap") {
-        if (
-          useOverlayPosition &&
-          computedWidth !== undefined &&
-          computedHeight !== undefined
-        ) {
-          element.style.width = `${computedWidth}`;
-          element.style.height = `${computedHeight}`;
+        if (overlayBox) {
+          element.style.width = `${overlayBox.rect.width}px`;
+          element.style.height = `${overlayBox.rect.height}px`;
         } else {
           element.style.width = `${rect.width}px`;
           element.style.height = `${rect.height}px`;
@@ -980,8 +966,8 @@ export function DecorationGroup(groupId, groupName) {
         element.style.top = `${topPos + finalYOffset}px`;
       }
 
-      if (rotationAngle !== undefined) {
-        return rotateElement(element, rotationAngle);
+      if (overlayBox?.rotationAngle !== undefined) {
+        return rotateElement(element, overlayBox.rotationAngle);
       }
 
       return element;
@@ -989,19 +975,23 @@ export function DecorationGroup(groupId, groupName) {
 
     try {
       if (style.layout === "boxes") {
-        const clientRects = getClientRectsNoOverlap(item.range, true).sort(
-          (rectA, rectB) => rectA.top - rectB.top
-        );
-        const useOverlay = clientRects.length === 1 && ocrLayout;
+        const placements = ocrLayout
+          ? overlayBoxes.map((overlayBox) => ({
+              rect: overlayBox.rect,
+              overlayBox,
+            }))
+          : getClientRectsNoOverlap(item.range, true)
+              .sort((rectA, rectB) => rectA.top - rectB.top)
+              .map((clientRect) => ({ rect: clientRect, overlayBox: undefined }));
 
-        for (let clientRect of clientRects) {
+        for (const placement of placements) {
           const line = elementTemplate.cloneNode(true);
           line.style.pointerEvents = "none";
           const positionedLine = positionElement(
             line,
-            clientRect,
+            placement.rect,
             boundingRect,
-            useOverlay
+            placement.overlayBox
           );
           itemContainer.append(positionedLine);
         }
@@ -1012,7 +1002,7 @@ export function DecorationGroup(groupId, groupName) {
           bounds,
           boundingRect,
           boundingRect,
-          ocrLayout
+          overlayBoxes[0]
         );
         itemContainer.append(positionedBounds);
       }

@@ -3,12 +3,20 @@ import { describe, it } from "node:test";
 
 import {
   getClosestRotationDegrees,
-  ocrOverlayGeometry,
+  ocrOverlayBoxes,
+  overlayElementsInRange,
   rotationDegreesFromTransform,
   textRunsAlongBoxHeight,
 } from "../src/ocrOverlay.mjs";
 
 globalThis.Node = { ELEMENT_NODE: 1, TEXT_NODE: 3 };
+
+globalThis.Range = {
+  START_TO_START: 0,
+  START_TO_END: 1,
+  END_TO_END: 2,
+  END_TO_START: 3,
+};
 
 globalThis.DOMMatrixReadOnly = class {
   constructor(transform) {
@@ -55,9 +63,20 @@ function element({
         offsetWidth: textWidth,
         remove() {},
       }),
+      createRange: () => boundaries(0, 0),
+    },
+    children: [],
+    querySelectorAll: (selector) => {
+      const wanted = selector.replace(".", "");
+      return el.children.filter((child) =>
+        child.className.split(" ").includes(wanted)
+      );
     },
     appendChild() {},
   };
+  if (parent) {
+    parent.children.push(el);
+  }
   el.closest = (selector) => {
     const wanted = selector.replace(".", "");
     let current = el;
@@ -70,8 +89,56 @@ function element({
   return el;
 }
 
+/**
+ * A pair of boundary points on one document-order axis, comparable the way the
+ * DOM compares two ranges.
+ */
+function boundaries(start, end) {
+  return {
+    start,
+    end,
+    selectNodeContents(element) {
+      this.start = element.start;
+      this.end = element.end;
+    },
+    compareBoundaryPoints(how, other) {
+      const mine = how === Range.END_TO_START ? this.start : this.end;
+      const theirs = how === Range.END_TO_START ? other.end : other.start;
+      if (mine === theirs) return 0;
+      return mine < theirs ? -1 : 1;
+    },
+  };
+}
+
 function rangeInside(parent) {
-  return { startContainer: { nodeType: 3, parentElement: parent } };
+  const range = boundaries(parent.start ?? 0, parent.end ?? 1);
+  range.startContainer = { nodeType: 3, parentElement: parent };
+  return range;
+}
+
+/** An `.ocr-container` holding one `.text-overlay` per word, in reading order. */
+function ocrPage(words) {
+  const container = element({ className: "ocr-container" });
+  const overlays = words.map((word, index) => {
+    const overlay = element({
+      className: "text-overlay",
+      parent: container,
+      text: typeof word === "string" ? word : word.text,
+      transform: typeof word === "string" ? "" : (word.transform ?? ""),
+    });
+    // Words never touch: a range ending on one cannot spill into the next.
+    overlay.start = index * 10;
+    overlay.end = index * 10 + 5;
+    return overlay;
+  });
+  return { container, overlays };
+}
+
+/** A range covering `words[from]` through `words[to]` inclusive. */
+function rangeOverWords(overlays, from, to) {
+  const range = boundaries(overlays[from].start, overlays[to].end);
+  range.startContainer = { nodeType: 3, parentElement: overlays[from] };
+  return range;
 }
 
 // "See You Later, Alligator" (9781510704855), page 004_Chapter001_0003.html,
@@ -121,22 +188,47 @@ describe("getClosestRotationDegrees", () => {
   });
 });
 
-describe("ocrOverlayGeometry", () => {
-  it("offers the overlay box and its rotation for an unwrapped word", () => {
-    const container = element({ className: "ocr-container" });
-    const overlay = element({
-      className: "text-overlay",
-      transform: "rotate(7.64402deg)",
-      parent: container,
-    });
+describe("overlayElementsInRange", () => {
+  it("covers every word a restored reading span reaches", () => {
+    const { overlays } = ocrPage([
+      "YOU'RE",
+      "NOT",
+      "MAKING",
+      "ME",
+      "GO",
+      "TO",
+    ]);
 
-    const geometry = ocrOverlayGeometry(rangeInside(overlay), OCR_BOX, 1);
+    const covered = overlayElementsInRange(rangeOverWords(overlays, 0, 3));
 
-    assert.deepEqual(geometry.box, OCR_BOX);
-    assert.equal(geometry.rotationAngle, 7.64402);
+    assert.deepEqual(
+      covered.map((overlay) => overlay.textContent),
+      ["YOU'RE", "NOT", "MAKING", "ME"]
+    );
   });
 
-  it("withholds the box once the invisible text has wrapped", () => {
+  it("leaves out the word a range stops short of", () => {
+    const { overlays } = ocrPage(["I", "HAVE", "TYPE"]);
+    const range = rangeOverWords(overlays, 0, 1);
+    range.end = overlays[2].start;
+
+    const covered = overlayElementsInRange(range);
+
+    assert.deepEqual(
+      covered.map((overlay) => overlay.textContent),
+      ["I", "HAVE"]
+    );
+  });
+
+  it("stays out of the way of ordinary reflowable text", () => {
+    const paragraph = element({ className: "chapter" });
+
+    assert.deepEqual(overlayElementsInRange(rangeInside(paragraph)), []);
+  });
+});
+
+describe("ocrOverlayBoxes", () => {
+  it("offers the overlay box and its rotation for one word", () => {
     const container = element({ className: "ocr-container" });
     const overlay = element({
       className: "text-overlay",
@@ -144,29 +236,70 @@ describe("ocrOverlayGeometry", () => {
       parent: container,
     });
 
-    const geometry = ocrOverlayGeometry(rangeInside(overlay), OCR_BOX, 3);
+    const boxes = ocrOverlayBoxes(rangeInside(overlay), () => OCR_BOX);
 
-    assert.equal(geometry.box, null);
-    assert.equal(geometry.rotationAngle, 7.64402);
+    assert.equal(boxes.length, 1);
+    assert.deepEqual(boxes[0].rect, OCR_BOX);
+    assert.equal(boxes[0].rotationAngle, 7.64402);
+  });
+
+  it("gives a span of words one box each, never the first word's alone", () => {
+    const { overlays } = ocrPage(["YOU'RE", "NOT", "MAKING"]);
+    const rects = {
+      "YOU'RE": { left: 136, top: 96, width: 47, height: 14 },
+      NOT: { left: 185, top: 96, width: 29, height: 14 },
+      MAKING: { left: 120, top: 112, width: 48, height: 12 },
+    };
+
+    const boxes = ocrOverlayBoxes(
+      rangeOverWords(overlays, 0, 2),
+      (overlay) => rects[overlay.textContent]
+    );
+
+    assert.deepEqual(
+      boxes.map((box) => box.rect),
+      [rects["YOU'RE"], rects.NOT, rects.MAKING]
+    );
+  });
+
+  it("still boxes a word whose invisible text wrapped", () => {
+    const container = element({ className: "ocr-container" });
+    const overlay = element({ className: "text-overlay", parent: container });
+
+    const boxes = ocrOverlayBoxes(rangeInside(overlay), () => OCR_BOX);
+
+    assert.deepEqual(
+      boxes.map((box) => box.rect),
+      [OCR_BOX]
+    );
   });
 
   it("reports no rotation for an upright overlay", () => {
     const container = element({ className: "ocr-container" });
     const overlay = element({ className: "text-overlay", parent: container });
 
-    const geometry = ocrOverlayGeometry(rangeInside(overlay), OCR_BOX, 1);
+    const boxes = ocrOverlayBoxes(rangeInside(overlay), () => OCR_BOX);
 
-    assert.deepEqual(geometry.box, OCR_BOX);
-    assert.equal(geometry.rotationAngle, undefined);
+    assert.equal(boxes[0].rotationAngle, undefined);
   });
 
   it("stays out of the way of ordinary reflowable text", () => {
     const paragraph = element({ className: "chapter" });
 
-    const geometry = ocrOverlayGeometry(rangeInside(paragraph), null, 1);
+    assert.deepEqual(ocrOverlayBoxes(rangeInside(paragraph), () => null), []);
+  });
 
-    assert.equal(geometry.box, null);
-    assert.equal(geometry.rotationAngle, undefined);
+  it("skips a word whose box cannot be resolved", () => {
+    const { overlays } = ocrPage(["I", "HAVE"]);
+
+    const boxes = ocrOverlayBoxes(rangeOverWords(overlays, 0, 1), (overlay) =>
+      overlay.textContent === "HAVE" ? OCR_BOX : null
+    );
+
+    assert.deepEqual(
+      boxes.map((box) => box.rect),
+      [OCR_BOX]
+    );
   });
 
   it("turns a swapped overlay onto the axis the word reads along", () => {
@@ -180,15 +313,15 @@ describe("ocrOverlayGeometry", () => {
       textWidth: KANGAROO.textWidth,
     });
 
-    const geometry = ocrOverlayGeometry(rangeInside(overlay), KANGAROO_RECT, 1);
+    const boxes = ocrOverlayBoxes(rangeInside(overlay), () => KANGAROO_RECT);
 
-    assert.deepEqual(geometry.box, {
+    assert.deepEqual(boxes[0].rect, {
       left: 100 + (44 - 257) / 2,
       top: 200 + (257 - 44) / 2,
       width: 257,
       height: 44,
     });
-    assert.ok(Math.abs(geometry.rotationAngle - 54.2314) < 0.001);
+    assert.ok(Math.abs(boxes[0].rotationAngle - 54.2314) < 0.001);
   });
 
   it("keeps the turn upright for an overlay tilted the other way", () => {
@@ -202,9 +335,9 @@ describe("ocrOverlayGeometry", () => {
       textWidth: KANGAROO.textWidth,
     });
 
-    const geometry = ocrOverlayGeometry(rangeInside(overlay), KANGAROO_RECT, 1);
+    const boxes = ocrOverlayBoxes(rangeInside(overlay), () => KANGAROO_RECT);
 
-    assert.ok(Math.abs(geometry.rotationAngle + 54.2314) < 0.001);
+    assert.ok(Math.abs(boxes[0].rotationAngle + 54.2314) < 0.001);
   });
 });
 

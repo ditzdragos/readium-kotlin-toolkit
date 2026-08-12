@@ -69,17 +69,15 @@ export function overlayElement(range) {
   return startNode.closest(".text-overlay");
 }
 
-export function overlayRotationDegrees(range) {
-  const textOverlayElement = overlayElement(range);
+function overlayRotationDegrees(textOverlayElement) {
   if (!textOverlayElement) {
     return undefined;
   }
-  const startNode =
-    range.startContainer.nodeType === Node.TEXT_NODE
-      ? range.startContainer.parentElement
-      : range.startContainer;
 
-  const closestAngle = getClosestRotationDegrees(startNode, textOverlayElement);
+  const closestAngle = getClosestRotationDegrees(
+    textOverlayElement,
+    textOverlayElement
+  );
   if (closestAngle !== undefined) {
     return closestAngle;
   }
@@ -95,6 +93,43 @@ export function overlayRotationDegrees(range) {
   return inlineAngle !== undefined
     ? inlineAngle
     : rotationDegreesFromTransform(transform);
+}
+
+/**
+ * The `.text-overlay` elements a range covers, in reading order.
+ *
+ * Overlays are laid out in document order and a range is contiguous, so the
+ * scan stops at the first overlay starting past the range's end. Touching
+ * boundaries are excluded: a range ending where the next word begins covers no
+ * part of it, and washing that word would read as a highlight running one word
+ * long.
+ *
+ * Returns [] when the range is not inside an OCR overlay.
+ */
+export function overlayElementsInRange(range) {
+  const startOverlay = overlayElement(range);
+  if (!startOverlay) {
+    return [];
+  }
+
+  const ocrContainer = startOverlay.closest(".ocr-container");
+  if (!ocrContainer || !ocrContainer.ownerDocument) {
+    return [startOverlay];
+  }
+
+  const probe = ocrContainer.ownerDocument.createRange();
+  const covered = [];
+  for (const overlay of ocrContainer.querySelectorAll(".text-overlay")) {
+    probe.selectNodeContents(overlay);
+    if (range.compareBoundaryPoints(Range.START_TO_END, probe) <= 0) {
+      break;
+    }
+    if (range.compareBoundaryPoints(Range.END_TO_START, probe) < 0) {
+      covered.push(overlay);
+    }
+  }
+
+  return covered.length > 0 ? covered : [startOverlay];
 }
 
 const ORIENTATION_MARGIN = 1.2;
@@ -187,9 +222,12 @@ function uprightAngle(rotationAngle) {
   return angle > 0 ? angle - 90 : angle + 90;
 }
 
-export function ocrOverlayPlacement(range, ocrRect) {
-  const rotationAngle = overlayRotationDegrees(range);
-  if (!ocrRect || !textRunsAlongBoxHeight(overlayElement(range), ocrRect)) {
+/**
+ * Resolves how a decoration on a single OCR overlay must be placed.
+ */
+export function ocrOverlayPlacementForOverlay(textOverlayElement, ocrRect) {
+  const rotationAngle = overlayRotationDegrees(textOverlayElement);
+  if (!ocrRect || !textRunsAlongBoxHeight(textOverlayElement, ocrRect)) {
     return { rect: ocrRect ?? null, rotationAngle };
   }
 
@@ -200,20 +238,33 @@ export function ocrOverlayPlacement(range, ocrRect) {
 }
 
 /**
- * Resolves how a decoration on an OCR overlay must be placed.
+ * The boxes a decoration must occupy, one per `.text-overlay` its range covers.
  *
- * `box` is the overlay rect the decoration should occupy, and is only offered
- * when the invisible text produced a single client rect: once it wraps, each
- * rect covers part of the word and none of them maps onto the overlay box.
+ * A range's own client rects cannot stand in for these. The invisible text is
+ * laid out at the reader's font size inside a box authored in percentages of
+ * the page, so the rects track the text, not the artwork word — and where the
+ * `.ocr-container` shrink-wraps to zero width they collapse to x = 0 for every
+ * word on the page. Only the authored box tracks the word.
+ *
+ * Counting client rects cannot tell a wrapped word from a span of several
+ * words, which is why the overlays themselves decide: each contributes its own
+ * box however many rects its text happened to produce.
+ *
+ * Returns [] when the range is not inside an OCR overlay, leaving the caller on
+ * its client-rect path.
  */
-export function ocrOverlayGeometry(range, ocrRect, clientRectCount) {
-  if (!range || !ocrRect) {
-    return { box: null, rotationAngle: undefined };
-  }
-  if (clientRectCount !== 1) {
-    return { box: null, rotationAngle: overlayRotationDegrees(range) };
+export function ocrOverlayBoxes(range, correctedRectForOverlay) {
+  if (!range || typeof correctedRectForOverlay !== "function") {
+    return [];
   }
 
-  const placement = ocrOverlayPlacement(range, ocrRect);
-  return { box: placement.rect, rotationAngle: placement.rotationAngle };
+  const boxes = [];
+  for (const overlay of overlayElementsInRange(range)) {
+    const ocrRect = correctedRectForOverlay(overlay);
+    if (!ocrRect) {
+      continue;
+    }
+    boxes.push(ocrOverlayPlacementForOverlay(overlay, ocrRect));
+  }
+  return boxes;
 }

@@ -5,6 +5,7 @@
 //
 
 import { resetViewportRatioCache, toNativeRect } from "./rect";
+import { overlayElement } from "./ocrOverlay.mjs";
 import { bestContextMatchIndex, lineBreakSeparator } from "./textOffsets.mjs";
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 import { TextRange } from "./vendor/hypothesis/anchoring/text-range";
@@ -899,28 +900,12 @@ function getOCRReferenceRect(ocrContainer) {
 }
 
 /**
- * Calculates corrected viewport coordinates for OCR text-overlay elements.
+ * Calculates corrected viewport coordinates for one OCR text-overlay element.
  *
- * Returns null when the range is not inside an OCR overlay.
+ * Returns null when the element is not an OCR overlay authored in percentages.
  */
-export function getOCRCorrectedRect(range) {
-  if (!range) {
-    return null;
-  }
-
-  let startNode = range.startContainer;
-  if (!startNode) {
-    return null;
-  }
-  if (startNode.nodeType === Node.TEXT_NODE) {
-    startNode = startNode.parentElement;
-  }
-  if (!startNode || typeof startNode.closest !== "function") {
-    return null;
-  }
-
-  const textOverlayElement = startNode.closest(".text-overlay");
-  if (!textOverlayElement) {
+export function getOCRCorrectedRectForOverlay(textOverlayElement) {
+  if (!textOverlayElement || typeof textOverlayElement.closest !== "function") {
     return null;
   }
 
@@ -972,6 +957,15 @@ export function getOCRCorrectedRect(range) {
   }
 
   return null;
+}
+
+/**
+ * Calculates corrected viewport coordinates for the OCR text-overlay a range starts in.
+ *
+ * Returns null when the range is not inside an OCR overlay.
+ */
+export function getOCRCorrectedRect(range) {
+  return getOCRCorrectedRectForOverlay(overlayElement(range));
 }
 
 /**
