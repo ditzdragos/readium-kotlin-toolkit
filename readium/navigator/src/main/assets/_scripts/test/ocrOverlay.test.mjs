@@ -233,12 +233,19 @@ describe("textRunsAlongBoxHeight", () => {
         textWidth,
       });
 
-      assert.equal(textRunsAlongBoxHeight(overlay), expected);
+      assert.equal(
+        textRunsAlongBoxHeight(overlay, { width: box.w, height: box.h }),
+        expected
+      );
     });
   }
 
   it("ignores an overlay it cannot measure", () => {
-    assert.equal(textRunsAlongBoxHeight(null), false);
+    assert.equal(textRunsAlongBoxHeight(null, OCR_BOX), false);
+    assert.equal(
+      textRunsAlongBoxHeight(element({ className: "text-overlay" }), null),
+      false
+    );
   });
 
   it("leaves a word that merely fills a box taller than a line", () => {
@@ -252,6 +259,31 @@ describe("textRunsAlongBoxHeight", () => {
     // The box alone clears the threshold; reading it instead of the word is
     // what drew the line beside "A" and "I" rather than under them.
     assert.ok(overlay.clientWidth > 19.2 * 1.2);
-    assert.equal(textRunsAlongBoxHeight(overlay), false);
+    assert.equal(
+      textRunsAlongBoxHeight(overlay, { width: 30, height: 43 }),
+      false
+    );
   });
+
+  // "Good-bye Stacey, Good-bye" (9781338616064) wraps its overlays in an
+  // `inline-block` `.ocr-container` whose only children are absolutely
+  // positioned, so the container lays out zero pixels wide and every
+  // percentage width under it collapses with it.
+  for (const [word, textWidth, box] of [
+    ["YOU'RE", 58, { width: 47, height: 14 }],
+    ["MAKING", 66, { width: 48, height: 12 }],
+    ["DIABETES.", 81, { width: 64, height: 16 }],
+  ]) {
+    it(`leaves "${word}" when the container collapsed its width`, () => {
+      const overlay = element({
+        className: "text-overlay",
+        box: { w: 0, h: box.height },
+        text: word,
+        textWidth,
+      });
+
+      assert.equal(overlay.clientWidth, 0);
+      assert.equal(textRunsAlongBoxHeight(overlay, box), false);
+    });
+  }
 });

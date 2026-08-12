@@ -148,15 +148,19 @@ function unwrappedTextWidth(element) {
  * only be a swapped box. Measure the word, never the box that holds it — a
  * single letter is naturally portrait, and its box alone is wide enough to pass
  * for a whole line.
+ *
+ * `boxRect` must be the rect the decoration is about to occupy, resolved from
+ * the percentages the overlay is authored in. The element's own layout box
+ * cannot stand in for it: an `.ocr-container` whose children are all absolutely
+ * positioned lays out zero pixels wide, and every percentage width under it
+ * collapses with it, which reads as portrait for every word on the page.
  */
-export function textRunsAlongBoxHeight(element) {
-  if (!element) {
+export function textRunsAlongBoxHeight(element, boxRect) {
+  if (!element || !boxRect) {
     return false;
   }
 
-  const boxWidth = element.clientWidth;
-  const boxHeight = element.clientHeight;
-  if (!(boxHeight > boxWidth * ORIENTATION_MARGIN)) {
+  if (!(boxRect.height > boxRect.width * ORIENTATION_MARGIN)) {
     return false;
   }
 
@@ -185,7 +189,7 @@ function uprightAngle(rotationAngle) {
 
 export function ocrOverlayPlacement(range, ocrRect) {
   const rotationAngle = overlayRotationDegrees(range);
-  if (!ocrRect || !textRunsAlongBoxHeight(overlayElement(range))) {
+  if (!ocrRect || !textRunsAlongBoxHeight(overlayElement(range), ocrRect)) {
     return { rect: ocrRect ?? null, rotationAngle };
   }
 
