@@ -135,6 +135,21 @@ describe("mergeSplitOcrWords", () => {
     assert.deepEqual(words(ocr), ["from.", "The", "children", "are"]);
   });
 
+  // 9781250406361 page 5 ships "ODD-SHAPED," and "BOX-SHAPED" as two overlays
+  // each, split at the hyphen with the boxes touching -- the tightest gap a page
+  // can hold, and not a word cut in two.
+  it("does not rejoin a compound the page split at its own hyphen", () => {
+    const ocr = container([
+      overlay({ text: "two", left: 0, width: 4 }),
+      overlay({ text: "ODD-", left: 5, width: 4 }),
+      overlay({ text: "SHAPED,", left: 9, width: 7 }),
+      overlay({ text: "boxes", left: 17, width: 6 }),
+    ]);
+
+    assert.equal(mergeSplitOcrWords(page([ocr])), 0);
+    assert.deepEqual(words(ocr), ["two", "ODD-", "SHAPED,", "boxes"]);
+  });
+
   it("rejoins a cut word whose tail carries the sentence's full stop", () => {
     const ocr = container([
       overlay({ text: "fun", left: 0, width: 5 }),

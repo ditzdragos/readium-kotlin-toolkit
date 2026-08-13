@@ -37,11 +37,13 @@ const FALLBACK_GAP_RATIO = 0.06;
 const LINE_OVERLAP_RATIO = 0.5;
 // A cut word's halves are set at one angle; the OCR emits both from one box.
 const ROTATION_TOLERANCE_DEGREES = 2;
-// Nothing is cut mid-word at a mark: a pair straddling one is two words. Only
-// the two sides of the cut are read, so a word keeping its own closing mark --
-// "ldren." -- is still a word that was cut.
-const PUNCTUATION_BEFORE_CUT = /[.,;:!?…"”’'）)\]}]$/;
-const PUNCTUATION_AFTER_CUT = /^[("“‘（[{.,;:!?…"”’'）)\]}]/;
+// A word cut in two is cut between two of its own characters, so a mark sitting
+// at the cut means the page already reads two words there and joining the boxes
+// would only drag a decoration across both: a compound the OCR split at its own
+// hyphen ("ODD-" + "SHAPED,", their boxes touching -- page 5 of 9781250406361)
+// is not a word cut in two. Read at the cut only, so a word that keeps its own
+// closing mark -- "ldren." -- is still a word that was cut.
+const WORD_BOUNDARY = /[\s\p{P}\p{S}]/u;
 
 function percent(value) {
   if (typeof value !== "string" || !value.includes("%")) {
@@ -133,7 +135,8 @@ function couldBeOneWord(first, second) {
     return false;
   }
   return (
-    !PUNCTUATION_BEFORE_CUT.test(before) && !PUNCTUATION_AFTER_CUT.test(after)
+    !WORD_BOUNDARY.test(before.slice(-1)) &&
+    !WORD_BOUNDARY.test(after.charAt(0))
   );
 }
 
