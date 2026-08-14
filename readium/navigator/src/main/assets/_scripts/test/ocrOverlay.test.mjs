@@ -41,6 +41,7 @@ function element({
   box = null,
   text = "word",
   textWidth = 0,
+  measureText = null,
 } = {}) {
   const el = {
     nodeType: 1,
@@ -58,11 +59,13 @@ function element({
     // A probe span inherits the overlay's font, so it reports the word's own
     // width — never the box's, the way `scrollWidth` would.
     ownerDocument: {
-      createElement: () => ({
-        style: {},
-        offsetWidth: textWidth,
-        remove() {},
-      }),
+      createElement: () => {
+        const probe = { style: {}, textContent: "", remove() {} };
+        Object.defineProperty(probe, "offsetWidth", {
+          get: () => (measureText ? measureText(probe.textContent) : textWidth),
+        });
+        return probe;
+      },
       createRange: () => boundaries(0, 0),
     },
     children: [],
@@ -104,17 +107,45 @@ function element({
  * A pair of boundary points on one document-order axis, comparable the way the
  * DOM compares two ranges.
  */
-function boundaries(start, end) {
+function boundaries(start, end, owner = null) {
   return {
     start,
     end,
+    owner,
     selectNodeContents(element) {
       this.start = element.start;
       this.end = element.end;
+      this.owner = element;
+    },
+    setStart(container, offset) {
+      this.owner = container.parentElement;
+      this.start = this.owner.start + offset;
+    },
+    setEnd(container, offset) {
+      this.owner = container.parentElement;
+      this.end = this.owner.start + offset;
+    },
+    collapse(toStart) {
+      if (toStart) this.end = this.start;
+      else this.start = this.end;
+    },
+    toString() {
+      if (!this.owner) return "";
+      const base = this.owner.start;
+      return (this.owner.textContent ?? "").slice(
+        this.start - base,
+        this.end - base
+      );
     },
     compareBoundaryPoints(how, other) {
-      const mine = how === Range.END_TO_START ? this.start : this.end;
-      const theirs = how === Range.END_TO_START ? other.end : other.start;
+      const mine =
+        how === Range.START_TO_START || how === Range.END_TO_START
+          ? this.start
+          : this.end;
+      const theirs =
+        how === Range.START_TO_START || how === Range.START_TO_END
+          ? other.start
+          : other.end;
       if (mine === theirs) return 0;
       return mine < theirs ? -1 : 1;
     },
@@ -466,4 +497,179 @@ describe("textRunsAlongBoxHeight", () => {
       assert.equal(textRunsAlongBoxHeight(overlay, box), false);
     });
   }
+});
+
+/**
+ * An `.ocr-container` holding a single `.text-overlay` that bounds a whole run
+ * of words rather than one word.
+ */
+function phraseOverlay(text, measureText, transform = "") {
+  return phrasePage([text], measureText, transform)[0];
+}
+
+/** An `.ocr-container` whose overlays each bound a run of words. */
+function phrasePage(texts, measureText, transform = "") {
+  const container = element({ className: "ocr-container" });
+  let cursor = 0;
+  return texts.map((text) => {
+    const overlay = element({
+      className: "text-overlay",
+      parent: container,
+      text,
+      measureText,
+      transform,
+    });
+    overlay.start = cursor;
+    overlay.end = cursor + text.length;
+    overlay.textNode = { nodeType: 3, parentElement: overlay };
+    // Runs never touch: a range ending on one cannot spill into the next.
+    cursor = overlay.end + 5;
+    return overlay;
+  });
+}
+
+/** A range running from one overlay's text into another's. */
+function rangeAcross(from, fromOffset, to, toOffset) {
+  const range = boundaries(from.start + fromOffset, to.start + toOffset, from);
+  range.startContainer = from.textNode;
+  range.startOffset = fromOffset;
+  range.endContainer = to.textNode;
+  range.endOffset = toOffset;
+  return range;
+}
+
+/** A range over `text.slice(from, to)` inside a phrase overlay. */
+function rangeOverPhrase(overlay, from, to) {
+  const range = boundaries(from, to, overlay);
+  range.startContainer = overlay.textNode;
+  range.startOffset = from;
+  range.endContainer = overlay.textNode;
+  range.endOffset = to;
+  return range;
+}
+
+/** A stand-in font in which every character advances the same width. */
+const perCharacter = (width) => (text) => text.length * width;
+
+describe("ocrOverlayBoxes on an overlay holding several words", () => {
+  // RR-8328: the word being read is one of several the box bounds, so painting
+  // the whole box underlines its neighbours at the same time.
+  const PHRASE = "time and Oliver";
+  const PHRASE_BOX = { left: 100, top: 200, width: 150, height: 20 };
+  const AND = PHRASE.indexOf("and");
+  const OLIVER = PHRASE.indexOf("Oliver");
+
+  it("clips the box to the word the range covers", () => {
+    const overlay = phraseOverlay(PHRASE, perCharacter(10));
+
+    const boxes = ocrOverlayBoxes(
+      rangeOverPhrase(overlay, AND, AND + 3),
+      () => PHRASE_BOX
+    );
+
+    assert.equal(boxes.length, 1);
+    assert.equal(boxes[0].rect.left, 150);
+    assert.equal(boxes[0].rect.width, 30);
+    assert.equal(boxes[0].rect.top, PHRASE_BOX.top);
+    assert.equal(boxes[0].rect.height, PHRASE_BOX.height);
+  });
+
+  it("clips to the first word without shifting the box's left edge", () => {
+    const overlay = phraseOverlay(PHRASE, perCharacter(10));
+
+    const boxes = ocrOverlayBoxes(
+      rangeOverPhrase(overlay, 0, 4),
+      () => PHRASE_BOX
+    );
+
+    assert.equal(boxes[0].rect.left, PHRASE_BOX.left);
+    assert.equal(boxes[0].rect.width, 40);
+  });
+
+  it("clips to the last word without overrunning the box's right edge", () => {
+    const overlay = phraseOverlay(PHRASE, perCharacter(10));
+
+    const boxes = ocrOverlayBoxes(
+      rangeOverPhrase(overlay, OLIVER, PHRASE.length),
+      () => PHRASE_BOX
+    );
+
+    assert.equal(boxes[0].rect.left, 190);
+    assert.equal(boxes[0].rect.right, PHRASE_BOX.left + PHRASE_BOX.width);
+  });
+
+  it("leaves the whole box to a range that covers the whole run", () => {
+    const overlay = phraseOverlay(PHRASE, perCharacter(10));
+
+    const boxes = ocrOverlayBoxes(
+      rangeOverPhrase(overlay, 0, PHRASE.length),
+      () => PHRASE_BOX
+    );
+
+    assert.deepEqual(boxes[0].rect, PHRASE_BOX);
+  });
+
+  it("keeps the space a read span trails off the decorated run", () => {
+    const overlay = phraseOverlay(PHRASE, perCharacter(10));
+
+    // A read-word span runs to where the next word starts, so it carries the
+    // space between them, and the artwork has no glyph there to decorate.
+    const boxes = ocrOverlayBoxes(
+      rangeOverPhrase(overlay, 0, AND),
+      () => PHRASE_BOX
+    );
+
+    assert.equal(boxes[0].rect.width, 40);
+  });
+
+  it("measures against the run, not the padding around it", () => {
+    // Some books pad the text inside the overlay; the box still bounds only the
+    // glyphs, so the padding must not shift the share the word takes up.
+    const overlay = phraseOverlay(`  ${PHRASE}  `, perCharacter(10));
+
+    const boxes = ocrOverlayBoxes(
+      rangeOverPhrase(overlay, AND + 2, AND + 5),
+      () => PHRASE_BOX
+    );
+
+    assert.equal(boxes[0].rect.left, 150);
+    assert.equal(boxes[0].rect.width, 30);
+  });
+
+  it("places a clipped box where the whole box's turn carries it", () => {
+    // The decoration is turned about its own centre, so a clipped box anchored
+    // at the clipped left edge would swing off the word it marks.
+    const overlay = phraseOverlay(PHRASE, perCharacter(10), "rotate(90deg)");
+
+    const boxes = ocrOverlayBoxes(
+      rangeOverPhrase(overlay, 0, 4),
+      () => PHRASE_BOX
+    );
+
+    assert.equal(boxes[0].rotationAngle, 90);
+    assert.equal(boxes[0].rect.width, 40);
+    // The box centre is (175, 210); the clipped centre (120, 210) turns a
+    // quarter about it to (175, 155).
+    assert.ok(Math.abs(boxes[0].rect.left - 155) < 1e-6);
+    assert.ok(Math.abs(boxes[0].rect.top - 145) < 1e-6);
+  });
+
+  it("clips only the run a span stops inside", () => {
+    const [read, next] = phrasePage(
+      ["It was Christmas", PHRASE],
+      perCharacter(10)
+    );
+    const READ_BOX = { left: 0, top: 200, width: 160, height: 20 };
+    const rects = { [read.textContent]: READ_BOX, [PHRASE]: PHRASE_BOX };
+
+    const boxes = ocrOverlayBoxes(
+      rangeAcross(read, 0, next, 4),
+      (overlay) => rects[overlay.textContent]
+    );
+
+    assert.equal(boxes.length, 2);
+    assert.deepEqual(boxes[0].rect, READ_BOX);
+    assert.equal(boxes[1].rect.left, PHRASE_BOX.left);
+    assert.equal(boxes[1].rect.width, 40);
+  });
 });

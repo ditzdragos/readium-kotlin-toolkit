@@ -171,23 +171,32 @@ function lineHeightOf(element) {
  * font, so it measures the same run the reader lays out, and `offsetWidth` is a
  * layout box — unlike a client rect, an overlay's rotation cannot inflate it.
  */
-function unwrappedTextWidth(element) {
-  const text = element.textContent ? element.textContent.trim() : "";
-  const ownerDocument = element.ownerDocument;
-  if (!text || !ownerDocument) {
-    return 0;
+function measureRuns(element, texts) {
+  const ownerDocument = element && element.ownerDocument;
+  if (!ownerDocument) {
+    return texts.map(() => 0);
   }
 
   const probe = ownerDocument.createElement("span");
-  probe.textContent = text;
   probe.style.position = "absolute";
   probe.style.visibility = "hidden";
   probe.style.whiteSpace = "pre";
 
   element.appendChild(probe);
-  const width = probe.offsetWidth;
+  const widths = texts.map((text) => {
+    if (!text) {
+      return 0;
+    }
+    probe.textContent = text;
+    return probe.offsetWidth;
+  });
   probe.remove();
-  return width;
+  return widths;
+}
+
+function unwrappedTextWidth(element) {
+  const text = element.textContent ? element.textContent.trim() : "";
+  return measureRuns(element, [text])[0];
 }
 
 /**
@@ -264,6 +273,151 @@ export function ocrOverlayPlacementForOverlay(textOverlayElement, ocrRect) {
 }
 
 /**
+ * Where the decorated text sits inside the overlay's own run, as a pair of
+ * fractions of that run's width.
+ *
+ * Returns null whenever the authored box must be kept whole: the range covers
+ * the overlay end to end (one word per box, which needs no measuring), or the
+ * run cannot be measured or reduces to whitespace.
+ */
+function decoratedTextFractions(overlay, range) {
+  const ownerDocument = overlay.ownerDocument;
+  if (!ownerDocument || typeof ownerDocument.createRange !== "function") {
+    return null;
+  }
+
+  const whole = ownerDocument.createRange();
+  whole.selectNodeContents(overlay);
+  const startsInside =
+    range.compareBoundaryPoints(Range.START_TO_START, whole) > 0;
+  const endsInside = range.compareBoundaryPoints(Range.END_TO_END, whole) < 0;
+  if (!startsInside && !endsInside) {
+    return null;
+  }
+
+  const before = ownerDocument.createRange();
+  before.selectNodeContents(overlay);
+  if (startsInside) {
+    before.setEnd(range.startContainer, range.startOffset);
+  } else {
+    before.collapse(true);
+  }
+
+  const decorated = ownerDocument.createRange();
+  decorated.selectNodeContents(overlay);
+  if (startsInside) {
+    decorated.setStart(range.startContainer, range.startOffset);
+  }
+  if (endsInside) {
+    decorated.setEnd(range.endContainer, range.endOffset);
+  }
+
+  return runFractions(overlay, before.toString(), decorated.toString());
+}
+
+/**
+ * The box bounds the artwork's glyphs, so the run is measured trimmed and any
+ * whitespace the span carries at either end decorates nothing: a read span runs
+ * to where the next word starts and would otherwise reach into the gap.
+ */
+function runFractions(overlay, before, decorated) {
+  const text = overlay.textContent ?? "";
+  const run = text.trim();
+  if (!run) {
+    return null;
+  }
+
+  const offset = before.length - (text.length - text.trimStart().length);
+  const start = clamp(
+    offset + (decorated.length - decorated.trimStart().length),
+    0,
+    run.length
+  );
+  const end = clamp(offset + decorated.trimEnd().length, start, run.length);
+  if (start === end || (start === 0 && end === run.length)) {
+    return null;
+  }
+
+  const [total, upToStart, upToEnd] = measureRuns(overlay, [
+    run,
+    run.slice(0, start),
+    run.slice(0, end),
+  ]);
+  if (!(total > 0)) {
+    return null;
+  }
+
+  return { start: upToStart / total, end: upToEnd / total };
+}
+
+function clamp(value, low, high) {
+  return Math.min(Math.max(value, low), high);
+}
+
+function turnPointAbout(x, y, centreX, centreY, rotationAngle) {
+  if (!rotationAngle) {
+    return { x, y };
+  }
+  const radians = (rotationAngle * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = x - centreX;
+  const dy = y - centreY;
+  return {
+    x: centreX + dx * cos - dy * sin,
+    y: centreY + dx * sin + dy * cos,
+  };
+}
+
+/**
+ * The part of an overlay box the decorated run occupies.
+ *
+ * A rotated decoration is turned about its own centre, so the clipped box is
+ * placed where its centre lands once the whole box turns — anchoring it at the
+ * clipped left edge would swing it off the word.
+ */
+function clipRect(rect, fractions, rotationAngle) {
+  const width = rect.width * (fractions.end - fractions.start);
+  const left = rect.left + rect.width * fractions.start;
+  const centre = turnPointAbout(
+    left + width / 2,
+    rect.top + rect.height / 2,
+    rect.left + rect.width / 2,
+    rect.top + rect.height / 2,
+    rotationAngle
+  );
+  const clippedLeft = centre.x - width / 2;
+  const clippedTop = centre.y - rect.height / 2;
+
+  return {
+    left: clippedLeft,
+    top: clippedTop,
+    right: clippedLeft + width,
+    bottom: clippedTop + rect.height,
+    width,
+    height: rect.height,
+    x: clippedLeft,
+    y: clippedTop,
+  };
+}
+
+function clipPlacementToRange(placement, overlay, range) {
+  if (!placement.rect) {
+    return placement;
+  }
+
+  const fractions = decoratedTextFractions(overlay, range);
+  if (!fractions) {
+    return placement;
+  }
+
+  return {
+    rect: clipRect(placement.rect, fractions, placement.rotationAngle),
+    rotationAngle: placement.rotationAngle,
+  };
+}
+
+/**
  * The boxes a decoration must occupy, one per `.text-overlay` its range covers.
  *
  * A range's own client rects cannot stand in for these. The invisible text is
@@ -275,6 +429,10 @@ export function ocrOverlayPlacementForOverlay(textOverlayElement, ocrRect) {
  * Counting client rects cannot tell a wrapped word from a span of several
  * words, which is why the overlays themselves decide: each contributes its own
  * box however many rects its text happened to produce.
+ *
+ * A box is not always one word. Where a book bounds a whole run of words in one
+ * overlay, the authored box is clipped to the share of that run the range
+ * covers, or the decoration would mark every word in it at once (RR-8328).
  *
  * Returns [] — leaving the caller on its client-rect path — unless every
  * overlay the range covers yields a box.
@@ -293,7 +451,13 @@ export function ocrOverlayBoxes(range, correctedRectForOverlay) {
     if (!ocrRect) {
       return [];
     }
-    boxes.push(ocrOverlayPlacementForOverlay(overlay, ocrRect));
+    boxes.push(
+      clipPlacementToRange(
+        ocrOverlayPlacementForOverlay(overlay, ocrRect),
+        overlay,
+        range
+      )
+    );
   }
   return boxes;
 }
