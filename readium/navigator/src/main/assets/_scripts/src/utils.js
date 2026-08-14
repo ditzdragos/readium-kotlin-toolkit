@@ -5,7 +5,7 @@
 //
 
 import { resetViewportRatioCache, toNativeRect } from "./rect";
-import { overlayElement } from "./ocrOverlay.mjs";
+import { clipOcrRectToRange, overlayElement } from "./ocrOverlay.mjs";
 import { bestContextMatchIndex, lineBreakSeparator } from "./textOffsets.mjs";
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 import { TextRange } from "./vendor/hypothesis/anchoring/text-range";
@@ -978,7 +978,7 @@ export function getRectFromLocator(locator) {
   if (range) {
     const ocrRect = getOCRCorrectedRect(range);
     if (ocrRect) {
-      return toNativeRect(ocrRect);
+      return toNativeRect(clipOcrRectToRange(ocrRect, range));
     }
     return toNativeRect(range.getBoundingClientRect());
   }

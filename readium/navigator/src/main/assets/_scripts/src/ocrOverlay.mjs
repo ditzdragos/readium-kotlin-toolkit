@@ -171,6 +171,10 @@ function lineHeightOf(element) {
  * font, so it measures the same run the reader lays out, and `offsetWidth` is a
  * layout box — unlike a client rect, an overlay's rotation cannot inflate it.
  */
+function collapseWhitespace(text) {
+  return (text ?? "").replace(/\s+/g, " ");
+}
+
 function measureRuns(element, texts) {
   const ownerDocument = element && element.ownerDocument;
   if (!ownerDocument) {
@@ -182,14 +186,23 @@ function measureRuns(element, texts) {
   probe.style.visibility = "hidden";
   probe.style.whiteSpace = "pre";
 
-  element.appendChild(probe);
-  const widths = texts.map((text) => {
-    if (!text) {
-      return 0;
-    }
-    probe.textContent = text;
-    return probe.offsetWidth;
+  // Every run is written before anything is read, so the whole set costs one
+  // layout instead of one per run — this measures for each word that is read.
+  const runs = texts.map((text) => {
+    const run = ownerDocument.createElement("span");
+    run.style.display = "inline-block";
+    run.style.whiteSpace = "pre";
+    // The overlay lays its own text out with whitespace collapsed. A run kept
+    // verbatim under `pre` turns a newline in pretty-printed markup into a
+    // second line, and `offsetWidth` then reports the widest line rather than
+    // the advance the reader draws.
+    run.textContent = collapseWhitespace(text);
+    probe.appendChild(run);
+    return run;
   });
+
+  element.appendChild(probe);
+  const widths = runs.map((run) => run.offsetWidth);
   probe.remove();
   return widths;
 }
@@ -315,6 +328,8 @@ function decoratedTextFractions(overlay, range) {
   return runFractions(overlay, before.toString(), decorated.toString());
 }
 
+const COVERS_NO_GLYPHS = { start: 0, end: 0 };
+
 /**
  * The box bounds the artwork's glyphs, so the run is measured trimmed and any
  * whitespace the span carries at either end decorates nothing: a read span runs
@@ -334,8 +349,15 @@ function runFractions(overlay, before, decorated) {
     run.length
   );
   const end = clamp(offset + decorated.trimEnd().length, start, run.length);
-  if (start === end || (start === 0 && end === run.length)) {
+  if (start === 0 && end === run.length) {
     return null;
+  }
+  // The span reaches into this overlay but stops before its first glyph — a
+  // read span runs to where the next word starts, so it can land in the gap.
+  // Keeping the authored box here would mark every word in it: the RR-8328
+  // smear, one box further along.
+  if (start === end) {
+    return COVERS_NO_GLYPHS;
   }
 
   const [total, upToStart, upToEnd] = measureRuns(overlay, [
@@ -347,7 +369,10 @@ function runFractions(overlay, before, decorated) {
     return null;
   }
 
-  return { start: upToStart / total, end: upToEnd / total };
+  return {
+    start: clamp(upToStart / total, 0, 1),
+    end: clamp(upToEnd / total, 0, 1),
+  };
 }
 
 function clamp(value, low, high) {
@@ -401,6 +426,7 @@ function clipRect(rect, fractions, rotationAngle) {
   };
 }
 
+/** Null when the range covers no glyphs in this overlay, so nothing is drawn. */
 function clipPlacementToRange(placement, overlay, range) {
   if (!placement.rect) {
     return placement;
@@ -410,11 +436,42 @@ function clipPlacementToRange(placement, overlay, range) {
   if (!fractions) {
     return placement;
   }
+  if (!(fractions.end > fractions.start)) {
+    return null;
+  }
 
   return {
     rect: clipRect(placement.rect, fractions, placement.rotationAngle),
     rotationAngle: placement.rotationAngle,
   };
+}
+
+/**
+ * The part of an overlay box the range's own words occupy, for callers that
+ * need the rect itself rather than a decoration placement.
+ *
+ * The word-help card and the mastered-word star anchor to this rect, so on a
+ * book that bounds several words in one overlay they would otherwise point at
+ * the whole phrase while the underline marks one word (RR-8328). Unlike a
+ * decoration, these always need somewhere to point, so a range covering no
+ * glyphs keeps the authored box rather than vanishing.
+ */
+export function clipOcrRectToRange(rect, range) {
+  if (!rect || !range) {
+    return rect;
+  }
+
+  const overlay = overlayElement(range);
+  if (!overlay) {
+    return rect;
+  }
+
+  const fractions = decoratedTextFractions(overlay, range);
+  if (!fractions || !(fractions.end > fractions.start)) {
+    return rect;
+  }
+
+  return clipRect(rect, fractions, overlayRotationDegrees(overlay));
 }
 
 /**
@@ -451,13 +508,14 @@ export function ocrOverlayBoxes(range, correctedRectForOverlay) {
     if (!ocrRect) {
       return [];
     }
-    boxes.push(
-      clipPlacementToRange(
-        ocrOverlayPlacementForOverlay(overlay, ocrRect),
-        overlay,
-        range
-      )
+    const placement = clipPlacementToRange(
+      ocrOverlayPlacementForOverlay(overlay, ocrRect),
+      overlay,
+      range
     );
+    if (placement) {
+      boxes.push(placement);
+    }
   }
   return boxes;
 }

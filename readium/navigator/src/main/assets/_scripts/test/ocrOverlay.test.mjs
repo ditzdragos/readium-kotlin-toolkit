@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  clipOcrRectToRange,
   getClosestRotationDegrees,
   ocrOverlayBoxes,
   overlayElementsInRange,
@@ -49,6 +50,12 @@ function element({
     parentElement: parent,
     style: { transform },
     textContent: text,
+    // Boundary points on the shared document-order axis. `ocrPage`/`phrasePage`
+    // space these out per overlay; a standalone element still needs its own
+    // span, or `selectNodeContents` reads undefined and every comparison
+    // against it answers "outside".
+    start: 0,
+    end: text.length,
     computedStyle: {
       transform: transform || "none",
       fontSize: "16px",
@@ -60,7 +67,12 @@ function element({
     // width — never the box's, the way `scrollWidth` would.
     ownerDocument: {
       createElement: () => {
-        const probe = { style: {}, textContent: "", remove() {} };
+        const probe = {
+          style: {},
+          textContent: "",
+          appendChild() {},
+          remove() {},
+        };
         Object.defineProperty(probe, "offsetWidth", {
           get: () => (measureText ? measureText(probe.textContent) : textWidth),
         });
@@ -671,5 +683,105 @@ describe("ocrOverlayBoxes on an overlay holding several words", () => {
     assert.deepEqual(boxes[0].rect, READ_BOX);
     assert.equal(boxes[1].rect.left, PHRASE_BOX.left);
     assert.equal(boxes[1].rect.width, 40);
+  });
+});
+
+/**
+ * A `white-space: pre` probe reports its widest line rather than the run's
+ * advance, so a run left verbatim across a line break measures short.
+ */
+const perCharacterWidestLine = (width) => (text) =>
+  Math.max(...text.split("\n").map((line) => line.length)) * width;
+
+describe("measuring an overlay run the way the reader lays it out", () => {
+  const BOX = { left: 100, top: 200, width: 150, height: 20 };
+
+  it("collapses a line break, which would otherwise measure one line", () => {
+    // Pretty-printed OCR markup puts the run across two source lines. Measured
+    // verbatim under `pre` every prefix reports the same widest line, the
+    // fractions collapse to a point, and the underline disappears entirely.
+    const overlay = phraseOverlay(
+      "time and\nOliver",
+      perCharacterWidestLine(10)
+    );
+    const range = rangeOverPhrase(overlay, "time and\n".length, 15);
+
+    const boxes = ocrOverlayBoxes(range, () => BOX);
+
+    assert.equal(boxes.length, 1);
+    assert.equal(boxes[0].rect.left, 190);
+    assert.equal(boxes[0].rect.width, 60);
+  });
+
+  it("collapses a doubled space, which would otherwise measure wide", () => {
+    const overlay = phraseOverlay("time  and Oliver", perCharacter(10));
+    const range = rangeOverPhrase(overlay, "time  and ".length, 16);
+
+    const boxes = ocrOverlayBoxes(range, () => BOX);
+
+    assert.equal(boxes.length, 1);
+    assert.equal(boxes[0].rect.left, 190);
+    assert.equal(boxes[0].rect.width, 60);
+  });
+});
+
+describe("an overlay the range reaches but decorates none of", () => {
+  it("draws nothing there rather than marking the whole run", () => {
+    // A read span runs to where the next word starts, so it can stop inside the
+    // next overlay's leading whitespace. Keeping that authored box would mark
+    // every word in it: the RR-8328 smear, one box further along.
+    const [first, second] = phrasePage(
+      ["time and", "  Oliver"],
+      perCharacter(10)
+    );
+    const range = rangeAcross(first, 0, second, 1);
+
+    const boxes = ocrOverlayBoxes(range, (overlay) =>
+      overlay === first
+        ? { left: 100, top: 200, width: 80, height: 20 }
+        : { left: 200, top: 200, width: 80, height: 20 }
+    );
+
+    assert.equal(boxes.length, 1);
+    assert.equal(boxes[0].rect.left, 100);
+    assert.equal(boxes[0].rect.width, 80);
+  });
+});
+
+describe("clipOcrRectToRange", () => {
+  // The word-help card and the mastered-word star anchor to this rect, so on a
+  // book bounding several words in one overlay they would point at the whole
+  // phrase while the underline marks one word.
+  const PHRASE = "time and Oliver";
+  const BOX = { left: 100, top: 200, width: 150, height: 20 };
+
+  it("clips the rect to the word the range covers", () => {
+    const overlay = phraseOverlay(PHRASE, perCharacter(10));
+    const range = rangeOverPhrase(overlay, PHRASE.indexOf("and"), 8);
+
+    const rect = clipOcrRectToRange(BOX, range);
+
+    assert.equal(rect.left, 150);
+    assert.equal(rect.width, 30);
+  });
+
+  it("keeps the whole box when the range covers the whole run", () => {
+    const overlay = phraseOverlay(PHRASE, perCharacter(10));
+
+    assert.deepEqual(clipOcrRectToRange(BOX, rangeInside(overlay)), BOX);
+  });
+
+  it("keeps the whole box when the range covers no glyphs", () => {
+    // Unlike a decoration, these always need somewhere to point.
+    const [, second] = phrasePage(["time and", "  Oliver"], perCharacter(10));
+
+    assert.deepEqual(
+      clipOcrRectToRange(BOX, rangeAcross(second, 0, second, 1)),
+      BOX
+    );
+  });
+
+  it("leaves a rect alone when the range is not in an overlay", () => {
+    assert.deepEqual(clipOcrRectToRange(BOX, rangeInside(element())), BOX);
   });
 });
