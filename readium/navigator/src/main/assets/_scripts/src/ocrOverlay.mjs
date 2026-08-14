@@ -171,6 +171,8 @@ function lineHeightOf(element) {
  * font, so it measures the same run the reader lays out, and `offsetWidth` is a
  * layout box — unlike a client rect, an overlay's rotation cannot inflate it.
  */
+// The overlay collapses whitespace, so a newline left verbatim under `pre`
+// would measure as a second line.
 function collapseWhitespace(text) {
   return (text ?? "").replace(/\s+/g, " ");
 }
@@ -186,16 +188,11 @@ function measureRuns(element, texts) {
   probe.style.visibility = "hidden";
   probe.style.whiteSpace = "pre";
 
-  // Every run is written before anything is read, so the whole set costs one
-  // layout instead of one per run — this measures for each word that is read.
+  // All runs written before any is read: one layout, not one per run.
   const runs = texts.map((text) => {
     const run = ownerDocument.createElement("span");
     run.style.display = "inline-block";
     run.style.whiteSpace = "pre";
-    // The overlay lays its own text out with whitespace collapsed. A run kept
-    // verbatim under `pre` turns a newline in pretty-printed markup into a
-    // second line, and `offsetWidth` then reports the widest line rather than
-    // the advance the reader draws.
     run.textContent = collapseWhitespace(text);
     probe.appendChild(run);
     return run;
@@ -286,12 +283,10 @@ export function ocrOverlayPlacementForOverlay(textOverlayElement, ocrRect) {
 }
 
 /**
- * Where the decorated text sits inside the overlay's own run, as a pair of
- * fractions of that run's width.
+ * Where the decorated text sits in the overlay's run, as fractions of its width.
  *
- * Returns null whenever the authored box must be kept whole: the range covers
- * the overlay end to end (one word per box, which needs no measuring), or the
- * run cannot be measured or reduces to whitespace.
+ * Null when the authored box must be kept whole — including a range covering
+ * the overlay end to end, the one-word-per-box case, which never measures.
  */
 function decoratedTextFractions(overlay, range) {
   const ownerDocument = overlay.ownerDocument;
@@ -331,9 +326,8 @@ function decoratedTextFractions(overlay, range) {
 const COVERS_NO_GLYPHS = { start: 0, end: 0 };
 
 /**
- * The box bounds the artwork's glyphs, so the run is measured trimmed and any
- * whitespace the span carries at either end decorates nothing: a read span runs
- * to where the next word starts and would otherwise reach into the gap.
+ * Measured trimmed: the box bounds glyphs, and a read span runs on to where the
+ * next word starts, so whitespace at either end decorates nothing.
  */
 function runFractions(overlay, before, decorated) {
   const text = overlay.textContent ?? "";
@@ -352,10 +346,7 @@ function runFractions(overlay, before, decorated) {
   if (start === 0 && end === run.length) {
     return null;
   }
-  // The span reaches into this overlay but stops before its first glyph — a
-  // read span runs to where the next word starts, so it can land in the gap.
-  // Keeping the authored box here would mark every word in it: the RR-8328
-  // smear, one box further along.
+  // Stops before this overlay's first glyph; keeping the box would smear it.
   if (start === end) {
     return COVERS_NO_GLYPHS;
   }
@@ -395,11 +386,8 @@ function turnPointAbout(x, y, centreX, centreY, rotationAngle) {
 }
 
 /**
- * The part of an overlay box the decorated run occupies.
- *
- * A rotated decoration is turned about its own centre, so the clipped box is
- * placed where its centre lands once the whole box turns — anchoring it at the
- * clipped left edge would swing it off the word.
+ * A rotated decoration turns about its own centre, so the clipped box goes
+ * where its centre lands once the whole box turns.
  */
 function clipRect(rect, fractions, rotationAngle) {
   const width = rect.width * (fractions.end - fractions.start);
@@ -447,14 +435,10 @@ function clipPlacementToRange(placement, overlay, range) {
 }
 
 /**
- * The part of an overlay box the range's own words occupy, for callers that
- * need the rect itself rather than a decoration placement.
+ * The part of an overlay box the range's words occupy, as a plain rect.
  *
- * The word-help card and the mastered-word star anchor to this rect, so on a
- * book that bounds several words in one overlay they would otherwise point at
- * the whole phrase while the underline marks one word (RR-8328). Unlike a
- * decoration, these always need somewhere to point, so a range covering no
- * glyphs keeps the authored box rather than vanishing.
+ * The word-help card and the mastered-word star anchor here, and always need
+ * somewhere to point, so a range covering no glyphs keeps the authored box.
  */
 export function clipOcrRectToRange(rect, range) {
   if (!rect || !range) {
@@ -487,9 +471,8 @@ export function clipOcrRectToRange(rect, range) {
  * words, which is why the overlays themselves decide: each contributes its own
  * box however many rects its text happened to produce.
  *
- * A box is not always one word. Where a book bounds a whole run of words in one
- * overlay, the authored box is clipped to the share of that run the range
- * covers, or the decoration would mark every word in it at once (RR-8328).
+ * A box is not always one word: where one bounds a whole run, it is clipped to
+ * the share the range covers, or every word in it is marked at once (RR-8328).
  *
  * Returns [] — leaving the caller on its client-rect path — unless every
  * overlay the range covers yields a box.

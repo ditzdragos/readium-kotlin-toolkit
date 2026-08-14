@@ -50,10 +50,7 @@ function element({
     parentElement: parent,
     style: { transform },
     textContent: text,
-    // Boundary points on the shared document-order axis. `ocrPage`/`phrasePage`
-    // space these out per overlay; a standalone element still needs its own
-    // span, or `selectNodeContents` reads undefined and every comparison
-    // against it answers "outside".
+    // Document-order span; `ocrPage`/`phrasePage` respace these per overlay.
     start: 0,
     end: text.length,
     computedStyle: {
@@ -686,10 +683,7 @@ describe("ocrOverlayBoxes on an overlay holding several words", () => {
   });
 });
 
-/**
- * A `white-space: pre` probe reports its widest line rather than the run's
- * advance, so a run left verbatim across a line break measures short.
- */
+/** A `white-space: pre` probe reports its widest line, not the run's advance. */
 const perCharacterWidestLine = (width) => (text) =>
   Math.max(...text.split("\n").map((line) => line.length)) * width;
 
@@ -697,9 +691,8 @@ describe("measuring an overlay run the way the reader lays it out", () => {
   const BOX = { left: 100, top: 200, width: 150, height: 20 };
 
   it("collapses a line break, which would otherwise measure one line", () => {
-    // Pretty-printed OCR markup puts the run across two source lines. Measured
-    // verbatim under `pre` every prefix reports the same widest line, the
-    // fractions collapse to a point, and the underline disappears entirely.
+    // Verbatim, every prefix reports the same widest line and the clip
+    // collapses to a point, taking the underline with it.
     const overlay = phraseOverlay(
       "time and\nOliver",
       perCharacterWidestLine(10)
@@ -727,9 +720,8 @@ describe("measuring an overlay run the way the reader lays it out", () => {
 
 describe("an overlay the range reaches but decorates none of", () => {
   it("draws nothing there rather than marking the whole run", () => {
-    // A read span runs to where the next word starts, so it can stop inside the
-    // next overlay's leading whitespace. Keeping that authored box would mark
-    // every word in it: the RR-8328 smear, one box further along.
+    // A read span can stop in the next overlay's leading whitespace; keeping
+    // that box would smear it, one box along from RR-8328.
     const [first, second] = phrasePage(
       ["time and", "  Oliver"],
       perCharacter(10)
@@ -749,9 +741,7 @@ describe("an overlay the range reaches but decorates none of", () => {
 });
 
 describe("clipOcrRectToRange", () => {
-  // The word-help card and the mastered-word star anchor to this rect, so on a
-  // book bounding several words in one overlay they would point at the whole
-  // phrase while the underline marks one word.
+  // The word-help card and the mastered-word star anchor to this rect.
   const PHRASE = "time and Oliver";
   const BOX = { left: 100, top: 200, width: 150, height: 20 };
 
