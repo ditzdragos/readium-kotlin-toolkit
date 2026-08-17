@@ -23,6 +23,7 @@ import {
   shouldSkipPageNumber,
 } from "./pageNumber.mjs";
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
+import { isOutsideViewport, isTooFarToLayOut } from "./offscreenLayout.mjs";
 
 let styles = new Map();
 let groups = new Map();
@@ -826,13 +827,21 @@ export function DecorationGroup(groupId, groupName) {
       boundingRect = item.range.getBoundingClientRect();
       const userInfo = item.decoration.userInfo || {};
       const shouldIgnoreOffscreen = userInfo.shoulNotBeIgnored !== true;
-      if (
-        shouldIgnoreOffscreen &&
-        (boundingRect.left + boundingRect.width < 0 ||
-          boundingRect.top + boundingRect.height < 0)
-      ) {
+      if (shouldIgnoreOffscreen && isOutsideViewport(boundingRect)) {
         postMessageWithInvalidRect();
-        return;
+        // Turning a page clears every enhanced decoration and lays the group
+        // out again, so skipping the page behind the reader left it with no
+        // elements at all. Swiping back then showed the words bare until the
+        // next relayout painted them mid-gesture (RR-8782).
+        if (
+          isTooFarToLayOut(
+            boundingRect,
+            viewportWidth,
+            Math.max(window.innerHeight || 0, 1)
+          )
+        ) {
+          return;
+        }
       }
 
       pageIndex = Math.floor(
