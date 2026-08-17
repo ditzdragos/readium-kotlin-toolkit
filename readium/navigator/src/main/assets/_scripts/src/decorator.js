@@ -23,6 +23,7 @@ import {
   shouldSkipPageNumber,
 } from "./pageNumber.mjs";
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
+import { VisibleAreas } from "./visibleAreas.mjs";
 
 let styles = new Map();
 let groups = new Map();
@@ -429,8 +430,7 @@ export function DecorationGroup(groupId, groupName) {
   var items = [];
   var container = null;
   var activable = false;
-  var visibleContainers = [];
-  var visibleContainersMap = new Map(); // O(1) lookup for visible containers
+  var visibleAreas = new VisibleAreas(document);
 
   function isActivable() {
     return activable;
@@ -524,13 +524,14 @@ export function DecorationGroup(groupId, groupName) {
 
   function clearAllEnhanced() {
     if (DEBUG_MODE) log("clearing all enhanced ", groupName, items);
-    visibleContainers.forEach((container) => {
-      if (DEBUG_MODE) log(`clearing container: ${container.id}`);
-      container.remove();
+    items.forEach((item) => {
+      if (item.container) {
+        item.container.remove();
+        item.container = null;
+      }
     });
 
-    visibleContainers.length = 0;
-    visibleContainersMap.clear();
+    visibleAreas.release();
   }
 
   function clearEnhanced(decorationId) {
@@ -903,7 +904,11 @@ export function DecorationGroup(groupId, groupName) {
       document.scrollingElement || document.documentElement;
     const yOffset = scrollingElement.scrollTop;
     const xOffset = window.scrollX - pageIndex * viewportWidth;
-    const visibleArea = applyContainmentToArea(pageIndex).visibleArea;
+    const visibleArea = visibleAreas.acquire(
+      pageIndex,
+      viewportWidth,
+      window.innerHeight
+    );
 
     let itemContainer = document.createElement("div");
     itemContainer.id = item.id;
@@ -1045,44 +1050,6 @@ export function DecorationGroup(groupId, groupName) {
       document.body.append(container);
     }
     return container;
-  }
-
-  function applyContainmentToArea(pageIndex) {
-    // Optimize: Cache viewport dimensions
-    let viewportWidth = window.innerWidth;
-    let viewportHeight = window.innerHeight;
-    let visibleAreaId = `visible-area-${pageIndex}`;
-
-    let newArea = false;
-    let visibleArea = null;
-
-    // Optimize: Use Map for O(1) lookup instead of array iteration
-    visibleArea = visibleContainersMap.get(visibleAreaId);
-
-    if (!visibleArea) {
-      // Optimize: Only query DOM if not found in cache
-      visibleArea = document.getElementById(visibleAreaId);
-
-      if (!visibleArea) {
-        // Create a new container for the visible area (this page)
-        visibleArea = document.createElement("div");
-        visibleArea.className = "visible-area";
-        visibleArea.id = visibleAreaId;
-
-        // Optimize: Batch style assignments
-        const visibleAreaLeft = pageIndex * viewportWidth;
-        visibleArea.style.cssText = `position:absolute;left:${visibleAreaLeft}px;top:0px;margin-top:0px;width:${viewportWidth}px;height:${viewportHeight}px;pointer-events:none;z-index:999`;
-
-        document.body.appendChild(visibleArea);
-        newArea = true;
-      }
-
-      // Cache in both array and map
-      visibleContainers.push(visibleArea);
-      visibleContainersMap.set(visibleAreaId, visibleArea);
-    }
-
-    return { visibleArea: visibleArea, new: newArea };
   }
 
   /**
