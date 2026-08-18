@@ -16,6 +16,7 @@ import {
   logError,
   rangeFromLocator,
 } from "./utils";
+import { processSpansForTextSpacing } from "./spanTextSpacing.mjs";
 import {
   isExplicitPageBreak,
   isPageNumberText,
@@ -80,16 +81,6 @@ function pageNumberLog(...args) {
   if (PAGE_NUMBER_DEBUG) {
     log(...args);
   }
-}
-
-function safeRatio(a, b) {
-  if (a === 0 && b === 0) {
-    return 1;
-  }
-  if (a === 0 || b === 0) {
-    return 0;
-  }
-  return a < b ? a / b : b / a;
 }
 
 function requestGroupsLayout() {
@@ -252,7 +243,7 @@ export function registerTemplates(newStyles) {
 
   normalizeTextNodes();
 
-  processSpansForTextSpacing();
+  processSpansForTextSpacing(document);
 
   setupViewportRelayoutListeners();
 }
@@ -302,62 +293,6 @@ function normalizeTextNodes() {
     );
     if (normalized !== value) {
       node.nodeValue = normalized;
-    }
-  }
-}
-
-function processSpansForTextSpacing() {
-  // Get all spans in the document - cache the query result
-  const spans = document.querySelectorAll("span");
-  const spansLength = spans.length;
-
-  // Early return if no spans
-  if (spansLength === 0) {
-    return;
-  }
-
-  // Group spans by parent element to analyze siblings
-  const spansByParent = new Map();
-  for (let i = 0; i < spansLength; i++) {
-    const span = spans[i];
-    const parent = span.parentElement;
-    const parentKey = parent || span;
-    if (!spansByParent.has(parentKey)) {
-      spansByParent.set(parentKey, []);
-    }
-    spansByParent.get(parentKey).push(span);
-  }
-
-  // First pass: Process spans and mark those that need spacing
-  const spansNeedingSpacing = [];
-  for (const siblingSpans of spansByParent.values()) {
-    for (let i = 1; i < siblingSpans.length; i++) {
-      const currentSpan = siblingSpans[i];
-      const previousSpan = siblingSpans[i - 1];
-
-      const currentBottom = parseFloat(currentSpan.style.bottom || "0");
-      const previousBottom = parseFloat(previousSpan.style.bottom || "0");
-      const currentLeft = parseFloat(currentSpan.style.left || "0");
-      const previousLeft = parseFloat(previousSpan.style.left || "0");
-
-      const bottomDifference = safeRatio(previousBottom, currentBottom);
-      const leftDifference = safeRatio(previousLeft, currentLeft);
-
-      if (
-        bottomDifference < 0.87 ||
-        leftDifference > 0.99 ||
-        leftDifference < 0.1
-      ) {
-        spansNeedingSpacing.push(currentSpan);
-      }
-    }
-  }
-
-  // Second pass: Insert spaces where needed
-  for (let i = 0; i < spansNeedingSpacing.length; i++) {
-    const span = spansNeedingSpacing[i];
-    if (span.parentElement) {
-      span.parentElement.insertBefore(document.createTextNode(" "), span);
     }
   }
 }
