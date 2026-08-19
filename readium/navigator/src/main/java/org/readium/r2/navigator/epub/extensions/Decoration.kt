@@ -10,9 +10,24 @@ import org.json.JSONObject
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.DecorationChange
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
+import org.readium.r2.shared.publication.epub.EpubLayout
 import timber.log.Timber
 
 // Decoration extensions related to HTML/EPUB.
+
+/**
+ * The change that adds the receiver to a web view laid out as [layout].
+ *
+ * Enhanced decorations are positioned in viewport coordinates and dropped while off screen, which
+ * only holds for a fixed layout where one resource is one page. A reflowable resource pages by
+ * scrolling, so its decorations must be placed in document coordinates and survive the scroll.
+ */
+internal fun Decoration.addedChangeFor(layout: EpubLayout): DecorationChange =
+    if (layout == EpubLayout.REFLOWABLE) {
+        DecorationChange.Added(this)
+    } else {
+        DecorationChange.AddedEnhanced(this)
+    }
 
 /**
  * Generates the JavaScript used to apply the receiver list of [DecorationChange] in a web view.

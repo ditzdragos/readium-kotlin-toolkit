@@ -38,6 +38,7 @@ import org.readium.r2.navigator.R2BasicWebView
 import org.readium.r2.navigator.SimpleOverflow
 import org.readium.r2.navigator.changesByHref
 import org.readium.r2.navigator.epub.css.ReadiumCss
+import org.readium.r2.navigator.epub.extensions.addedChangeFor
 import org.readium.r2.navigator.epub.extensions.javascript
 import org.readium.r2.navigator.epub.extensions.javascriptForGroup
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
@@ -206,13 +207,7 @@ internal class EpubNavigatorViewModel(
             for ((group, decorations) in decorations) {
                 val changes = decorations
                     .filter { it.locator.href == link.url() }
-                    .map {
-                        if (layout == EpubLayout.REFLOWABLE) {
-                            DecorationChange.Added(it)
-                        } else {
-                            DecorationChange.AddedEnhanced(it)
-                        }
-                    }
+                    .map { it.addedChangeFor(layout) }
 
                 val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
                 add(
@@ -414,7 +409,7 @@ internal class EpubNavigatorViewModel(
             script = """
                 requestAnimationFrame(function () {
                     let group = readium.getDecorations('$group');
-                    ${DecorationChange.AddedEnhanced(decoration).javascript(decorationTemplates)}
+                    ${decoration.addedChangeFor(layout).javascript(decorationTemplates)}
                 });
         """,
             scope = RunScriptCommand.Scope.LoadedResource(decoration.locator.href)
