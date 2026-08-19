@@ -11,7 +11,9 @@ package org.readium.r2.lcp.service
 
 import android.content.Context
 import android.content.SharedPreferences
-import org.joda.time.DateTime
+import kotlin.time.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
 import org.readium.r2.lcp.BuildConfig.DEBUG
 import org.readium.r2.shared.util.Instant
 import timber.log.Timber
@@ -60,7 +62,7 @@ internal class ValidationCacheService(context: Context) {
 
             preferences.edit()
                 .putString(statusKey, android.util.Base64.encodeToString(statusData, android.util.Base64.DEFAULT))
-                .putString(dateKey, DateTime.now().toString())
+                .putString(dateKey, Clock.System.now().toString())
                 .apply()
 
             if (DEBUG) Timber.d("Cached status document for license $licenseId")
@@ -81,10 +83,11 @@ internal class ValidationCacheService(context: Context) {
             val cachedStatus = preferences.getString(statusKey, null) ?: return null
             val dateString = preferences.getString(dateKey, null) ?: return null
 
-            val cacheDate = DateTime(dateString)
+            val cacheDate = kotlin.time.Instant.parse(dateString)
 
             // Check if cache has exceeded maximum age (safety fallback)
-            val daysSinceCache = org.joda.time.Days.daysBetween(cacheDate, DateTime.now()).days
+            val daysSinceCache =
+                cacheDate.daysUntil(Clock.System.now(), TimeZone.currentSystemDefault())
             if (daysSinceCache >= MAX_CACHE_DAYS) {
                 if (DEBUG) Timber.d("Cached status document for license $licenseId exceeded max cache age")
                 clearStatusCache(licenseId)
@@ -120,7 +123,7 @@ internal class ValidationCacheService(context: Context) {
 
             val editor = preferences.edit()
                 .putBoolean(validationKey, true)
-                .putString(dateKey, DateTime.now().toString())
+                .putString(dateKey, Clock.System.now().toString())
 
             // Store license expiry if available
             if (licenseEnd != null) {
@@ -153,10 +156,11 @@ internal class ValidationCacheService(context: Context) {
             if (!wasValidated) return false
 
             val dateString = preferences.getString(dateKey, null) ?: return false
-            val validationDate = DateTime(dateString)
+            val validationDate = kotlin.time.Instant.parse(dateString)
 
             // Check if cache has exceeded maximum age (safety fallback)
-            val daysSinceValidation = org.joda.time.Days.daysBetween(validationDate, DateTime.now()).days
+            val daysSinceValidation =
+                validationDate.daysUntil(Clock.System.now(), TimeZone.currentSystemDefault())
             if (daysSinceValidation >= MAX_CACHE_DAYS) {
                 if (DEBUG) Timber.d("Validation cache for license $licenseId exceeded max cache age")
                 clearValidationCache(licenseId)
