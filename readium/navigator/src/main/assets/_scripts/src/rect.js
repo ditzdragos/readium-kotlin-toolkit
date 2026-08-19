@@ -5,10 +5,7 @@
 //
 
 import { DEBUG_MODE, log as logNative } from "./utils";
-import {
-  kerningGapLimit,
-  mergeRectsSeparatedByKerning,
-} from "./kernedRects.mjs";
+import { gapBridgesRange, mergeRectRuns } from "./rangeRects.mjs";
 
 const debug = false;
 
@@ -125,15 +122,10 @@ export function getClientRectsNoOverlap(
       }
     }
   }
-  const kernedRects = mergeRectsSeparatedByKerning(
-    newRects,
-    kerningGapLimit(range)
-  );
+  const runs = mergeRectRuns(newRects, gapBridgesRange(range, document));
   if (DEBUG_MODE)
-    log(
-      `CLIENT RECT: reduced ${originalRects.length} --> ${kernedRects.length}`
-    );
-  return kernedRects;
+    log(`CLIENT RECT: reduced ${originalRects.length} --> ${runs.length}`);
+  return runs;
 }
 
 function mergeTouchingRects(
