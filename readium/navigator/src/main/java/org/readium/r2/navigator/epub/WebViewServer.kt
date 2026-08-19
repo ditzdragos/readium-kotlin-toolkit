@@ -246,6 +246,7 @@ internal class WebViewServer(
             }
             path.startsWith("/assets/") && isServedAsset(path.removePrefix("/assets/")) -> {
                 assetsLoader.shouldInterceptRequest(request.url)
+                    ?.apply { allowCors() }
             }
             else -> null
         }
@@ -360,6 +361,15 @@ internal class WebViewServer(
             resource.buffered(bufferSize = 256 * 1024)
         }
     }
+    /**
+     * Allow the response to be consumed by publication documents served
+     * from any origin, including the package domain.
+     */
+    private fun WebResourceResponse.allowCors() {
+        responseHeaders = responseHeaders ?: mutableMapOf()
+        responseHeaders["Access-Control-Allow-Origin"] = "*"
+    }
+
     private fun errorResource(): Resource =
         StringResource {
             withContext(Dispatchers.IO) {
