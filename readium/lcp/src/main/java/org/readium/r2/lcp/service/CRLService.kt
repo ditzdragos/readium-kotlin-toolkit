@@ -15,6 +15,7 @@ import android.os.Build
 import androidx.core.content.edit
 import java.util.Base64
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
@@ -24,6 +25,7 @@ import org.readium.r2.lcp.LcpException
 import org.readium.r2.shared.util.getOrElse
 import timber.log.Timber
 
+@OptIn(ExperimentalTime::class)
 internal class CRLService(val network: NetworkService, val context: Context) {
 
     private val preferences: SharedPreferences = context.getSharedPreferences(

@@ -13,6 +13,7 @@ import io.mockk.mockk
 import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +21,7 @@ import org.readium.r2.shared.util.Try
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 
+@OptIn(ExperimentalTime::class)
 @RunWith(RobolectricTestRunner::class)
 class CRLServiceTest {
 

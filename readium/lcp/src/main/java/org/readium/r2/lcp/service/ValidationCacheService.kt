@@ -12,6 +12,7 @@ package org.readium.r2.lcp.service
 import android.content.Context
 import android.content.SharedPreferences
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
 import org.readium.r2.lcp.BuildConfig.DEBUG
@@ -35,6 +36,7 @@ import timber.log.Timber
  * - Perpetual license → Cache valid for 30 days
  * - License already expired → Cache immediately invalid
  */
+@OptIn(ExperimentalTime::class)
 internal class ValidationCacheService(context: Context) {
 
     private val preferences: SharedPreferences = context.getSharedPreferences(
