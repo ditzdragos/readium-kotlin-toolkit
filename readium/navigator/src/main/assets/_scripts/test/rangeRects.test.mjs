@@ -87,6 +87,51 @@ describe("mergeRectRuns", () => {
     ]);
   });
 
+  it("reads a line left to right even when its tops differ a little", () => {
+    const asked = [];
+    mergeRectRuns([rect(40, 20, 100), rect(10, 20, 100.4)], (a, b) => {
+      asked.push([a.left, b.left]);
+      return true;
+    });
+
+    assert.deepEqual(asked, [[10, 40]]);
+  });
+
+  it("asks about the last rect of the run, not the run itself", () => {
+    const asked = [];
+    mergeRectRuns([rect(10, 60), rect(20, 10), rect(50, 20)], (a, b) => {
+      asked.push([a.right, b.left]);
+      return true;
+    });
+
+    assert.deepEqual(asked, [
+      [70, 20],
+      [30, 50],
+    ]);
+  });
+
+  it("cuts a line against the rect that opened it, not the previous one", () => {
+    const drifting = [
+      rect(10, 20, 100),
+      rect(40, 20, 100.8),
+      rect(70, 20, 101.6),
+    ];
+
+    assert.equal(mergeRectRuns(drifting, always).length, 2);
+  });
+
+  it("leaves a gap wider than the line alone, whatever the caret says", () => {
+    const columns = [rect(10, 40, 100, 32), rect(100, 40, 100, 32)];
+
+    assert.equal(mergeRectRuns(columns, always).length, 2);
+  });
+
+  it("still bridges a gap as wide as the line is tall", () => {
+    const touching = [rect(10, 40, 100, 32), rect(82, 40, 100, 32)];
+
+    assert.equal(mergeRectRuns(touching, always).length, 1);
+  });
+
   it("passes a single rect straight through", () => {
     assert.equal(mergeRectRuns([michael[0]], never).length, 1);
     assert.equal(mergeRectRuns([], never).length, 0);
