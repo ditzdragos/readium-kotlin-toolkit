@@ -7,6 +7,8 @@
  * LICENSE file present in the project repository where this source code is maintained.
  */
 
+@file:OptIn(InternalReadiumApi::class)
+
 package org.readium.r2.lcp.service
 
 import android.content.Context
@@ -22,6 +24,8 @@ import kotlinx.datetime.daysUntil
 import org.readium.r2.lcp.BuildConfig.DEBUG
 import org.readium.r2.lcp.LcpError
 import org.readium.r2.lcp.LcpException
+import org.readium.r2.shared.InternalReadiumApi
+import org.readium.r2.shared.extensions.tryOrNull
 import org.readium.r2.shared.util.getOrElse
 import timber.log.Timber
 
@@ -72,7 +76,8 @@ internal class CRLService(val network: NetworkService, val context: Context) {
     // Returns (CRL, expired)
     private fun readLocal(): Pair<String?, Boolean> {
         val crl = preferences.getString(CRL_KEY, null)
-        val date = preferences.getString(DATE_KEY, null)?.let { Instant.parse(input = it) }
+        val date = preferences.getString(DATE_KEY, null)
+            ?.let { tryOrNull { Instant.parse(input = it) } }
         val expired = date?.let { daysSince(date) >= EXPIRATION } ?: true
         return Pair(crl, expired)
     }
