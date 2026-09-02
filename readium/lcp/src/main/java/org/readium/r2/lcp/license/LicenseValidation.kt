@@ -10,7 +10,10 @@
 package org.readium.r2.lcp.license
 
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.readium.r2.lcp.BuildConfig.DEBUG
 import org.readium.r2.lcp.LcpAuthenticating
@@ -29,6 +32,12 @@ import org.readium.r2.shared.util.Instant
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.mediatype.MediaType
 import timber.log.Timber
+
+private val STATUS_FETCH_TIMEOUT = 5.seconds
+
+// Refreshing on literally every open put a TLS handshake next to the publication opening and cost
+// back most of what serving the cache saved, so a recently refreshed document is left alone.
+private val STATUS_REFRESH_MIN_AGE = 15.minutes
 
 internal sealed class Either<A, B> {
     class Left<A, B>(val left: A) : Either<A, B>()
@@ -124,9 +133,13 @@ internal class LicenseValidation(
     val passphrases: PassphrasesService,
     val validationCache: ValidationCacheService,
     val context: android.content.Context,
+    val revalidationScope: CoroutineScope,
     val onLicenseValidated: (LicenseDocument) -> Unit,
 ) {
     private val observers = CopyOnWriteArrayList<Pair<Observer, ObserverPolicy>>()
+
+    private val statusRequestHeaders =
+        mapOf("Accept" to MediaType.LCP_STATUS_DOCUMENT.toString())
 
     var state: State = State.start
         set(newValue) {
@@ -375,14 +388,21 @@ internal class LicenseValidation(
 
         if (DEBUG) Timber.d("fetchStatus: URL = $url")
 
-        // Short timeout to avoid blocking the License, when the LSD is optional.
-        val timeout = 5.seconds.takeIf { ignoreInternetErrors }
+        // RallyReader fork patch: opening a book used to block on this round trip every single
+        // time, which cost about a second before the first page could start rendering. When the
+        // license already tolerates network errors we serve the cached status document right away
+        // and refresh it in the background instead. A status change made elsewhere (a return or a
+        // revocation) therefore takes effect on the next open rather than this one - the same
+        // staleness the offline fallback below has always allowed, and bounded by the cache's own
+        // license-expiry and maximum-age rules.
+        if (ignoreInternetErrors && serveCachedStatus(license, url)) {
+            return
+        }
 
-        val result = network.fetch(
-            url,
-            timeout = timeout,
-            headers = mapOf("Accept" to MediaType.LCP_STATUS_DOCUMENT.toString())
-        )
+        // Short timeout to avoid blocking the License, when the LSD is optional.
+        val timeout = STATUS_FETCH_TIMEOUT.takeIf { ignoreInternetErrors }
+
+        val result = network.fetch(url, timeout = timeout, headers = statusRequestHeaders)
 
         result.onSuccess { data ->
             // Cache the successfully fetched status document
@@ -401,6 +421,47 @@ internal class LicenseValidation(
                 if (DEBUG) Timber.d("fetchStatus: No cached status document found for license ${license.id}")
                 throw LcpException(LcpError.Network(error))
             }
+        }
+    }
+
+    private fun serveCachedStatus(license: LicenseDocument, url: String): Boolean {
+        val cachedStatus = validationCache.getCachedStatusDocument(license.id) ?: return false
+
+        // A cached document that no longer parses would otherwise send the validation down the
+        // status-less branch for as long as the entry lives, so drop it and go to the network.
+        try {
+            StatusDocument(data = cachedStatus)
+        } catch (error: Exception) {
+            if (DEBUG) {
+                Timber.e(error, "Discarding unparsable cached status document for license ${license.id}")
+            }
+            validationCache.clearCache(license.id)
+            return false
+        }
+
+        if (DEBUG) Timber.d("fetchStatus: Serving cached status document for license ${license.id}")
+
+        val cacheAge = validationCache.statusCacheAge(license.id)
+        if (cacheAge == null || cacheAge >= STATUS_REFRESH_MIN_AGE) {
+            refreshStatusInBackground(license.id, url)
+        }
+
+        raise(Event.retrievedStatusData(cachedStatus))
+        return true
+    }
+
+    private fun refreshStatusInBackground(licenseId: String, url: String) {
+        revalidationScope.launch {
+            network.fetch(url, timeout = STATUS_FETCH_TIMEOUT, headers = statusRequestHeaders)
+                .onSuccess { data ->
+                    if (DEBUG) Timber.d("Refreshed cached status document for license $licenseId")
+                    validationCache.cacheStatusDocument(licenseId, data)
+                }
+                .onFailure { error ->
+                    if (DEBUG) {
+                        Timber.d("Background status refresh failed for license $licenseId: ${error.message}")
+                    }
+                }
         }
     }
 

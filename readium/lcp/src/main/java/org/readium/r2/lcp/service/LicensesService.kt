@@ -356,6 +356,7 @@ internal class LicensesService(
             passphrases = this.passphrases,
             context = this.context,
             validationCache = this.validationCache,
+            revalidationScope = this,
             allowUserInteraction = allowUserInteraction,
             ignoreInternetErrors = container is WritableLicenseContainer
         ) { licenseDocument ->

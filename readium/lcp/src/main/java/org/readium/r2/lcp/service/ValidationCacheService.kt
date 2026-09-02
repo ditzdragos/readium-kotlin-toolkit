@@ -12,6 +12,7 @@ package org.readium.r2.lcp.service
 import android.content.Context
 import android.content.SharedPreferences
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
@@ -110,6 +111,20 @@ internal class ValidationCacheService(context: Context) {
         } catch (e: Exception) {
             if (DEBUG) Timber.e(e, "Failed to retrieve cached status document for license $licenseId")
             return null
+        }
+    }
+
+    /**
+     * How long ago the status document for [licenseId] was cached, or null when nothing is cached.
+     */
+    fun statusCacheAge(licenseId: String): Duration? {
+        return try {
+            val dateKey = "$STATUS_DATE_KEY_PREFIX$licenseId"
+            val dateString = preferences.getString(dateKey, null) ?: return null
+            Clock.System.now() - kotlin.time.Instant.parse(dateString)
+        } catch (e: Exception) {
+            if (DEBUG) Timber.e(e, "Failed to read status cache date for license $licenseId")
+            null
         }
     }
 
