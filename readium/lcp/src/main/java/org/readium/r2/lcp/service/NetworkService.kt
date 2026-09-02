@@ -12,8 +12,6 @@ package org.readium.r2.lcp.service
 import android.net.Uri
 import java.io.File
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.TimeUnit
 import kotlin.math.round
 import kotlin.time.Duration
@@ -23,6 +21,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.buffer
 import okio.sink
 import org.readium.r2.lcp.LcpError
@@ -64,6 +64,18 @@ internal class NetworkService {
             .build()
     }
 
+    // RallyReader fork patch: the API calls used to go through a bare HttpURLConnection, which
+    // opened a fresh TCP+TLS connection every time and never set a read timeout, so a stalled
+    // server could hang the caller forever. They now share the pooled OkHttp client below.
+    private val apiHttpClient: OkHttpClient by lazy {
+        downloadHttpClient.newBuilder()
+            .connectTimeout(API_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(API_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(API_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .callTimeout(API_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+    }
+
     suspend fun fetch(
         url: String,
         method: Method = Method.GET,
@@ -73,23 +85,29 @@ internal class NetworkService {
     ): Try<ByteArray, NetworkException> =
         withContext(Dispatchers.IO) {
             try {
-                @Suppress("NAME_SHADOWING")
-                val url = URL(
-                    Uri.parse(url).buildUpon().appendQueryParameters(parameters).build().toString()
-                )
+                val requestUrl = Uri.parse(url)
+                    .buildUpon()
+                    .appendQueryParameters(parameters)
+                    .build()
+                    .toString()
 
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = method.value
+                val request = Request.Builder()
+                    .url(requestUrl)
+                    .method(method.value, method.emptyRequestBodyOrNull())
+                    .appendRequestHeaders(headers)
+                    .build()
+
+                val call = apiHttpClient.newCall(request)
                 if (timeout != null) {
-                    connection.connectTimeout = timeout.inWholeMilliseconds.toInt()
+                    call.timeout().timeout(timeout.inWholeMilliseconds, TimeUnit.MILLISECONDS)
                 }
-                connection.appendRequestHeaders(headers)
 
-                val status = connection.responseCode
-                if (status >= 400) {
-                    Try.failure(NetworkException(status))
-                } else {
-                    Try.success(connection.inputStream.readBytes())
+                call.execute().use { response ->
+                    if (response.code >= 400) {
+                        Try.failure(NetworkException(response.code))
+                    } else {
+                        Try.success(response.body?.bytes() ?: ByteArray(0))
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e)
@@ -97,10 +115,16 @@ internal class NetworkService {
             }
         }
 
-    private fun HttpURLConnection.appendRequestHeaders(headers: Map<String, String>): HttpURLConnection =
+    private fun Method.emptyRequestBodyOrNull(): RequestBody? =
+        when (this) {
+            Method.GET -> null
+            Method.POST, Method.PUT -> ByteArray(0).toRequestBody(null)
+        }
+
+    private fun Request.Builder.appendRequestHeaders(headers: Map<String, String>): Request.Builder =
         apply {
             for ((key, value) in headers) {
-                setRequestProperty(key, value)
+                header(key, value)
             }
         }
 
@@ -205,6 +229,10 @@ private fun Double.roundToDecimals(decimals: Int): Double {
     repeat(decimals) { multiplier *= 10 }
     return round(this * multiplier) / multiplier
 }
+
+private const val API_CONNECT_TIMEOUT_SECONDS: Long = 15
+private const val API_READ_TIMEOUT_SECONDS: Long = 20
+private const val API_CALL_TIMEOUT_SECONDS: Long = 30
 
 private const val DOWNLOAD_READ_BUFFER_BYTES: Long = 64 * 1024
 
