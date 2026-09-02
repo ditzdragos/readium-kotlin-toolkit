@@ -35,8 +35,7 @@ import timber.log.Timber
 
 private val STATUS_FETCH_TIMEOUT = 5.seconds
 
-// Refreshing on literally every open put a TLS handshake next to the publication opening and cost
-// back most of what serving the cache saved, so a recently refreshed document is left alone.
+// Refreshing every open put a TLS handshake next to the publication opening.
 private val STATUS_REFRESH_MIN_AGE = 15.minutes
 
 internal sealed class Either<A, B> {
@@ -388,13 +387,8 @@ internal class LicenseValidation(
 
         if (DEBUG) Timber.d("fetchStatus: URL = $url")
 
-        // RallyReader fork patch: opening a book used to block on this round trip every single
-        // time, which cost about a second before the first page could start rendering. When the
-        // license already tolerates network errors we serve the cached status document right away
-        // and refresh it in the background instead. A status change made elsewhere (a return or a
-        // revocation) therefore takes effect on the next open rather than this one - the same
-        // staleness the offline fallback below has always allowed, and bounded by the cache's own
-        // license-expiry and maximum-age rules.
+        // RallyReader fork patch: cache-first, so a status change elsewhere applies on the
+        // next open rather than this one.
         if (ignoreInternetErrors && serveCachedStatus(license, url)) {
             return
         }
@@ -427,8 +421,8 @@ internal class LicenseValidation(
     private fun serveCachedStatus(license: LicenseDocument, url: String): Boolean {
         val cachedStatus = validationCache.getCachedStatusDocument(license.id) ?: return false
 
-        // A cached document that no longer parses would otherwise send the validation down the
-        // status-less branch for as long as the entry lives, so drop it and go to the network.
+        // Otherwise a corrupt entry pins validation to the status-less branch for the whole
+        // life of the cache.
         try {
             StatusDocument(data = cachedStatus)
         } catch (error: Exception) {

@@ -64,9 +64,7 @@ internal class NetworkService {
             .build()
     }
 
-    // RallyReader fork patch: the API calls used to go through a bare HttpURLConnection, which
-    // opened a fresh TCP+TLS connection every time and never set a read timeout, so a stalled
-    // server could hang the caller forever. They now share the pooled OkHttp client below.
+    // RallyReader fork patch: was a bare HttpURLConnection, unpooled and with no read timeout.
     private val apiHttpClient: OkHttpClient by lazy {
         downloadHttpClient.newBuilder()
             .connectTimeout(API_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
