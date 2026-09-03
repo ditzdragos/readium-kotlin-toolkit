@@ -14,6 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
 import java.io.BufferedInputStream
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
@@ -40,6 +41,13 @@ import org.readium.r2.shared.util.resource.synchronized
 import org.readium.r2.shared.util.use
 import timber.log.Timber
 
+/** The web view path prefix under which the publication identified by [namespace] is served. */
+internal fun publicationPathPrefixFor(namespace: String): String = "/publication/$namespace/"
+
+/** The base href resolving a publication's hrefs into the namespace at [pathPrefix]. */
+internal fun publicationBaseHrefFor(pathPrefix: String): AbsoluteUrl =
+    AbsoluteUrl("https://readium$pathPrefix")!!
+
 /**
  * Serves the publication resources and application assets in the EPUB navigator web views.
  */
@@ -52,8 +60,23 @@ internal class WebViewServer(
     private val disableSelectionWhenProtected: Boolean,
     private val onResourceLoadFailed: (Url, ReadError) -> Unit,
 ) {
+    // Publication resources are served under a path segment unique to this server instance, and
+    // therefore unique to one opened publication.
+    //
+    // Every publication URL is built from an EPUB-internal href chosen by the publisher, and books
+    // produced by the same conversion toolchain routinely reuse those hrefs verbatim — two
+    // unrelated titles both holding OPS/html/page-001.xhtml is ordinary. Sharing one base href
+    // therefore mapped different books' resources onto identical URLs, and since non-HTML
+    // responses are served immutable for a day (see servePublicationResource), the web view
+    // answered the second book's request out of the first book's cache entry: the reader rendered
+    // the previously opened book. Namespacing the URL keeps that cache per-publication, so it
+    // still spares the repeat ZIP inflate and LCP decrypt within a reading session. (RR-8935)
+    private val publicationPathPrefix: String =
+        publicationPathPrefixFor(UUID.randomUUID().toString())
+
+    val publicationBaseHref: AbsoluteUrl = publicationBaseHrefFor(publicationPathPrefix)
+
     companion object {
-        val publicationBaseHref = AbsoluteUrl("https://readium/publication/")!!
         val assetsBaseHref = AbsoluteUrl("https://readium/assets/")!!
 
         fun assetUrl(path: String): Url? =
@@ -226,7 +249,7 @@ internal class WebViewServer(
     /**
      * Serves the requests of the navigator web views.
      *
-     * https://readium/publication/ serves the publication resources through its fetcher.
+     * [publicationBaseHref] serves the publication resources through its fetcher.
      * https://readium/assets/ serves the application assets.
      */
     fun shouldInterceptRequest(request: WebResourceRequest, css: ReadiumCss): WebResourceResponse? {
@@ -234,8 +257,8 @@ internal class WebViewServer(
         val path = request.url.path ?: return null
 
         return when {
-            path.startsWith("/publication/") -> {
-                val href = Url.fromDecodedPath(path.removePrefix("/publication/"))
+            path.startsWith(publicationPathPrefix) -> {
+                val href = Url.fromDecodedPath(path.removePrefix(publicationPathPrefix))
                     ?: return null
 
                 servePublicationResource(
@@ -361,6 +384,7 @@ internal class WebViewServer(
             resource.buffered(bufferSize = 256 * 1024)
         }
     }
+
     /**
      * Allow the response to be consumed by publication documents served
      * from any origin, including the package domain.

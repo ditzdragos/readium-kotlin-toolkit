@@ -30,7 +30,6 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
-import org.readium.r2.navigator.DecorationChange
 import org.readium.r2.navigator.DecorationId
 import org.readium.r2.navigator.HyperlinkNavigator
 import org.readium.r2.navigator.OverflowableNavigator
@@ -222,7 +221,7 @@ internal class EpubNavigatorViewModel(
     // Serving resources
 
     val baseUrl: AbsoluteUrl =
-        (publication.baseUrl as? AbsoluteUrl) ?: WebViewServer.publicationBaseHref
+        (publication.baseUrl as? AbsoluteUrl) ?: server.publicationBaseHref
 
     /**
      * Generates the URL to the given publication link.
