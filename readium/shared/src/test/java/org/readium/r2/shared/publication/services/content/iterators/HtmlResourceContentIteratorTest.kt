@@ -5,7 +5,9 @@ package org.readium.r2.shared.publication.services.content.iterators
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import android.util.Log
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,6 +27,7 @@ import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.mediatype.MediaType
 import org.readium.r2.shared.util.resource.StringResource
 import org.robolectric.RobolectricTestRunner
+import timber.log.Timber
 
 @OptIn(ExperimentalReadiumApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -161,6 +164,9 @@ class HtmlResourceContentIteratorTest {
         )
     )
 
+    private val htmlWithControlCharacterInId =
+        "<html><body><p id=\"page_4\u0001\">Text with a broken anchor</p></body></html>"
+
     private fun locator(
         progression: Double? = null,
         selector: String? = null,
@@ -195,6 +201,28 @@ class HtmlResourceContentIteratorTest {
                 add(next())
             }
         }
+
+    @Test
+    fun `an id jsoup cannot escape yields no selector instead of an error log`() = runTest {
+        val errors = mutableListOf<Throwable?>()
+        val recorder = object : Timber.Tree() {
+            override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+                if (priority >= Log.ERROR) {
+                    errors.add(t)
+                }
+            }
+        }
+        Timber.plant(recorder)
+        val elements = try {
+            iterator(htmlWithControlCharacterInId).elements()
+        } finally {
+            Timber.uproot(recorder)
+        }
+
+        assertTrue(errors.isEmpty())
+        assertEquals(1, elements.size)
+        assertNull(elements.first().locator.locations.otherLocations["cssSelector"])
+    }
 
     @Test
     fun `cannot call previous() without first hasPrevious()`() = runTest {

@@ -20,7 +20,6 @@ import org.jsoup.select.NodeVisitor
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
-import org.readium.r2.shared.extensions.tryOrLog
 import org.readium.r2.shared.extensions.tryOrNull
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
@@ -277,7 +276,12 @@ public class HtmlResourceContentIterator internal constructor(
         ) {
             constructor(element: Element) : this(
                 element = element,
-                cssSelector = tryOrLog { element.cssSelector() }
+                cssSelector = try {
+                    element.cssSelector()
+                } catch (e: Exception) {
+                    Timber.w(e, "Could not compute a CSS selector for this element")
+                    null
+                }
             )
         }
 
