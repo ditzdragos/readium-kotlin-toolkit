@@ -12,6 +12,8 @@ package org.readium.r2.lcp.service
 import android.net.Uri
 import java.io.File
 import java.io.IOException
+import java.net.UnknownHostException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.round
 import kotlin.time.Duration
@@ -108,7 +110,7 @@ internal class NetworkService {
                     }
                 }
             } catch (e: Exception) {
-                Timber.e(e)
+                e.reportNetworkFailure()
                 Try.failure(NetworkException(status = null, cause = e))
             }
         }
@@ -188,11 +190,56 @@ internal class NetworkService {
         } catch (e: LcpException) {
             throw e
         } catch (e: Exception) {
-            Timber.e(e)
+            e.reportNetworkFailure()
             throw LcpException(LcpError.Network(e))
         }
     }
 }
+
+/**
+ * RallyReader fork patch: reports a failed LCP network call at the level its outcome deserves.
+ *
+ * Every caller of [NetworkService.fetch] classifies the failure itself — the status document falls
+ * back to its cached copy, the background refresh drops it, device registration returns null, and
+ * renew and return map the status onto a user-facing error — and [NetworkService.download] rethrows
+ * as [LcpError.Network] for the reading app to surface. Reporting all of them here at error level
+ * announced a broken feature for outcomes the callers had already absorbed, and a device with no
+ * DNS was by far the loudest of them.
+ *
+ * The throwable goes with the level rather than just being downgraded: the reading app's Timber
+ * tree forwards any throwable it is handed at warning or above to crash reporting.
+ *
+ * Deliberately narrow. Only name resolution counts as offline; a connect or read timeout can
+ * equally mean the license server is in trouble, which is still worth an error.
+ */
+internal fun Throwable.reportNetworkFailure() {
+    if (isOfflineLike()) {
+        Timber.w("LCP network call skipped, the device could not resolve the host")
+    } else {
+        Timber.e(this)
+    }
+}
+
+internal fun Throwable.isOfflineLike(): Boolean = when {
+    this is UnknownHostException -> true
+    message.isOfflineLikeMessage() -> true
+    else -> cause?.isOfflineLike() == true
+}
+
+// The wording differs by API level, and the underlying failure often arrives as an
+// android.system.GaiException this module cannot reference directly, so match the message too.
+private fun String?.isOfflineLikeMessage(): Boolean {
+    if (isNullOrBlank()) return false
+    val normalizedMessage = lowercase(Locale.ROOT)
+    return OFFLINE_MESSAGE_PATTERNS.any { pattern -> normalizedMessage.contains(pattern) }
+}
+
+private val OFFLINE_MESSAGE_PATTERNS = listOf(
+    "unable to resolve host",
+    "no address associated with hostname",
+    "eai_nodata",
+    "eai_noname"
+)
 
 /**
  * Fails the download before a single byte is written when the volume cannot hold the publication.
