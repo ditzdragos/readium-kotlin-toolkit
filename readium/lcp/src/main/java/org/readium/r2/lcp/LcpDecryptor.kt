@@ -158,8 +158,17 @@ internal class CbcLcpResource(
             }
 
         check(decryptedBytes.size == AES_BLOCK_SIZE)
-        return Try.success(decryptedBytes.last().toInt())
+        return Try.success(decryptedBytes.builtinPaddingLengthOrNull())
     }
+
+    /**
+     * Reads the trailing PKCS#7 padding length, or null if it is not a legal one.
+     *
+     * [Byte.toInt] sign-extends, so the mask is what keeps a padding byte of 0x80 or above from
+     * becoming a negative length.
+     */
+    private fun ByteArray.builtinPaddingLengthOrNull(): Int? =
+        (last().toInt() and 0xFF).takeIf { it in 1..AES_BLOCK_SIZE }
 
     override suspend fun read(range: LongRange?): Try<ByteArray, ReadError> {
         if (range == null) {
@@ -226,7 +235,15 @@ internal class CbcLcpResource(
 
         val builtinPaddingLength =
             if (dataIncludesBuiltinPadding) {
-                bytes.last().toInt().also { this.builtinPaddingLength = it }
+                bytes.builtinPaddingLengthOrNull()
+                    ?.also { this.builtinPaddingLength = it }
+                    ?: return Try.failure(
+                        ReadError.Decoding(
+                            DebugError(
+                                "Invalid padding in the CBC-encrypted content for resource with key: ${resource.sourceUrl}"
+                            )
+                        )
+                    )
             } else {
                 0
             }
