@@ -563,6 +563,7 @@ public class EpubNavigatorFragment public constructor(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        locationGate = LocationNotificationGate(viewLifecycleOwner.lifecycleScope) { notifyCurrentLocation() }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -942,7 +943,8 @@ public class EpubNavigatorFragment public constructor(
         }
 
         override fun onProgressionChanged() {
-            notifyCurrentLocation()
+            val gate = locationGate ?: return notifyCurrentLocation()
+            gate.onChange(currentLocationKey())
         }
 
         override fun goToPreviousResource(jump: Boolean, animated: Boolean): Boolean {
@@ -1305,6 +1307,7 @@ public class EpubNavigatorFragment public constructor(
      * debounce the notification.
      */
     private var debounceLocationNotificationJob: Job? = null
+    private var locationGate: LocationNotificationGate? = null
 
     /**
      * Mapping between reading order hrefs and the table of contents title.
@@ -1385,6 +1388,12 @@ public class EpubNavigatorFragment public constructor(
                 }
             }
         }
+    }
+
+    private fun currentLocationKey(): Pair<Int, Int?> {
+        val webView = currentReflowablePageFragment?.webView
+        webView?.updateCurrentItem()
+        return resourcePager.currentItem to webView?.mCurItem
     }
 
     private fun createLocatorForLink(link: Link, progression: Double): Locator {
@@ -1591,6 +1600,8 @@ public class EpubNavigatorFragment public constructor(
     }
 
     override fun onDestroyView() {
+        locationGate?.cancel()
+        locationGate = null
         super.onDestroyView()
         cleanupResources()
         _binding = null
