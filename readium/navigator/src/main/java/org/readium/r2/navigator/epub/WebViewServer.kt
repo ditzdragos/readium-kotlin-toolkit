@@ -33,6 +33,7 @@ import org.readium.r2.shared.util.data.asInputStream
 import org.readium.r2.shared.util.http.HttpHeaders
 import org.readium.r2.shared.util.http.HttpRange
 import org.readium.r2.shared.util.mediatype.MediaType
+import org.readium.r2.shared.util.resource.InMemoryResource
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.StringResource
 import org.readium.r2.shared.util.resource.borrow
@@ -127,6 +128,8 @@ internal class WebViewServer(
     // fitted to that size than left to fill its slot at a size unlike its neighbours'.
     private var fallbackFxlViewport: FixedLayoutViewport? = null
 
+    private val rawHtml = RawHtmlHandoff<Url>()
+
     private fun cachedResource(url: Url, build: () -> Resource): Resource {
         // Fast path: return a live entry. The get() must hold the lock because the map
         // is access-ordered (get() mutates iteration order).
@@ -171,11 +174,11 @@ internal class WebViewServer(
         // Read the raw (small) HTML wrapper to discover referenced assets. Served HTML is built
         // per-request (request-scoped ReadiumCss injection), so the page itself cannot be
         // cached — only its assets are.
-        val html = ReadiumTrace.section(ReadiumTrace.HTML_READ) {
-            publication.get(pageUrl)
-                ?.use { it.read().getOrNull() }
-                ?.decodeToString()
+        val bytes = ReadiumTrace.section(ReadiumTrace.HTML_READ) {
+            publication.get(pageUrl)?.use { it.read().getOrNull() }
         } ?: return
+        rawHtml.put(pageUrl, bytes)
+        val html = bytes.decodeToString()
 
         if (isFixedLayout) {
             cacheFixedLayoutViewport(pageUrl, html)
@@ -218,15 +221,14 @@ internal class WebViewServer(
 
         // Only a page that was never prewarmed reaches here: a zip inflate plus, for an LCP title,
         // a decrypt. A read failure is left uncached so a transient one doesn't pin the page.
-        val html = withContext(Dispatchers.IO) {
+        val bytes = withContext(Dispatchers.IO) {
             ReadiumTrace.section(ReadiumTrace.HTML_READ) {
-                publication.get(pageUrl)
-                    ?.use { it.read().getOrNull() }
-                    ?.decodeToString()
+                publication.get(pageUrl)?.use { it.read().getOrNull() }
             }
         } ?: return fallbackFxlViewport
+        rawHtml.put(pageUrl, bytes)
 
-        return cacheFixedLayoutViewport(pageUrl, html) ?: fallbackFxlViewport
+        return cacheFixedLayoutViewport(pageUrl, bytes.decodeToString()) ?: fallbackFxlViewport
     }
 
     private fun cacheFixedLayoutViewport(pageUrl: Url, html: String): FixedLayoutViewport? {
@@ -248,6 +250,7 @@ internal class WebViewServer(
             }
             resourceCache.clear()
         }
+        rawHtml.clear()
     }
 
     /**
@@ -346,18 +349,20 @@ internal class WebViewServer(
     }
 
     private fun buildResource(link: Link, url: Url, css: ReadiumCss): Resource {
-        var resource = publication
-            .get(url)
-            ?.fallback {
-                onResourceLoadFailed(url, it)
+        val handedOver = if (link.mediaType?.isHtml == true) rawHtml.take(url) else null
+        var resource = handedOver?.let { InMemoryResource(it) }
+            ?: publication
+                .get(url)
+                ?.fallback {
+                    onResourceLoadFailed(url, it)
+                    errorResource()
+                } ?: run {
+                val error = ReadError.Decoding(
+                    "Resource not found at $url in publication."
+                )
+                onResourceLoadFailed(url, error)
                 errorResource()
-            } ?: run {
-            val error = ReadError.Decoding(
-                "Resource not found at $url in publication."
-            )
-            onResourceLoadFailed(url, error)
-            errorResource()
-        }
+            }
 
         val mediaType = link.mediaType
         when {
