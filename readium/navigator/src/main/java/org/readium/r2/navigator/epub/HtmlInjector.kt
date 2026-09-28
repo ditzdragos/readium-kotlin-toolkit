@@ -7,6 +7,7 @@
 package org.readium.r2.navigator.epub
 
 import org.readium.r2.navigator.epub.css.ReadiumCss
+import org.readium.r2.navigator.util.ReadiumTrace
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.epub.EpubLayout
@@ -35,75 +36,77 @@ internal fun Resource.injectHtml(
     disableSelectionWhenProtected: Boolean,
 ): Resource =
     TransformingResource(this) { bytes ->
-        if (!mediaType.isHtml) {
-            return@TransformingResource Try.success(bytes)
-        }
-
-        var content = bytes.toString(mediaType.charset ?: Charsets.UTF_8).trim()
-        val injectables = mutableListOf<String>()
-
-        if (publication.metadata.presentation.layout == EpubLayout.FIXED) {
-            injectables.add(
-                script(baseHref.resolve(Url("readium/scripts/readium-fixed.js")!!))
-            )
-            // RR-6369: Many fixed-layout pages (e.g. graphic novels) bake their text
-            // into the page image with a Times-metric typeface and lay an invisible
-            // text overlay on top to anchor read-aloud highlights. Those pages declare
-            // no font-family, so the overlay falls back to the WebView default. The
-            // Android WebView default is sans-serif (Roboto), ~8% wider per character
-            // than the baked text, so the overlay — and the underline anchored to it —
-            // drifts rightward and accumulates across each line. Default the unstyled
-            // text to a bundled Times-metric serif so the overlay tracks the artwork.
-            // The font is preloaded so its metrics are settled before any decoration
-            // is measured.
-            injectables.add(
-                preloadFont(
-                    baseHref.resolve(
-                        Url("readium/fonts/fxl-default-serif/NimbusRoman.woff2")!!
-                    )
-                )
-            )
-            injectables.add(
-                stylesheet(
-                    baseHref.resolve(
-                        Url("readium/fonts/fxl-default-serif/fxl-default-serif.css")!!
-                    )
-                )
-            )
-        } else {
-            content = try {
-                css.injectHtml(content)
-            } catch (e: Exception) {
-                return@TransformingResource Try.failure(ReadError.Decoding(e))
+        ReadiumTrace.section(ReadiumTrace.INJECT_HTML) {
+            if (!mediaType.isHtml) {
+                return@section Try.success(bytes)
             }
 
-            injectables.add(
-                script(
-                    baseHref.resolve(Url("readium/scripts/readium-reflowable.js")!!)
+            var content = bytes.toString(mediaType.charset ?: Charsets.UTF_8).trim()
+            val injectables = mutableListOf<String>()
+
+            if (publication.metadata.presentation.layout == EpubLayout.FIXED) {
+                injectables.add(
+                    script(baseHref.resolve(Url("readium/scripts/readium-fixed.js")!!))
                 )
-            )
-        }
-
-        // Disable the text selection if the publication is protected.
-        // FIXME: This is a hack until proper LCP copy is implemented, see https://github.com/readium/kotlin-toolkit/issues/221
-        if (disableSelectionWhenProtected && publication.isProtected) {
-            injectables.add(
-                """
-                <style>
-                *:not(input):not(textarea) {
-                    user-select: none;
-                    -webkit-user-select: none;
+                // RR-6369: Many fixed-layout pages (e.g. graphic novels) bake their text
+                // into the page image with a Times-metric typeface and lay an invisible
+                // text overlay on top to anchor read-aloud highlights. Those pages declare
+                // no font-family, so the overlay falls back to the WebView default. The
+                // Android WebView default is sans-serif (Roboto), ~8% wider per character
+                // than the baked text, so the overlay — and the underline anchored to it —
+                // drifts rightward and accumulates across each line. Default the unstyled
+                // text to a bundled Times-metric serif so the overlay tracks the artwork.
+                // The font is preloaded so its metrics are settled before any decoration
+                // is measured.
+                injectables.add(
+                    preloadFont(
+                        baseHref.resolve(
+                            Url("readium/fonts/fxl-default-serif/NimbusRoman.woff2")!!
+                        )
+                    )
+                )
+                injectables.add(
+                    stylesheet(
+                        baseHref.resolve(
+                            Url("readium/fonts/fxl-default-serif/fxl-default-serif.css")!!
+                        )
+                    )
+                )
+            } else {
+                content = try {
+                    css.injectHtml(content)
+                } catch (e: Exception) {
+                    return@section Try.failure(ReadError.Decoding(e))
                 }
-                </style>
-            """
-            )
+
+                injectables.add(
+                    script(
+                        baseHref.resolve(Url("readium/scripts/readium-reflowable.js")!!)
+                    )
+                )
+            }
+
+            // Disable the text selection if the publication is protected.
+            // FIXME: This is a hack until proper LCP copy is implemented, see https://github.com/readium/kotlin-toolkit/issues/221
+            if (disableSelectionWhenProtected && publication.isProtected) {
+                injectables.add(
+                    """
+                    <style>
+                    *:not(input):not(textarea) {
+                        user-select: none;
+                        -webkit-user-select: none;
+                    }
+                    </style>
+                """
+                )
+            }
+
+            val injectableContent = "\n" + injectables.joinToString("\n") + "\n"
+            content = content.injectReadiumContent(injectableContent, sourceUrl)
+            content = injectFontDisplaySwap(content)
+
+            Try.success(content.toByteArray())
         }
-
-        val injectableContent = "\n" + injectables.joinToString("\n") + "\n"
-        content = content.injectReadiumContent(injectableContent, sourceUrl)
-        content = injectFontDisplaySwap(content)
-
-        Try.success(content.toByteArray())
     }
 
 // Force `font-display: swap` onto publisher @font-face rules so multi-MB embedded fonts render

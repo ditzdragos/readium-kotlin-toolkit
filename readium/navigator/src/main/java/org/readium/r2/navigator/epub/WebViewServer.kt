@@ -18,6 +18,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
+import org.readium.r2.navigator.util.ReadiumTrace
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Href
@@ -170,10 +171,11 @@ internal class WebViewServer(
         // Read the raw (small) HTML wrapper to discover referenced assets. Served HTML is built
         // per-request (request-scoped ReadiumCss injection), so the page itself cannot be
         // cached — only its assets are.
-        val html = publication.get(pageUrl)
-            ?.use { it.read().getOrNull() }
-            ?.decodeToString()
-            ?: return
+        val html = ReadiumTrace.section(ReadiumTrace.HTML_READ) {
+            publication.get(pageUrl)
+                ?.use { it.read().getOrNull() }
+                ?.decodeToString()
+        } ?: return
 
         if (isFixedLayout) {
             cacheFixedLayoutViewport(pageUrl, html)
@@ -217,9 +219,11 @@ internal class WebViewServer(
         // Only a page that was never prewarmed reaches here: a zip inflate plus, for an LCP title,
         // a decrypt. A read failure is left uncached so a transient one doesn't pin the page.
         val html = withContext(Dispatchers.IO) {
-            publication.get(pageUrl)
-                ?.use { it.read().getOrNull() }
-                ?.decodeToString()
+            ReadiumTrace.section(ReadiumTrace.HTML_READ) {
+                publication.get(pageUrl)
+                    ?.use { it.read().getOrNull() }
+                    ?.decodeToString()
+            }
         } ?: return fallbackFxlViewport
 
         return cacheFixedLayoutViewport(pageUrl, html) ?: fallbackFxlViewport
