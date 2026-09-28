@@ -1044,7 +1044,7 @@ public class EpubNavigatorFragment public constructor(
 
         Timber.d("goToNextResource setCurrentItem ${resourcePager.currentItem}")
 
-        resourcePager.setCurrentItem(resourcePager.currentItem + 1, animated)
+        turnResourcePager(resourcePager.currentItem + 1, animated)
 
         currentReflowablePageFragment?.webView?.let { webView ->
             Timber.d("goToNextResource webView 0 -> ${webView.numPages}")
@@ -1070,7 +1070,7 @@ public class EpubNavigatorFragment public constructor(
             locatorToPreviousResource()?.let { listener?.onJumpToLocator(it) }
         }
 
-        resourcePager.setCurrentItem(resourcePager.currentItem - 1, animated)
+        turnResourcePager(resourcePager.currentItem - 1, animated)
 
         if (viewModel.layout == EpubLayout.FIXED) {
             return true
@@ -1085,6 +1085,17 @@ public class EpubNavigatorFragment public constructor(
         }
 
         return true
+    }
+
+    private fun turnResourcePager(item: Int, animated: Boolean) {
+        val pagerAdapter = r2PagerAdapter
+        if (!animated || pagerAdapter == null) {
+            resourcePager.setCurrentItem(item, animated)
+            return
+        }
+        // A turn still settling may have left the target page uncommitted; slide in a built page.
+        pagerAdapter.commitPendingTransaction()
+        pagerAdapter.deferringCommit { resourcePager.setCurrentItem(item, true) }
     }
 
     private fun locatorToPreviousResource(): Locator? = locatorToResourceAtIndex(resourcePager.currentItem - 1)

@@ -110,10 +110,30 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
         }
     }
 
+    private var isCommitDeferred = false
+
+    /**
+     * Runs [block] without committing the page fragments it adds or removes. The transaction is
+     * committed by the next [finishUpdate], which the pager runs once an animated scroll settles,
+     * so building the new neighbour page no longer delays the first frame of the page turn.
+     */
+    fun <T> deferringCommit(block: () -> T): T {
+        isCommitDeferred = true
+        return try {
+            block()
+        } finally {
+            isCommitDeferred = false
+        }
+    }
+
+    fun commitPendingTransaction() {
+        mCurTransaction?.commitNowAllowingStateLoss()
+        mCurTransaction = null
+    }
+
     override fun finishUpdate(container: ViewGroup) {
-        if (mCurTransaction != null) {
-            mCurTransaction!!.commitNowAllowingStateLoss()
-            mCurTransaction = null
+        if (!isCommitDeferred) {
+            commitPendingTransaction()
         }
     }
 
