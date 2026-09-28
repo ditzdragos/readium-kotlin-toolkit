@@ -64,6 +64,7 @@ import org.readium.r2.navigator.epub.isJavascriptNullResult
 import org.readium.r2.navigator.extensions.htmlId
 import org.readium.r2.navigator.extensions.optRectF
 import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.util.ReadiumTrace
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
@@ -130,6 +131,7 @@ internal class R2EpubPageFragment : Fragment() {
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
             if (view == null) return
+            ReadiumTrace.endAsync(ReadiumTrace.PAGE_LOAD, System.identityHashCode(view))
             view.evaluateJavascript(WebViewScripts.disableTextDragScript, null)
             // Handle loading state based on which web view finished loading
             when (view) {
@@ -258,7 +260,7 @@ internal class R2EpubPageFragment : Fragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View {
+    ): View = ReadiumTrace.section(ReadiumTrace.PAGE_FRAGMENT_CREATE_VIEW) {
         Timber.d("onCreateView: $resourceUrl")
 
         // Check if WebView is available before proceeding
@@ -272,7 +274,7 @@ internal class R2EpubPageFragment : Fragment() {
                 false
             )
             errorView.findViewById<android.widget.TextView>(R.id.error_message)?.text = webViewError
-            return errorView
+            return@section errorView
         }
 
         // Choose layout based on whether we have a right resource
@@ -341,7 +343,7 @@ internal class R2EpubPageFragment : Fragment() {
             webView?.listener?.onTap(point)
         }
 
-        return containerView
+        containerView
     }
 
     /**
@@ -439,6 +441,7 @@ internal class R2EpubPageFragment : Fragment() {
                 isLoading = true
                 _isLoaded.value = false
                 Timber.d("Loading left page: $url")
+                ReadiumTrace.beginAsync(ReadiumTrace.PAGE_LOAD, System.identityHashCode(it))
                 it.loadUrl(url.toString())
             }
         }
@@ -449,6 +452,7 @@ internal class R2EpubPageFragment : Fragment() {
             rightResourceUrl?.let { url ->
                 isLoadingRight = true
                 Timber.d("Loading right page in parallel: $url")
+                ReadiumTrace.beginAsync(ReadiumTrace.PAGE_LOAD, System.identityHashCode(it))
                 it.loadUrl(url.toString())
             }
         }
