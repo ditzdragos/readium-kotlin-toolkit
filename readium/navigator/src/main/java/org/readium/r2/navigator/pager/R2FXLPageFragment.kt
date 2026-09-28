@@ -150,6 +150,7 @@ internal class R2FXLPageFragment : Fragment() {
         }
 
         webView.settings.javaScriptEnabled = true
+        webView.settings.offscreenPreRaster = true
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
         webView.settings.useWideViewPort = true

@@ -227,6 +227,18 @@ public class EpubNavigatorFragment public constructor(
 
         internal var fontFamilyDeclarations: List<FontFamilyDeclaration>,
         internal var javascriptInterfaces: Map<String, JavascriptInterfaceFactory>,
+
+        /**
+         * Transformation applied to the resource pages while the pager moves between them, drawn
+         * in reverse order so the outgoing page stays above the incoming one.
+         */
+        var pageTransformer: ViewPager.PageTransformer? = null,
+
+        /**
+         * Loads the fixed-layout spreads next to the visible one even on memory-constrained hosts,
+         * so an animated page turn never slides in a blank page.
+         */
+        var preloadFixedLayoutNeighbours: Boolean = false,
     ) {
         public constructor(
             servedAssets: List<String> = emptyList(),
@@ -549,6 +561,9 @@ public class EpubNavigatorFragment public constructor(
         }
         adapter.listener = PagerAdapterListener()
         resourcePager.adapter = adapter
+        config.pageTransformer?.let {
+            resourcePager.setPageTransformer(true, it, View.LAYER_TYPE_NONE)
+        }
         // Pre-render 1 page on each side (default). offscreenPageLimit=2 caused OOM on memory-
         // constrained devices (e.g. Chromebook ARC++) because 5 simultaneous pages × full image
         // ByteArrays would fill the heap to 99MB and trigger the lowmemorykiller.
@@ -1148,7 +1163,7 @@ public class EpubNavigatorFragment public constructor(
      * hosts where resident neighbour spreads risk an out-of-memory kill (see [shouldDeferPageLoad]).
      */
     internal fun shouldPersistDeferredLoad(): Boolean =
-        viewModel.layout == EpubLayout.FIXED && isMemoryConstrainedHost
+        viewModel.layout == EpubLayout.FIXED && isMemoryConstrainedHost && !config.preloadFixedLayoutNeighbours
 
     private val isMemoryConstrainedHost: Boolean by lazy {
         val ctx = context ?: return@lazy false

@@ -40,6 +40,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.BuildConfig.DEBUG
+import org.readium.r2.navigator.preferences.ReadingProgression
 import timber.log.Timber
 
 /**
@@ -58,6 +59,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
     private val uiScope = CoroutineScope(Dispatchers.Main)
 
     override fun scrollRight(animated: Boolean) {
+        if (animated && slideWithinResource(1)) return
         super.scrollRight(animated)
         uiScope.launch {
             if (mCurItem < numPages - 1) {
@@ -70,6 +72,7 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
     }
 
     override fun scrollLeft(animated: Boolean) {
+        if (animated && slideWithinResource(-1)) return
         super.scrollLeft(animated)
         uiScope.launch {
             if (mCurItem > 0) {
@@ -79,6 +82,16 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
                 }
             }
         }
+    }
+
+    private fun slideWithinResource(delta: Int): Boolean {
+        if (scrollMode || listener?.readingProgression != ReadingProgression.LTR) return false
+        if (mScroller?.isFinished != false) updateCurrentItem()
+        val target = mCurItem + delta
+        if (target !in 0 until numPages) return false
+        isSelecting = false
+        setCurrentItemInternal(target, true)
+        return true
     }
 
     private val MAX_SETTLE_DURATION = 600 // ms

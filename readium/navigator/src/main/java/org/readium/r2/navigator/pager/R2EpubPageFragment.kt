@@ -485,6 +485,7 @@ internal class R2EpubPageFragment : Fragment() {
 
     fun setupWebView(webView: R2WebView, resourceUrl: AbsoluteUrl?) {
         webView.settings.javaScriptEnabled = true
+        webView.settings.offscreenPreRaster = true
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
         webView.settings.useWideViewPort = true
