@@ -317,11 +317,16 @@ internal class R2WebView(context: Context, attrs: AttributeSet) : R2BasicWebView
             .takeIf { it > 0 }
 
     internal fun updateCurrentItem() {
+        mCurItem = pageIndexAtScroll()
+    }
+
+    internal fun pageIndexAtScroll(): Int {
         val clientWidth = getClientWidth()
-        if (!scrollMode && !mIsBeingDragged && clientWidth != null) {
-            // Sometimes scrollX is not exactly a multiple of clientWidth, so we need to round the result.
-            mCurItem = (scrollX.toDouble() / clientWidth.toDouble()).roundToInt()
+        if (scrollMode || mIsBeingDragged || clientWidth == null) {
+            return mCurItem
         }
+        // Sometimes scrollX is not exactly a multiple of clientWidth, so we need to round the result.
+        return (scrollX.toDouble() / clientWidth.toDouble()).roundToInt()
     }
 
     /**

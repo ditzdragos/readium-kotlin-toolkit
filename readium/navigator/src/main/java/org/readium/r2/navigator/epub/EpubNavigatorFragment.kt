@@ -1390,11 +1390,8 @@ public class EpubNavigatorFragment public constructor(
         }
     }
 
-    private fun currentLocationKey(): Pair<Int, Int?> {
-        val webView = currentReflowablePageFragment?.webView
-        webView?.updateCurrentItem()
-        return resourcePager.currentItem to webView?.mCurItem
-    }
+    private fun currentLocationKey(): Pair<Int, Int?> =
+        resourcePager.currentItem to currentReflowablePageFragment?.webView?.pageIndexAtScroll()
 
     private fun createLocatorForLink(link: Link, progression: Double): Locator {
         val positionLocator = publication.positionsByResource[link.url()]?.let { positions ->
