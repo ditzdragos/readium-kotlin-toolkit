@@ -21,11 +21,11 @@ import timber.log.Timber
 
 class NetworkServiceTest {
 
-    private val logged = mutableListOf<Pair<Int, Throwable?>>()
+    private val logged = mutableListOf<Triple<Int, String, Throwable?>>()
 
     private val recordingTree = object : Timber.Tree() {
         override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-            logged += priority to t
+            logged += Triple(priority, message, t)
         }
     }
 
@@ -78,10 +78,12 @@ class NetworkServiceTest {
         UnknownHostException(
             "Unable to resolve host \"api-prod.rallyreader.com\": No address associated with " +
                 "hostname"
-        ).reportNetworkFailure()
+        ).reportNetworkFailure("GET status call to api-prod.rallyreader.com")
 
-        val (priority, throwable) = logged.single()
+        val (priority, message, throwable) = logged.single()
         assertEquals(Log.WARN, priority)
+        assertTrue(message.contains("GET status call to api-prod.rallyreader.com"), message)
+        assertTrue(message.contains("java.net.UnknownHostException: Unable to resolve host"), message)
         assertNull(
             throwable,
             "The reading app's tree forwards any throwable it is handed at warning or above, so " +
@@ -93,10 +95,59 @@ class NetworkServiceTest {
     fun `any other failure is still an error carrying the throwable`() {
         val refused = SocketTimeoutException("timeout")
 
-        refused.reportNetworkFailure()
+        refused.reportNetworkFailure("GET license call to lcp.example.com")
 
-        val (priority, throwable) = logged.single()
+        val (priority, message, throwable) = logged.single()
         assertEquals(Log.ERROR, priority)
+        assertTrue(message.contains("GET license call to lcp.example.com"), message)
         assertEquals(refused, throwable)
+    }
+
+    @Test
+    fun `a status call is described by its kind and host`() {
+        assertEquals(
+            "GET status call to lsd.example.com",
+            describeLcpCall(
+                NetworkService.Method.GET,
+                "https://lsd.example.com/licenses/3d1f-licence-id/status"
+            )
+        )
+    }
+
+    @Test
+    fun `a register call leaves out the device id and name`() {
+        val call = describeLcpCall(
+            NetworkService.Method.POST,
+            "https://lsd.example.com/licenses/3d1f-licence-id/register?id=device-id&name=Ana%27s+Phone"
+        )
+
+        assertEquals("POST register call to lsd.example.com", call)
+    }
+
+    @Test
+    fun `a revocation list fetch is described as a crl call`() {
+        assertEquals(
+            "GET crl call to crl.edrlab.telesec.de",
+            describeLcpCall(
+                NetworkService.Method.GET,
+                "http://crl.edrlab.telesec.de/rl/EDRLab_CA.crl"
+            )
+        )
+    }
+
+    @Test
+    fun `a license document fetch is described as a license call`() {
+        assertEquals(
+            "GET license call to lcp.example.com",
+            describeLcpCall(NetworkService.Method.GET, "https://lcp.example.com/licenses/3d1f-licence-id")
+        )
+    }
+
+    @Test
+    fun `an unparsable url names no host`() {
+        assertEquals(
+            "PUT call to an unparsable URL",
+            describeLcpCall(NetworkService.Method.PUT, "not a url")
+        )
     }
 }
