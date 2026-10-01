@@ -20,6 +20,8 @@ import kotlin.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -110,7 +112,7 @@ internal class NetworkService {
                     }
                 }
             } catch (e: Exception) {
-                e.reportNetworkFailure()
+                e.reportNetworkFailure(describeLcpCall(method, url))
                 Try.failure(NetworkException(status = null, cause = e))
             }
         }
@@ -190,35 +192,42 @@ internal class NetworkService {
         } catch (e: LcpException) {
             throw e
         } catch (e: Exception) {
-            e.reportNetworkFailure()
+            e.reportNetworkFailure("publication download from ${request.url.host}")
             throw LcpException(LcpError.Network(e))
         }
     }
 }
 
 /**
- * RallyReader fork patch: reports a failed LCP network call at the level its outcome deserves.
+ * RallyReader fork patch: every caller classifies a failed call itself, so name resolution (the
+ * device is offline) is a warning with no throwable, since the reading app's Timber tree forwards
+ * any throwable at warning or above to crash reporting. Any other failure stays an error.
  *
- * Every caller of [NetworkService.fetch] classifies the failure itself — the status document falls
- * back to its cached copy, the background refresh drops it, device registration returns null, and
- * renew and return map the status onto a user-facing error — and [NetworkService.download] rethrows
- * as [LcpError.Network] for the reading app to surface. Reporting all of them here at error level
- * announced a broken feature for outcomes the callers had already absorbed, and a device with no
- * DNS was by far the loudest of them.
- *
- * The throwable goes with the level rather than just being downgraded: the reading app's Timber
- * tree forwards any throwable it is handed at warning or above to crash reporting.
- *
- * Deliberately narrow. Only name resolution counts as offline; a connect or read timeout can
- * equally mean the license server is in trouble, which is still worth an error.
+ * [call] names the method, kind and host only: LCP URLs carry licence and device ids and the
+ * device name.
  */
-internal fun Throwable.reportNetworkFailure() {
+internal fun Throwable.reportNetworkFailure(call: String) {
     if (isOfflineLike()) {
-        Timber.w("LCP network call skipped, the device could not resolve the host")
+        Timber.w(
+            "LCP $call failed, the device could not resolve the host (${javaClass.name}: $message)"
+        )
     } else {
-        Timber.e(this)
+        Timber.e(this, "LCP $call failed")
     }
 }
+
+internal fun describeLcpCall(method: NetworkService.Method, url: String): String {
+    val httpUrl = url.toHttpUrlOrNull() ?: return "${method.value} call to an unparsable URL"
+    return "${method.value} ${httpUrl.lcpCallKind()} call to ${httpUrl.host}"
+}
+
+private fun HttpUrl.lcpCallKind(): String {
+    val segments = pathSegments.map { it.lowercase(Locale.ROOT) }
+    return segments.lastOrNull { it in LSD_INTERACTIONS }
+        ?: if (segments.lastOrNull().orEmpty().endsWith(".crl")) "crl" else "license"
+}
+
+private val LSD_INTERACTIONS = setOf("status", "register", "renew", "return")
 
 internal fun Throwable.isOfflineLike(): Boolean = when {
     this is UnknownHostException -> true
