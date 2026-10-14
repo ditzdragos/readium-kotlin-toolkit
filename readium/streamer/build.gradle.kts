@@ -17,10 +17,6 @@ dependencies {
 
     @Suppress("GradleDependency")
     implementation(libs.timber)
-    // AM NOTE: conflicting support libraries, excluding these
-    implementation("com.mcxiaoke.koi:core:0.5.5") {
-        exclude(module = "support-v4")
-    }
     implementation(libs.kotlinx.coroutines.android)
 
     // Tests
