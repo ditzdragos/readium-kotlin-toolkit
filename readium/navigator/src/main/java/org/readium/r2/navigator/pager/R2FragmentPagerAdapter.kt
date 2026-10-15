@@ -15,7 +15,6 @@ import android.os.Parcelable
 import android.view.View
 import android.view.ViewGroup
 import androidx.collection.LongSparseArray
-import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
@@ -121,18 +120,11 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
         return (`object` as Fragment).view === view
     }
 
+    // Destroyed pages' states are kept in memory only: one per page turned would grow the
+    // parcel past the binder limit (TransactionTooLargeException on stop), and the navigator
+    // restores its position from its own locator anyway.
     override fun saveState(): Parcelable? {
         var state: Bundle? = null
-        if (mSavedStates.size() > 0) {
-            state = Bundle()
-            val stateIds = LongArray(mSavedStates.size())
-            for (i in 0 until mSavedStates.size()) {
-                val entry = mSavedStates.valueAt(i)
-                stateIds[i] = mSavedStates.keyAt(i)
-                state.putParcelable(stateIds[i].toString(), entry)
-            }
-            state.putLongArray("states", stateIds)
-        }
         for (i in 0 until mFragments.size()) {
             val f = mFragments.valueAt(i)
             if (f.isAdded) {
@@ -150,20 +142,8 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
         if (state != null) {
             val bundle = state as Bundle?
             bundle!!.classLoader = loader
-            val fss = bundle.getLongArray("states")
             mSavedStates.clear()
             mFragments.clear()
-            if (fss != null) {
-                for (fs in fss) {
-                    BundleCompat.getParcelable(
-                        bundle,
-                        fs.toString(),
-                        Fragment.SavedState::class.java
-                    )?.let { st ->
-                        mSavedStates.put(fs, st)
-                    }
-                }
-            }
             val keys = bundle.keySet()
             for (key in keys) {
                 if (key.startsWith("f")) {
