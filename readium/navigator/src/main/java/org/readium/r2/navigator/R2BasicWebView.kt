@@ -17,6 +17,7 @@ import android.util.AttributeSet
 import android.view.ActionMode
 import android.view.MenuItem
 import android.view.View
+import android.view.textclassifier.TextClassifier
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -153,6 +154,14 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
         @InternalReadiumApi
         fun goToPreviousResource(jump: Boolean, animated: Boolean): Boolean = false
+    }
+
+    init {
+        // The system text classifier widens a long-pressed word to a name or a whole sentence,
+        // and the reader only acts on a single-word selection.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTextClassifier(TextClassifier.NO_OP)
+        }
     }
 
     var listener: Listener? = null
