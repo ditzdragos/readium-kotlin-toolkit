@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { gapBridgesRange, mergeRectRuns } from "../src/rangeRects.mjs";
+import {
+  gapBridgesRange,
+  mergeIntoLines,
+  mergeRectRuns,
+} from "../src/rangeRects.mjs";
 
 function round(value) {
   return Math.round(value * 100) / 100;
@@ -135,6 +139,54 @@ describe("mergeRectRuns", () => {
   it("passes a single rect straight through", () => {
     assert.equal(mergeRectRuns([michael[0]], never).length, 1);
     assert.equal(mergeRectRuns([], never).length, 0);
+  });
+});
+
+describe("mergeIntoLines", () => {
+  /**
+   * "WHERE'S" opening chapter 1 of Charlotte's Web (9780062406781): a drop-cap
+   * "W" followed by small-caps "HERE'S", each its own box with its own bottom.
+   */
+  const wheres = [rect(20, 25, 115, 30), rect(45, 62, 121, 22)];
+
+  it("gives a word set in two sizes one box spanning both", () => {
+    const lines = mergeIntoLines(wheres);
+
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0].left, 20);
+    assert.equal(lines[0].right, 107);
+    assert.equal(lines[0].top, 115);
+    assert.equal(lines[0].bottom, 145);
+  });
+
+  it("keeps one box per line for a word that wraps", () => {
+    const wrapped = [rect(300, 40, 100, 32), rect(10, 30, 140, 32)];
+
+    assert.deepEqual(mergeIntoLines(wrapped), [
+      rect(300, 40, 100, 32),
+      rect(10, 30, 140, 32),
+    ]);
+  });
+
+  it("does not join lines whose boxes only touch through tight leading", () => {
+    const tight = [rect(10, 40, 100, 32), rect(10, 40, 126, 32)];
+
+    assert.equal(mergeIntoLines(tight).length, 2);
+  });
+
+  it("measures a line against the box that opened it", () => {
+    const drifting = [
+      rect(10, 20, 100, 32),
+      rect(30, 20, 115, 32),
+      rect(50, 20, 130, 32),
+    ];
+
+    assert.equal(mergeIntoLines(drifting).length, 2);
+  });
+
+  it("passes a single box straight through", () => {
+    assert.deepEqual(mergeIntoLines([wheres[0]]), [wheres[0]]);
+    assert.deepEqual(mergeIntoLines([]), []);
   });
 });
 

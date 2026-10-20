@@ -24,6 +24,7 @@ import {
   shouldSkipPageNumber,
 } from "./pageNumber.mjs";
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
+import { mergeIntoLines } from "./rangeRects.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import { DeferredAppends, oncePerFrame } from "./layoutBatching.mjs";
 
@@ -662,7 +663,7 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    if (style.layout === "boxes") {
+    if (style.layout === "boxes" || style.layout === "lines") {
       const doNotMergeHorizontallyAlignedRects =
         !documentWritingMode.startsWith("vertical");
       const startElement =
@@ -670,9 +671,12 @@ export function DecorationGroup(groupId, groupName) {
       // Decorated text may have a different writingMode from document body
       const decoratorWritingMode = getComputedStyle(startElement).writingMode;
 
-      const clientRects = getClientRectsNoOverlap(
+      const boxes = getClientRectsNoOverlap(
         item.range,
         doNotMergeHorizontallyAlignedRects
+      );
+      const clientRects = (
+        style.layout === "lines" ? mergeIntoLines(boxes) : boxes
       ).sort((r1, r2) => {
         if (r1.top !== r2.top) return r1.top - r2.top;
         if (decoratorWritingMode === "vertical-rl") {
@@ -925,7 +929,8 @@ export function DecorationGroup(groupId, groupName) {
     }
 
     try {
-      if (style.layout === "boxes") {
+      if (style.layout === "boxes" || style.layout === "lines") {
+        const boxes = getClientRectsNoOverlap(item.range, true);
         // Only `wrap` takes its geometry from the box it decorates; the other
         // widths span the viewport or the bounding box, so they stay on one
         // element per client rect — one per word would stack identical bands.
@@ -935,7 +940,7 @@ export function DecorationGroup(groupId, groupName) {
                 rect: overlayBox.rect,
                 overlayBox,
               }))
-            : getClientRectsNoOverlap(item.range, true)
+            : (style.layout === "lines" ? mergeIntoLines(boxes) : boxes)
                 .sort((rectA, rectB) => rectA.top - rectB.top)
                 .map((clientRect) => ({
                   rect: clientRect,

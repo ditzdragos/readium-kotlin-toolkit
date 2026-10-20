@@ -94,6 +94,39 @@ export function mergeRectRuns(rects, bridges) {
 }
 
 /**
+ * Whether two boxes sit on one visual line: their heights overlap by more than
+ * half of the shorter one. A drop cap and the small caps after it share a line
+ * while their tops and bottoms differ; two lines set with tight leading only
+ * graze each other.
+ */
+function shareALine(rect1, rect2) {
+  const overlap =
+    Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top);
+  return overlap > Math.min(rect1.height, rect2.height) / 2;
+}
+
+/**
+ * Reduces a range's boxes to one per visual line, each the union of the boxes
+ * on it, so a decoration drawn along a box's edge runs straight under letters
+ * of different sizes. A line is measured against the box that opened it, so it
+ * cannot creep onto the next one box by box.
+ */
+export function mergeIntoLines(rects) {
+  const lines = [];
+  for (const rect of rects
+    .slice()
+    .sort((rect1, rect2) => rect1.top - rect2.top)) {
+    const line = lines[lines.length - 1];
+    if (line && shareALine(line.opener, rect)) {
+      line.box = union(line.box, rect);
+    } else {
+      lines.push({ opener: rect, box: rect });
+    }
+  }
+  return lines.map((line) => line.box);
+}
+
+/**
  * Asks the layout what sits in the gap between two rects: the caret position
  * under that point is inside the range exactly when the gap is the range's own.
  */

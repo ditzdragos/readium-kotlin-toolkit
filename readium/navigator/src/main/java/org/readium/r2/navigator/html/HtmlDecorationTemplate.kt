@@ -53,6 +53,12 @@ public data class HtmlDecorationTemplate(
 
         /** One HTML element for each CSS border box (e.g. line of text). */
         BOXES("boxes"),
+
+        /**
+         * One HTML element for each visual line, covering every CSS border box on it, so a
+         * decoration drawn along an edge stays straight under text set in mixed sizes.
+         */
+        LINES("lines"),
     }
 
     /**
