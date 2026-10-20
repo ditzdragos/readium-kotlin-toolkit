@@ -28,8 +28,14 @@ class WebViewScriptsTest {
     fun `restates the declared box and the scale it should be drawn at`() {
         assertContains(
             script(1224.0, 1584.0, 0.43277),
-            "'width=1224.00000, height=1584.00000, initial-scale=0.43277'"
+            "'width=1224.00000, height=1584.00000, initial-scale=0.43277, minimum-scale=0.43277'"
         )
+    }
+
+    @Test
+    fun `lets a page wider than four web views fit below the default minimum scale`() {
+        // Without a minimum-scale Chromium floors the page scale at 0.25 and clips the page (RR-9226).
+        assertContains(script(1762.39, 1762.39, 0.21789), "minimum-scale=0.21789'")
     }
 
     @Test
@@ -37,7 +43,10 @@ class WebViewScriptsTest {
         // `0,43277` would be parsed as the end of the initial-scale value, leaving the page at 0.
         Locale.setDefault(Locale.forLanguageTag("fr-FR"))
         val script = script(1224.0, 1584.0, 0.43277)
-        assertContains(script, "'width=1224.00000, height=1584.00000, initial-scale=0.43277'")
+        assertContains(
+            script,
+            "'width=1224.00000, height=1584.00000, initial-scale=0.43277, minimum-scale=0.43277'"
+        )
         assertFalse(Regex("""\d,\d""").containsMatchIn(script), "a comma is separating digits")
     }
 

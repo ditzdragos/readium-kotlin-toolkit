@@ -48,7 +48,8 @@ internal object WebViewScripts {
     /**
      * Restates a fixed-layout page's scale as `initial-scale` on its own viewport meta, which is
      * what makes it refit — Chromium resolves `loadWithOverviewMode` only once. No-op when the page
-     * is already at that scale, so a correct fit is never disturbed.
+     * is already at that scale, so a correct fit is never disturbed. `minimum-scale` lifts
+     * Chromium's default floor of 0.25, which clips any page wider than four web views.
      */
     fun getFixedLayoutScaleScript(width: Double, height: Double, scale: Double): String {
         val w = format(width)
@@ -60,7 +61,7 @@ internal object WebViewScripts {
                 if (!meta) { return; }
                 var current = window.visualViewport ? window.visualViewport.scale : 0;
                 if (Math.abs(current - $s) < 0.002) { return; }
-                meta.setAttribute('content', 'width=$w, height=$h, initial-scale=$s');
+                meta.setAttribute('content', 'width=$w, height=$h, initial-scale=$s, minimum-scale=$s');
             })();
         """.trimIndent()
     }
