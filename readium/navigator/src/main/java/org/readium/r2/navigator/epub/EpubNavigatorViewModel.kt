@@ -444,7 +444,7 @@ internal class EpubNavigatorViewModel(
      */
     fun requestDecorationLayout(group: String): RunScriptCommand =
         RunScriptCommand(
-            script = "requestAnimationFrame(function () { readium.getDecorations('$group').requestLayout();});",
+            script = "readium.getDecorations('$group').scheduleLayout();",
             scope = RunScriptCommand.Scope.LoadedResources
         )
 

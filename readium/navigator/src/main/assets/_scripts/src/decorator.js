@@ -25,6 +25,7 @@ import {
 } from "./pageNumber.mjs";
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
+import { DeferredAppends, oncePerFrame } from "./layoutBatching.mjs";
 
 let styles = new Map();
 let groups = new Map();
@@ -366,6 +367,8 @@ export function DecorationGroup(groupId, groupName) {
   var container = null;
   var activable = false;
   var visibleAreas = new VisibleAreas(document);
+  var deferredAppends = new DeferredAppends();
+  var scheduleLayout = oncePerFrame(requestLayout);
 
   function isActivable() {
     return activable;
@@ -495,12 +498,14 @@ export function DecorationGroup(groupId, groupName) {
     if (DEBUG_MODE) log("requesting layout ", groupName, items.length);
     clearContainer();
     clearAllEnhanced();
-    items.forEach((item) => {
-      if (item.enhanced) {
-        layoutEnhanced(item, false);
-      } else {
-        layout(item, false);
-      }
+    deferredAppends.run(() => {
+      items.forEach((item) => {
+        if (item.enhanced) {
+          layoutEnhanced(item, false);
+        } else {
+          layout(item, false);
+        }
+      });
     });
   }
 
@@ -723,7 +728,7 @@ export function DecorationGroup(groupId, groupName) {
       if (DEBUG_MODE) log("style layout: ", groupName, style.layout);
     }
 
-    groupContainer.append(itemContainer);
+    deferredAppends.append(groupContainer, itemContainer);
     item.container = itemContainer;
     item.clickableElements = Array.from(
       itemContainer.querySelectorAll("[data-activable='1']")
@@ -965,7 +970,7 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    visibleArea.append(itemContainer);
+    deferredAppends.append(visibleArea, itemContainer);
     item.container = itemContainer;
 
     if (postMessage) {
@@ -982,7 +987,7 @@ export function DecorationGroup(groupId, groupName) {
       container.id = groupId;
       container.dataset.group = groupName;
       container.style.pointerEvents = "none";
-      document.body.append(container);
+      deferredAppends.append(document.body, container);
     }
     return container;
   }
@@ -1007,6 +1012,7 @@ export function DecorationGroup(groupId, groupName) {
     clearAllEnhanced,
     items,
     requestLayout,
+    scheduleLayout,
     isActivable,
     setActivable,
   };
