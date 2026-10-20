@@ -22,19 +22,41 @@ function inlineStyleValue(span, property) {
   return style[property] || "";
 }
 
+function isPlaced(element) {
+  return (
+    inlineStyleValue(element, "left") !== "" ||
+    inlineStyleValue(element, "bottom") !== ""
+  );
+}
+
+function isSpan(element) {
+  return (element.tagName || "").toLowerCase() === "span";
+}
+
+function isInsidePlacedRun(span) {
+  for (let el = span.parentElement; el && isSpan(el); el = el.parentElement) {
+    if (isPlaced(el)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
- * Publishers emit empty spans that only nudge kerning through a margin. They
- * sit at no coordinate, so both `left` and `bottom` read as 0, every ratio
- * degenerates and the gap rule below fires on all of them - dropping a space
- * inside whatever word the publisher wrapped. Such a span also separates
- * nothing: the text either side of it is already adjacent, so the page has
- * written one word there.
+ * Only a span the page places at its own coordinate can start a new text
+ * segment. An unplaced span sits at no coordinate, so both `left` and `bottom`
+ * read as 0, every ratio degenerates and the gap rule below fires on all of
+ * them - dropping a space inside whatever word the publisher wrapped:
+ * - an empty span that only nudges kerning through a margin;
+ * - a span nested in a placed run, which flows inline with the text around it
+ *   (`ke<span style="margin-left:5.3px">ep</span>`), so the run's own text
+ *   already holds every space the page renders.
  */
 export function isSpacingCandidate(span) {
-  const placed =
-    inlineStyleValue(span, "left") !== "" ||
-    inlineStyleValue(span, "bottom") !== "";
-  return placed || (span.textContent || "") !== "";
+  if (isPlaced(span)) {
+    return true;
+  }
+  return (span.textContent || "") !== "" && !isInsidePlacedRun(span);
 }
 
 function needsSpacing(previousSpan, currentSpan) {
