@@ -468,9 +468,18 @@ export function DecorationGroup(groupId, groupName) {
     let item = items[index];
     items.splice(index, 1);
     item.clickableElements = null;
+    detach(item);
+  }
+
+  /** Takes the item's elements out of the document, giving back its room in its bucket. */
+  function detach(item) {
     if (item.container) {
       item.container.remove();
       item.container = null;
+    }
+    if (item.bucket) {
+      buckets.release(item.bucket);
+      item.bucket = null;
     }
   }
 
@@ -496,12 +505,7 @@ export function DecorationGroup(groupId, groupName) {
 
   function clearAllEnhanced() {
     if (DEBUG_MODE) log("clearing all enhanced ", groupName, items);
-    items.forEach((item) => {
-      if (item.container) {
-        item.container.remove();
-        item.container = null;
-      }
-    });
+    items.forEach(detach);
 
     visibleAreas.release();
   }
@@ -511,8 +515,8 @@ export function DecorationGroup(groupId, groupName) {
     if (DEBUG_MODE) log("trying to clear decoration: ", decorationId);
     items.forEach((item) => {
       // Check if the item's decoration id matches the one we want to remove
-      if (item.decoration.id === decorationId && item.container) {
-        item.container.remove();
+      if (item.decoration.id === decorationId) {
+        detach(item);
       }
     });
 
@@ -761,10 +765,10 @@ export function DecorationGroup(groupId, groupName) {
       if (DEBUG_MODE) log("style layout: ", groupName, style.layout);
     }
 
-    deferredAppends.append(
-      buckets.bucketFor(templateZIndex(item.decoration.style, elementTemplate)),
-      itemContainer
+    item.bucket = buckets.bucketFor(
+      templateZIndex(item.decoration.style, elementTemplate)
     );
+    deferredAppends.append(item.bucket.element, itemContainer);
     item.container = itemContainer;
     item.clickableElements = Array.from(
       itemContainer.querySelectorAll("[data-activable='1']")

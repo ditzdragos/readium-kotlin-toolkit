@@ -78,14 +78,26 @@ export class DecorationBuckets {
     this.open = new Map();
   }
 
+  /** Places one decoration of [zIndex], returning its bucket; its element is where it goes. */
   bucketFor(zIndex) {
     let bucket = this.open.get(zIndex);
     if (!bucket || bucket.size >= this.capacity) {
-      bucket = { element: this.createBucket(zIndex), size: 0 };
+      bucket = { element: this.createBucket(zIndex), zIndex, size: 0 };
       this.open.set(zIndex, bucket);
     }
     bucket.size++;
-    return bucket.element;
+    return bucket;
+  }
+
+  /**
+   * Gives back the room of a decoration taken out of [bucket]. The underline is replaced on every
+   * word, so without this a bucket filled up with words long gone and left a trail of empty ones.
+   */
+  release(bucket) {
+    bucket.size--;
+    if (bucket.size <= 0 && this.open.get(bucket.zIndex) !== bucket) {
+      bucket.element.remove();
+    }
   }
 
   clear() {

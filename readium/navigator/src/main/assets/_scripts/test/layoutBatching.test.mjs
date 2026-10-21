@@ -120,18 +120,26 @@ describe("oncePerFrame", () => {
 describe("DecorationBuckets", () => {
   function recordingBuckets(capacity) {
     const created = [];
+    const removed = [];
     const buckets = new DecorationBuckets((zIndex) => {
       const name = `bucket-${created.length}@${zIndex}`;
       created.push(name);
-      return name;
+      return {
+        name,
+        remove() {
+          removed.push(name);
+        },
+      };
     }, capacity);
-    return { buckets, created };
+    const place = (zIndex) => buckets.bucketFor(zIndex);
+    const nameOf = (bucket) => bucket.element.name;
+    return { buckets, created, removed, place, nameOf };
   }
 
   it("fills a bucket before opening the next", () => {
-    const { buckets, created } = recordingBuckets(2);
+    const { created, place, nameOf } = recordingBuckets(2);
 
-    const placed = [1, 2, 3].map(() => buckets.bucketFor("auto"));
+    const placed = [1, 2, 3].map(() => nameOf(place("auto")));
 
     assert.deepEqual(placed, [
       "bucket-0@auto",
@@ -142,22 +150,59 @@ describe("DecorationBuckets", () => {
   });
 
   it("keeps decorations of different z-index apart", () => {
-    const { buckets } = recordingBuckets(64);
+    const { place } = recordingBuckets(64);
 
-    const highlight = buckets.bucketFor("auto");
-    const underline = buckets.bucketFor("2");
+    const highlight = place("auto");
+    const underline = place("2");
 
     assert.notEqual(highlight, underline);
-    assert.equal(buckets.bucketFor("2"), underline);
+    assert.equal(place("2"), underline);
   });
 
   it("opens new buckets once cleared", () => {
-    const { buckets, created } = recordingBuckets(64);
+    const { buckets, created, place } = recordingBuckets(64);
 
-    buckets.bucketFor("auto");
+    place("auto");
     buckets.clear();
-    buckets.bucketFor("auto");
+    place("auto");
 
     assert.deepEqual(created, ["bucket-0@auto", "bucket-1@auto"]);
+  });
+
+  it("reuses the room a released decoration leaves", () => {
+    const { buckets, created, removed, place } = recordingBuckets(2);
+
+    for (let word = 0; word < 10; word++) {
+      buckets.release(place("2"));
+    }
+
+    assert.deepEqual(created, ["bucket-0@2"]);
+    assert.deepEqual(removed, []);
+  });
+
+  it("drops a filled bucket once its last decoration is released", () => {
+    const { buckets, removed, place } = recordingBuckets(2);
+    const first = place("auto");
+    const second = place("auto");
+    place("auto");
+
+    buckets.release(first);
+    assert.deepEqual(removed, []);
+    buckets.release(second);
+
+    assert.deepEqual(removed, ["bucket-0@auto"]);
+  });
+
+  it("ignores a release from before a clear", () => {
+    const { buckets, created, removed, place } = recordingBuckets(2);
+    const stale = place("auto");
+    buckets.clear();
+    const fresh = place("auto");
+
+    buckets.release(stale);
+
+    assert.equal(place("auto"), fresh);
+    assert.deepEqual(created, ["bucket-0@auto", "bucket-1@auto"]);
+    assert.deepEqual(removed, ["bucket-0@auto"]);
   });
 });
