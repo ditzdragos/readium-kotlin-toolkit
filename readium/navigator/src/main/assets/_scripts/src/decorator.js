@@ -360,6 +360,14 @@ export function handleDecorationClickEvent(event, clickEvent) {
   );
 }
 
+function lineOrBoxRects(range, layout, doNotMergeHorizontallyAlignedRects) {
+  const boxes = getClientRectsNoOverlap(
+    range,
+    doNotMergeHorizontallyAlignedRects
+  );
+  return layout === "lines" ? mergeIntoLines(boxes) : boxes;
+}
+
 /**
  * Creates a DecorationGroup object from a unique HTML ID and its name.
  */
@@ -671,12 +679,10 @@ export function DecorationGroup(groupId, groupName) {
       // Decorated text may have a different writingMode from document body
       const decoratorWritingMode = getComputedStyle(startElement).writingMode;
 
-      const boxes = getClientRectsNoOverlap(
+      const clientRects = lineOrBoxRects(
         item.range,
+        style.layout,
         doNotMergeHorizontallyAlignedRects
-      );
-      const clientRects = (
-        style.layout === "lines" ? mergeIntoLines(boxes) : boxes
       ).sort((r1, r2) => {
         if (r1.top !== r2.top) return r1.top - r2.top;
         if (decoratorWritingMode === "vertical-rl") {
@@ -930,7 +936,6 @@ export function DecorationGroup(groupId, groupName) {
 
     try {
       if (style.layout === "boxes" || style.layout === "lines") {
-        const boxes = getClientRectsNoOverlap(item.range, true);
         // Only `wrap` takes its geometry from the box it decorates; the other
         // widths span the viewport or the bounding box, so they stay on one
         // element per client rect — one per word would stack identical bands.
@@ -940,7 +945,7 @@ export function DecorationGroup(groupId, groupName) {
                 rect: overlayBox.rect,
                 overlayBox,
               }))
-            : (style.layout === "lines" ? mergeIntoLines(boxes) : boxes)
+            : lineOrBoxRects(item.range, style.layout, true)
                 .sort((rectA, rectB) => rectA.top - rectB.top)
                 .map((clientRect) => ({
                   rect: clientRect,

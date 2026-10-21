@@ -159,6 +159,12 @@ describe("mergeIntoLines", () => {
     assert.equal(lines[0].bottom, 145);
   });
 
+  it("keeps a drop cap floated over three lines apart from the rest of its word", () => {
+    const floated = [rect(71, 53, 114, 64), rect(124, 58, 120, 20)];
+
+    assert.deepEqual(mergeIntoLines(floated), floated);
+  });
+
   it("keeps one box per line for a word that wraps", () => {
     const wrapped = [rect(300, 40, 100, 32), rect(10, 30, 140, 32)];
 
