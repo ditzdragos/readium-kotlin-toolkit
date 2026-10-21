@@ -713,9 +713,6 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     internal fun getWebView(href: Url?): R2WebView? {
-        if (DEBUG) {
-            Timber.d("getWebView: $href vs ${rightLink?.url()}")
-        }
         return if (href == rightLink?.url()) {
             webViewRight
         } else {

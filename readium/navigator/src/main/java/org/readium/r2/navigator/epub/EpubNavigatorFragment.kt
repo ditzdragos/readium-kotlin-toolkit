@@ -739,9 +739,6 @@ public class EpubNavigatorFragment public constructor(
     }
 
     private fun run(command: RunScriptCommand) {
-        if (DEBUG) {
-            Timber.d("run: $command")
-        }
         when (command.scope) {
             RunScriptCommand.Scope.CurrentResource -> {
                 currentReflowablePageFragment?.runJavaScript(command.script)
@@ -1409,7 +1406,6 @@ public class EpubNavigatorFragment public constructor(
         if (jsonString.isJavascriptNullResult()) return null
 
         return try {
-            Timber.d("Parsing RectF for $locatorHref from JSON: $jsonString")
             val jsonObject = JSONObject(jsonString)
             // Check if the rect is valid (e.g., contains non-zero dimensions or specific properties)
             val left = jsonObject.optDouble("left", 0.0).toFloat()
@@ -1417,7 +1413,6 @@ public class EpubNavigatorFragment public constructor(
             val right = jsonObject.optDouble("right", 0.0).toFloat()
             val bottom = jsonObject.optDouble("bottom", 0.0).toFloat()
             val rect = RectF(left, top, right, bottom)
-            Timber.d("Parsed RectF for $locatorHref: $rect")
             rect
         } catch (e: Exception) {
             Timber.e(e, "Error parsing JSON to RectF for $locatorHref")
@@ -1446,7 +1441,6 @@ public class EpubNavigatorFragment public constructor(
             webViewLeft = webView.left,
             webViewTop = webView.top
         )
-        Timber.d("RectF in spread coordinates for $locatorHref: $inSpread")
 
         return RectF(inSpread.left, inSpread.top, inSpread.right, inSpread.bottom)
     }
@@ -1487,7 +1481,6 @@ public class EpubNavigatorFragment public constructor(
 
             // Find the fragment containing the locator's href
             val fragment = loadedFragmentForHref(locator.href)
-            Timber.d("getRectForLocator for href ${locator.href} found fragment: ${fragment != null}")
 
             val webView = fragment?.getWebView(locator.href)
             if (webView == null) {
