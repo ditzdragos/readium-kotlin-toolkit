@@ -6,6 +6,11 @@
 
 import { resetViewportRatioCache, toNativeRect } from "./rect";
 import { overlayElement } from "./ocrOverlay.mjs";
+import {
+  scrollPageLeft,
+  scrollPageRight,
+  snapOffset as snapPageOffset,
+} from "./pageScroll.mjs";
 import { bestContextMatchIndex, lineBreakSeparator } from "./textOffsets.mjs";
 import { TextQuoteAnchor } from "./vendor/hypothesis/anchoring/types";
 import { TextRange } from "./vendor/hypothesis/anchoring/text-range";
@@ -259,41 +264,24 @@ export function scrollToEnd() {
   }
 }
 
-// Returns false if the page is already at the left-most scroll offset.
 export function scrollLeft() {
-  var documentWidth = document.scrollingElement.scrollWidth;
-  var offset = window.scrollX - pageWidth;
-  var minOffset = isRTL() ? -(documentWidth - pageWidth) : 0;
-  return scrollToOffset(Math.max(offset, minOffset));
+  assertPaginated();
+  return scrollPageLeft(document.scrollingElement, pageWidth, isRTL());
 }
 
-// Returns false if the page is already at the right-most scroll offset.
 export function scrollRight() {
-  var documentWidth = document.scrollingElement.scrollWidth;
-  var offset = window.scrollX + pageWidth;
-  var maxOffset = isRTL() ? 0 : documentWidth - pageWidth;
-  return scrollToOffset(Math.min(offset, maxOffset));
+  assertPaginated();
+  return scrollPageRight(document.scrollingElement, pageWidth, isRTL());
 }
 
-// Scrolls to the given left offset.
-// Returns false if the page scroll position is already close enough to the given offset.
-function scrollToOffset(offset) {
-  //        Android.log("scrollToOffset " + offset);
+function assertPaginated() {
   if (isScrollModeEnabled()) {
-    throw "Called scrollToOffset() with scroll mode enabled. This can only be used in paginated mode.";
+    throw "Called a page scroll with scroll mode enabled. This can only be used in paginated mode.";
   }
-
-  var currentOffset = window.scrollX;
-  document.scrollingElement.scrollLeft = snapOffset(offset);
-  // In some case the scrollX cannot reach the position respecting to innerWidth
-  var diff = Math.abs(currentOffset - offset) / pageWidth;
-  return diff > 0.01;
 }
 
-// Snap the offset to the screen width (page width).
 function snapOffset(offset) {
-  var value = offset + (isRTL() ? -1 : 1);
-  return value - (value % pageWidth);
+  return snapPageOffset(offset, pageWidth, isRTL());
 }
 
 // Snaps the current offset to the page width.
