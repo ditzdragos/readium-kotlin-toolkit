@@ -59,3 +59,36 @@ export function oncePerFrame(
     });
   };
 }
+
+/**
+ * Spreads a group's decorations over boxes the web view can lay out on their own.
+ *
+ * Decorations are absolutely positioned, and inserting one dirtied the box holding every other
+ * decoration of the group, so the next layout read relaid them all: each word read aloud cost
+ * more than the last, until a fast reader outran the web view. A box with size and layout
+ * containment is a relayout boundary, so filling it relays out only the decorations it holds.
+ *
+ * Containment also makes the box a stacking context, so decorations are boxed by z-index: one
+ * raised above the others still paints above them.
+ */
+export class DecorationBuckets {
+  constructor(createBucket, capacity = 64) {
+    this.createBucket = createBucket;
+    this.capacity = capacity;
+    this.open = new Map();
+  }
+
+  bucketFor(zIndex) {
+    let bucket = this.open.get(zIndex);
+    if (!bucket || bucket.size >= this.capacity) {
+      bucket = { element: this.createBucket(zIndex), size: 0 };
+      this.open.set(zIndex, bucket);
+    }
+    bucket.size++;
+    return bucket.element;
+  }
+
+  clear() {
+    this.open.clear();
+  }
+}

@@ -26,7 +26,11 @@ import {
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
 import { mergeIntoLines } from "./rangeRects.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
-import { DeferredAppends, oncePerFrame } from "./layoutBatching.mjs";
+import {
+  DecorationBuckets,
+  DeferredAppends,
+  oncePerFrame,
+} from "./layoutBatching.mjs";
 
 let styles = new Map();
 let groups = new Map();
@@ -69,6 +73,26 @@ function getDocumentWritingMode() {
     documentWritingModeCache = getComputedStyle(document.body).writingMode;
   }
   return documentWritingModeCache;
+}
+
+const templateZIndexCache = new Map();
+
+/**
+ * The z-index a decoration style's template paints at, read once per style: decorations are
+ * boxed by it, and the box decides how they stack against other groups.
+ */
+function templateZIndex(styleId, elementTemplate) {
+  let zIndex = templateZIndexCache.get(styleId);
+  if (zIndex === undefined) {
+    let probe = elementTemplate.cloneNode(true);
+    probe.style.position = "absolute";
+    probe.style.display = "none";
+    document.body.append(probe);
+    zIndex = getComputedStyle(probe).zIndex;
+    probe.remove();
+    templateZIndexCache.set(styleId, zIndex);
+  }
+  return zIndex;
 }
 
 /**
@@ -377,6 +401,7 @@ export function DecorationGroup(groupId, groupName) {
   var activable = false;
   var visibleAreas = new VisibleAreas(document);
   var deferredAppends = new DeferredAppends();
+  var buckets = new DecorationBuckets(createBucket);
   var scheduleLayout = oncePerFrame(requestLayout);
 
   function isActivable() {
@@ -522,8 +547,6 @@ export function DecorationGroup(groupId, groupName) {
    * Layouts a single Decoration item.
    */
   function layout(item, postMessage = true) {
-    let groupContainer = requireContainer();
-
     let style = styles.get(item.decoration.style);
     if (!style) {
       if (DEBUG_MODE)
@@ -738,7 +761,10 @@ export function DecorationGroup(groupId, groupName) {
       if (DEBUG_MODE) log("style layout: ", groupName, style.layout);
     }
 
-    deferredAppends.append(groupContainer, itemContainer);
+    deferredAppends.append(
+      buckets.bucketFor(templateZIndex(item.decoration.style, elementTemplate)),
+      itemContainer
+    );
     item.container = itemContainer;
     item.clickableElements = Array.from(
       itemContainer.querySelectorAll("[data-activable='1']")
@@ -1002,6 +1028,22 @@ export function DecorationGroup(groupId, groupName) {
     return container;
   }
 
+  function createBucket(zIndex) {
+    let bucket = document.createElement("div");
+    bucket.dataset.bucket = zIndex;
+    Object.assign(bucket.style, {
+      position: "absolute",
+      left: "0px",
+      top: "0px",
+      width: "100%",
+      height: "100%",
+      contain: "size layout",
+      zIndex: zIndex,
+    });
+    deferredAppends.append(requireContainer(), bucket);
+    return bucket;
+  }
+
   /**
    * Removes the group container.
    */
@@ -1010,6 +1052,7 @@ export function DecorationGroup(groupId, groupName) {
       container.remove();
       container = null;
     }
+    buckets.clear();
   }
 
   return {

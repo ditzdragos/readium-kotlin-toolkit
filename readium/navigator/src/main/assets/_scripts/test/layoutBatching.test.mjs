@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { DeferredAppends, oncePerFrame } from "../src/layoutBatching.mjs";
+import {
+  DecorationBuckets,
+  DeferredAppends,
+  oncePerFrame,
+} from "../src/layoutBatching.mjs";
 
 function recordingParent(name, log) {
   return {
@@ -110,5 +114,50 @@ describe("oncePerFrame", () => {
     frames.flush();
 
     assert.equal(runs, 2);
+  });
+});
+
+describe("DecorationBuckets", () => {
+  function recordingBuckets(capacity) {
+    const created = [];
+    const buckets = new DecorationBuckets((zIndex) => {
+      const name = `bucket-${created.length}@${zIndex}`;
+      created.push(name);
+      return name;
+    }, capacity);
+    return { buckets, created };
+  }
+
+  it("fills a bucket before opening the next", () => {
+    const { buckets, created } = recordingBuckets(2);
+
+    const placed = [1, 2, 3].map(() => buckets.bucketFor("auto"));
+
+    assert.deepEqual(placed, [
+      "bucket-0@auto",
+      "bucket-0@auto",
+      "bucket-1@auto",
+    ]);
+    assert.deepEqual(created, ["bucket-0@auto", "bucket-1@auto"]);
+  });
+
+  it("keeps decorations of different z-index apart", () => {
+    const { buckets } = recordingBuckets(64);
+
+    const highlight = buckets.bucketFor("auto");
+    const underline = buckets.bucketFor("2");
+
+    assert.notEqual(highlight, underline);
+    assert.equal(buckets.bucketFor("2"), underline);
+  });
+
+  it("opens new buckets once cleared", () => {
+    const { buckets, created } = recordingBuckets(64);
+
+    buckets.bucketFor("auto");
+    buckets.clear();
+    buckets.bucketFor("auto");
+
+    assert.deepEqual(created, ["bucket-0@auto", "bucket-1@auto"]);
   });
 });
