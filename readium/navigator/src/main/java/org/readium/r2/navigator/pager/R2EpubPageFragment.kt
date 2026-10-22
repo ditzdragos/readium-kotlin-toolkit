@@ -492,6 +492,7 @@ internal class R2EpubPageFragment : Fragment() {
         webView.settings.setSupportZoom(false)
         webView.settings.builtInZoomControls = false
         webView.settings.displayZoomControls = false
+        webView.settings.offscreenPreRaster = navigator?.shouldPreRasterOffscreenPages() == true
         webView.resourceUrl = resourceUrl
         webView.setPadding(0, 0, 0, 0)
         webView.webViewClient = webViewClient
