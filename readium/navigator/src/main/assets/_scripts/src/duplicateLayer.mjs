@@ -3,6 +3,8 @@
 
 const MIN_OVERLAP = 0.5;
 
+const duplicateByLayer = new WeakMap();
+
 export function normalizedText(text) {
   return (text || "")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
@@ -30,7 +32,7 @@ function unfilledLayer(element, fillColorOf) {
   let layer = null;
   for (
     let node = element;
-    node && node.parentElement && node.tagName !== "BODY";
+    node && node.parentElement && String(node.tagName).toUpperCase() !== "BODY";
     node = node.parentElement
   ) {
     if (!isTransparentColor(fillColorOf(node))) break;
@@ -46,6 +48,13 @@ function unfilledLayer(element, fillColorOf) {
 export function isUnfilledDuplicateLayer(element, fillColorOf) {
   const layer = unfilledLayer(element, fillColorOf);
   if (!layer) return false;
+  if (!duplicateByLayer.has(layer)) {
+    duplicateByLayer.set(layer, coversFilledCopy(layer, fillColorOf));
+  }
+  return duplicateByLayer.get(layer);
+}
+
+function coversFilledCopy(layer, fillColorOf) {
   const text = normalizedText(layer.textContent);
   if (!text) return false;
   const rect = layer.getBoundingClientRect();

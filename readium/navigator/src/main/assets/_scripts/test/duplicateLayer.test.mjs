@@ -149,4 +149,50 @@ describe("isUnfilledDuplicateLayer", () => {
 
     assert.equal(isUnfilledDuplicateLayer(outline, fillColorOf), false);
   });
+
+  it("compares a layer with its siblings once, however many of its words are laid out", () => {
+    const { outline, outlineWord, filled } = arcticPage();
+    let siblingMeasures = 0;
+    const box = filled.getBoundingClientRect();
+    filled.getBoundingClientRect = () => {
+      siblingMeasures += 1;
+      return box;
+    };
+
+    isUnfilledDuplicateLayer(outlineWord, fillColorOf);
+    isUnfilledDuplicateLayer(outline, fillColorOf);
+    isUnfilledDuplicateLayer(outlineWord, fillColorOf);
+
+    assert.equal(siblingMeasures, 1);
+  });
+
+  it("stops at an XHTML body, whose tag name is lower case", () => {
+    const html = element({
+      text: "",
+      fill: INK,
+      box: rect(0, 0, 880, 880),
+      tagName: "html",
+    });
+    const body = element({
+      text: "",
+      fill: TRANSPARENT,
+      box: rect(0, 0, 880, 880),
+      parent: html,
+      tagName: "body",
+    });
+    const outline = element({
+      text: "called permafrost",
+      fill: TRANSPARENT,
+      box: rect(55, 726, 247, 29),
+      parent: body,
+    });
+    element({
+      text: "called permafrost.",
+      fill: INK,
+      box: rect(55, 726, 253, 29),
+      parent: body,
+    });
+
+    assert.equal(isUnfilledDuplicateLayer(outline, fillColorOf), true);
+  });
 });
