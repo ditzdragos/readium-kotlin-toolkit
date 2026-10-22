@@ -24,6 +24,7 @@ import {
   shouldSkipPageNumber,
 } from "./pageNumber.mjs";
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
+import { isUnfilledDuplicateLayer } from "./duplicateLayer.mjs";
 import { mergeIntoLines } from "./rangeRects.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
@@ -878,6 +879,17 @@ export function DecorationGroup(groupId, groupName) {
         postMessageWithInvalidRect();
         return;
       }
+    }
+
+    if (
+      startNode &&
+      isUnfilledDuplicateLayer(
+        startNode,
+        (element) => window.getComputedStyle(element).webkitTextFillColor
+      )
+    ) {
+      postMessageWithInvalidRect();
+      return;
     }
 
     const scrollingElement =
