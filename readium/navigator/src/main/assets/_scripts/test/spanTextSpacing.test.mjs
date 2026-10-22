@@ -37,6 +37,20 @@ function run(style, parent, children) {
   return element;
 }
 
+function rendered(element, computed) {
+  element.ownerDocument = {
+    defaultView: {
+      getComputedStyle: () => ({
+        display: "inline",
+        position: "static",
+        cssFloat: "none",
+        ...computed,
+      }),
+    },
+  };
+  return element;
+}
+
 function textNode(value, parent = null) {
   const node = { nodeType: 3, nodeValue: value, parentElement: parent };
   if (parent) {
@@ -176,7 +190,55 @@ describe("spansNeedingSpacing", () => {
   });
 });
 
+describe("spansNeedingSpacing between unplaced spans", () => {
+  it("keeps a floated drop cap joined to the rest of its word", () => {
+    // The shape "Escargot" (9781466896970) ships on its first story page.
+    const root = parent();
+    rendered(span({}, root, "B"), { display: "block", cssFloat: "left" });
+    rendered(span({}, root, "onjour!"));
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), []);
+  });
+
+  it("keeps two spans in the same line flow joined", () => {
+    const root = parent();
+    rendered(span({}, root, "sun"));
+    rendered(span({}, root, "flower"));
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), []);
+  });
+
+  it("separates spans a stylesheet positions on their own", () => {
+    const root = parent();
+    rendered(span({}, root, "African"), { position: "absolute" });
+    const next = rendered(span({}, root, "elephant"), {
+      position: "absolute",
+    });
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), [next]);
+  });
+
+  it("separates a span laid out as its own block", () => {
+    const root = parent();
+    rendered(span({}, root, "African"), { display: "block" });
+    const next = rendered(span({}, root, "elephant"));
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), [next]);
+  });
+});
+
 describe("processSpansForTextSpacing", () => {
+  it("extracts a drop-cap word as one word", () => {
+    const root = parent();
+    rendered(span({}, root, "B"), { display: "block", cssFloat: "left" });
+    rendered(span({}, root, "onjour!"));
+    textNode(" I see you are staring at me!", root);
+
+    processSpansForTextSpacing(documentOf(root));
+
+    assert.equal(textContentOf(root), "Bonjour! I see you are staring at me!");
+  });
+
   it("keeps a word the publisher split around a kerning span whole", () => {
     // The shape "When I Grow Up" (9781338291162) ships on its second page.
     const root = parent();

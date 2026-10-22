@@ -59,7 +59,29 @@ export function isSpacingCandidate(span) {
   return (span.textContent || "") !== "" && !isInsidePlacedRun(span);
 }
 
-function needsSpacing(previousSpan, currentSpan) {
+function startsOwnSegment(span) {
+  const view = span.ownerDocument && span.ownerDocument.defaultView;
+  if (!view) {
+    return true;
+  }
+  const style = view.getComputedStyle(span);
+  if (style.position === "absolute" || style.position === "fixed") {
+    return true;
+  }
+  return style.display !== "inline" && style.cssFloat === "none";
+}
+
+/**
+ * Two unplaced spans have no coordinates to compare, so only how they render
+ * can say whether a new segment starts between them. Spans that share the
+ * line flow, such as a floated drop cap and the rest of its word
+ * (`<span class="big">B</span><span>onjour!</span>`, RR-9252), are written
+ * as one word and keep the page's own whitespace.
+ */
+function needsSpacing(previousSpan, currentSpan, ownsSegment) {
+  if (!isPlaced(previousSpan) && !isPlaced(currentSpan)) {
+    return ownsSegment(previousSpan) || ownsSegment(currentSpan);
+  }
   const currentBottom = parseFloat(
     inlineStyleValue(currentSpan, "bottom") || "0"
   );
@@ -98,10 +120,18 @@ export function spansNeedingSpacing(spans) {
     spansByParent.get(parentKey).push(span);
   }
 
+  const segmentStarts = new Map();
+  const ownsSegment = (span) => {
+    if (!segmentStarts.has(span)) {
+      segmentStarts.set(span, startsOwnSegment(span));
+    }
+    return segmentStarts.get(span);
+  };
+
   const needing = [];
   for (const siblingSpans of spansByParent.values()) {
     for (let i = 1; i < siblingSpans.length; i++) {
-      if (needsSpacing(siblingSpans[i - 1], siblingSpans[i])) {
+      if (needsSpacing(siblingSpans[i - 1], siblingSpans[i], ownsSegment)) {
         needing.push(siblingSpans[i]);
       }
     }
