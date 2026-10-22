@@ -37,6 +37,9 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
 
     /** Neighbour fragments added by a transaction that has not been committed yet. */
     private val pendingFragments = LongSparseArray<Fragment>()
+
+    /** Built fragments removed by the transaction that has not been committed yet. */
+    private val pendingRemovals = ArrayList<Fragment>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var offscreenCommitScheduled = false
 
@@ -106,6 +109,7 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
         }
 
         mCurTransaction!!.remove(fragment)
+        pendingRemovals += fragment
     }
 
     override fun setPrimaryItem(container: ViewGroup, position: Int, `object`: Any) {
@@ -162,13 +166,23 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
             mFragments.put(pendingFragments.keyAt(i), pendingFragments.valueAt(i))
         }
         pendingFragments.clear()
+        pendingRemovals.clear()
         if (!mFragmentManager.isDestroyed) transaction.commitNowAllowingStateLoss()
     }
 
-    /** Drops a transaction still waiting to be committed. */
+    /**
+     * Drops a transaction still waiting to be committed. Its neighbours were never built, but the
+     * pages it removes still have to go, or they stay added with their web views.
+     */
     protected fun discardPending() {
         mCurTransaction = null
         pendingFragments.clear()
+        val removals = pendingRemovals.filter { it.isAdded }
+        pendingRemovals.clear()
+        if (removals.isEmpty() || mFragmentManager.isDestroyed) return
+        mFragmentManager.beginTransaction()
+            .apply { removals.forEach { remove(it) } }
+            .commitNowAllowingStateLoss()
     }
 
     /** The fragment at [position], whether committed or still waiting to be. */
