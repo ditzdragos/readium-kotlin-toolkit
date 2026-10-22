@@ -11,7 +11,10 @@ package org.readium.r2.navigator.pager
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Parcelable
+import android.view.Choreographer
 import android.view.View
 import android.view.ViewGroup
 import androidx.collection.LongSparseArray
@@ -32,6 +35,11 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
     private var mCurTransaction: FragmentTransaction? = null
     private var mCurrentPrimaryItem: Fragment? = null
 
+    /** Neighbour fragments added by a transaction that has not been committed yet. */
+    private val pendingFragments = LongSparseArray<Fragment>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var offscreenCommitScheduled = false
+
     abstract override fun getItem(position: Int): Fragment
 
     override fun startUpdate(container: ViewGroup) {
@@ -43,7 +51,7 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
     @SuppressLint("CommitTransaction")
     override fun instantiateItem(container: ViewGroup, position: Int): Any {
         val tag = getItemId(position)
-        var fragment: Fragment? = mFragments.get(tag)
+        var fragment: Fragment? = mFragments.get(tag) ?: pendingFragments.get(tag)
 
         if (fragment != null) {
             return fragment
@@ -61,7 +69,7 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
         }
         fragment.setMenuVisibility(false)
         fragment.userVisibleHint = false
-        mFragments.put(tag, fragment)
+        pendingFragments.put(tag, fragment)
         mCurTransaction!!.add(container.id, fragment, "f$tag")
 
         return fragment
@@ -70,6 +78,12 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
     @SuppressLint("CommitTransaction")
     override fun destroyItem(container: ViewGroup, position: Int, `object`: Any) {
         val fragment = `object` as Fragment
+        val pendingIndex = pendingFragments.indexOfValue(fragment)
+        if (pendingIndex != -1) {
+            pendingFragments.removeAt(pendingIndex)
+            mCurTransaction?.remove(fragment)
+            return
+        }
         val currentPosition = getItemPosition(fragment)
 
         val index = mFragments.indexOfValue(fragment)
@@ -109,12 +123,57 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
         }
     }
 
+    /**
+     * Commits at once when the visible page is new; otherwise only neighbours changed, and they
+     * are built after the visible page has drawn, so a turn into the next resource is not held
+     * up by creating the one after it.
+     */
     override fun finishUpdate(container: ViewGroup) {
-        if (mCurTransaction != null) {
-            mCurTransaction!!.commitNowAllowingStateLoss()
-            mCurTransaction = null
+        mCurTransaction ?: return
+        val primary = mCurrentPrimaryItem
+        if (primary != null && primary.isAdded && pendingFragments.indexOfValue(primary) == -1) {
+            scheduleOffscreenCommit()
+        } else {
+            commitPending()
         }
     }
+
+    private fun scheduleOffscreenCommit() {
+        if (offscreenCommitScheduled || mCurTransaction == null) return
+        offscreenCommitScheduled = true
+        afterFrames(OFFSCREEN_COMMIT_FRAMES) {
+            mainHandler.post {
+                offscreenCommitScheduled = false
+                commitPending()
+            }
+        }
+    }
+
+    private fun afterFrames(count: Int, action: () -> Unit) {
+        Choreographer.getInstance().postFrameCallback {
+            if (count <= 1) action() else afterFrames(count - 1, action)
+        }
+    }
+
+    private fun commitPending() {
+        val transaction = mCurTransaction ?: return
+        mCurTransaction = null
+        for (i in 0 until pendingFragments.size()) {
+            mFragments.put(pendingFragments.keyAt(i), pendingFragments.valueAt(i))
+        }
+        pendingFragments.clear()
+        if (!mFragmentManager.isDestroyed) transaction.commitNowAllowingStateLoss()
+    }
+
+    /** Drops a transaction still waiting to be committed. */
+    protected fun discardPending() {
+        mCurTransaction = null
+        pendingFragments.clear()
+    }
+
+    /** The fragment at [position], whether committed or still waiting to be. */
+    fun fragmentAt(position: Int): Fragment? =
+        getItemId(position).let { mFragments.get(it) ?: pendingFragments.get(it) }
 
     override fun isViewFromObject(view: View, `object`: Any): Boolean {
         return (`object` as Fragment).view === view
@@ -144,6 +203,7 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
             bundle!!.classLoader = loader
             mSavedStates.clear()
             mFragments.clear()
+            discardPending()
             val keys = bundle.keySet()
             for (key in keys) {
                 if (key.startsWith("f")) {
@@ -159,5 +219,9 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
 
     fun getItemId(position: Int): Long {
         return position.toLong()
+    }
+
+    private companion object {
+        const val OFFSCREEN_COMMIT_FRAMES = 2
     }
 }

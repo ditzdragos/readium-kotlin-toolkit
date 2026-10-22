@@ -142,7 +142,7 @@ internal class R2PagerAdapter internal constructor(
      */
     internal fun loadLocatorAt(position: Int, locator: Locator) {
         val id = getItemId(position)
-        val fragment = mFragments.get(id)
+        val fragment = fragmentAt(position)
         if (fragment == null) {
             pendingLocators.put(id, locator)
         } else {
@@ -179,6 +179,7 @@ internal class R2PagerAdapter internal constructor(
         // Clear collections
         pendingLocators.clear()
         mFragments.clear()
+        discardPending()
 
         currentFragment = null
         previousFragment = null
