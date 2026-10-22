@@ -548,6 +548,7 @@ public class EpubNavigatorFragment public constructor(
             }
         }
         adapter.listener = PagerAdapterListener()
+        adapter.holdOffscreenPages = holdOffscreenPages
         resourcePager.adapter = adapter
         // Pre-render 1 page on each side (default). offscreenPageLimit=2 caused OOM on memory-
         // constrained devices (e.g. Chromebook ARC++) because 5 simultaneous pages × full image
@@ -1075,6 +1076,16 @@ public class EpubNavigatorFragment public constructor(
 
     private fun locatorToResourceAtIndex(index: Int): Locator? =
         readingOrder.getOrNull(index)?.let { publication.locatorFromLink(it) }
+
+    /**
+     * While true, the pages next to the visible one are neither built nor torn down, so an
+     * animation drawn over the navigator does not stall on them; they catch up once released.
+     */
+    public var holdOffscreenPages: Boolean = false
+        set(value) {
+            field = value
+            r2PagerAdapter?.holdOffscreenPages = value
+        }
 
     private val r2PagerAdapter: R2PagerAdapter?
         get() = if (::resourcePager.isInitialized) {

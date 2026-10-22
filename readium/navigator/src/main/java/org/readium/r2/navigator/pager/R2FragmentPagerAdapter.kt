@@ -43,6 +43,16 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
     private val mainHandler = Handler(Looper.getMainLooper())
     private var offscreenCommitScheduled = false
 
+    /**
+     * While true, transactions that only create or destroy pages next to the visible one wait,
+     * so an animation over the pager does not stall on building a web view.
+     */
+    var holdOffscreenPages = false
+        set(value) {
+            field = value
+            if (!value) scheduleOffscreenCommit()
+        }
+
     abstract override fun getItem(position: Int): Fragment
 
     override fun startUpdate(container: ViewGroup) {
@@ -143,12 +153,12 @@ internal abstract class R2FragmentPagerAdapter(private val mFragmentManager: Fra
     }
 
     private fun scheduleOffscreenCommit() {
-        if (offscreenCommitScheduled || mCurTransaction == null) return
+        if (holdOffscreenPages || offscreenCommitScheduled || mCurTransaction == null) return
         offscreenCommitScheduled = true
         afterFrames(OFFSCREEN_COMMIT_FRAMES) {
             mainHandler.post {
                 offscreenCommitScheduled = false
-                commitPending()
+                if (!holdOffscreenPages) commitPending()
             }
         }
     }
