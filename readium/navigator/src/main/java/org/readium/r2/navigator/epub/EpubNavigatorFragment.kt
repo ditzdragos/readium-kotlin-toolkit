@@ -1147,6 +1147,13 @@ public class EpubNavigatorFragment public constructor(
     internal fun shouldPersistDeferredLoad(): Boolean =
         viewModel.layout == EpubLayout.FIXED && isMemoryConstrainedHost
 
+    /**
+     * Whether page web views draw while offscreen, so a neighbour shows its content the moment it
+     * is turned to instead of a blank frame. Costs a screen of tiles per web view, so not on
+     * memory-constrained hosts.
+     */
+    internal fun shouldPreRasterOffscreenPages(): Boolean = !isMemoryConstrainedHost
+
     private val isMemoryConstrainedHost: Boolean by lazy {
         val ctx = context ?: return@lazy false
         val pm = ctx.packageManager
