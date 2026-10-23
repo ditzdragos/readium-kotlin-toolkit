@@ -11,7 +11,6 @@ package org.readium.r2.navigator.epub
 import android.app.ActivityManager
 import android.content.ComponentCallbacks2
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Build
@@ -1166,17 +1165,11 @@ public class EpubNavigatorFragment public constructor(
     internal fun shouldPreRasterOffscreenPages(): Boolean = !isMemoryConstrainedHost
 
     private val isMemoryConstrainedHost: Boolean by lazy {
-        val ctx = context ?: return@lazy false
-        val pm = ctx.packageManager
-        val isChromeOs = pm.hasSystemFeature(PackageManager.FEATURE_PC) ||
-            pm.hasSystemFeature("org.chromium.arc")
-        val activityManager = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val lowTotalRam = activityManager?.let {
-            val memInfo = ActivityManager.MemoryInfo()
-            it.getMemoryInfo(memInfo)
-            it.isLowRamDevice || memInfo.totalMem <= LOW_RAM_THRESHOLD_BYTES
-        } ?: false
-        isChromeOs || lowTotalRam
+        val activityManager = context?.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return@lazy false
+        val memInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memInfo)
+        activityManager.isLowRamDevice || memInfo.totalMem <= LOW_RAM_THRESHOLD_BYTES
     }
 
     /** Releases deferred neighbour loads once the visible spread has finished loading. */
