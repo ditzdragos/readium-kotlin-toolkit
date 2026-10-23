@@ -1235,6 +1235,27 @@ public class EpubNavigatorFragment public constructor(
     private val _currentLocators = MutableStateFlow<Pair<Locator?, Locator?>>(Pair(null, null))
     public val currentLocators: StateFlow<Pair<Locator?, Locator?>> = _currentLocators.asStateFlow()
 
+    /**
+     * Where the visible pages are drawn, in window coordinates, left page first. A fixed-layout
+     * page's web view takes the page's own shape, so this is where the book ends and the margin
+     * begins; a reflowable resource fills the navigator.
+     */
+    public fun visiblePageBoundsInWindow(): List<RectF> {
+        val fragment = currentFragment as? R2EpubPageFragment ?: return emptyList()
+        val at = IntArray(2)
+        return listOfNotNull(fragment.webView, fragment.webViewRight)
+            .filter { it.isShown && it.width > 0 && it.height > 0 }
+            .map { webView ->
+                webView.getLocationInWindow(at)
+                RectF(
+                    at[0].toFloat(),
+                    at[1].toFloat(),
+                    (at[0] + webView.width).toFloat(),
+                    (at[1] + webView.height).toFloat()
+                )
+            }
+    }
+
     public fun getVisibleHrefs(): List<Url> {
         val hrefs = mutableSetOf<Url>()
         r2PagerAdapter?.mFragments?.forEach { _, fragment ->
