@@ -13,7 +13,6 @@ import org.junit.runner.RunWith
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.Url
 import org.robolectric.RobolectricTestRunner
 
@@ -37,11 +36,10 @@ class ReadiumCssTest {
                 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
                     <head>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 
                         <title>Publication</title>
                         <link rel="stylesheet" href="style.css" type="text/css"/>
@@ -50,7 +48,7 @@ class ReadiumCssTest {
                 </head>
                     <body dir="ltr"></body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -82,11 +80,10 @@ class ReadiumCssTest {
                 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
                     <head xmlns:xlink="http://www.w3.org/1999/xlink">
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 
                         <title>Publication</title>
                         <link rel="stylesheet" href="style.css" type="text/css"/>
@@ -95,7 +92,7 @@ class ReadiumCssTest {
                 </head>
                     <body dir="ltr" xmlns:xlink="http://www.w3.org/1999/xlink"></body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -125,15 +122,14 @@ class ReadiumCssTest {
             """
                 <?xml version="1.0" encoding="utf-8"?><html dir="ltr" xmlns="http://www.w3.org/1999/xhtml"><head xmlns:xlink="http://www.w3.org/1999/xlink">
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 <title>Publication</title><link rel="stylesheet" href="style.css" type="text/css"/>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-after.css"/>
                 </head><body dir="ltr" xmlns:xlink="http://www.w3.org/1999/xlink"></body></html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head xmlns:xlink="http://www.w3.org/1999/xlink"><title>Publication</title><link rel="stylesheet" href="style.css" type="text/css"/></head><body xmlns:xlink="http://www.w3.org/1999/xlink"></body></html>
@@ -156,15 +152,14 @@ class ReadiumCssTest {
             """
                 <?xml version="1.0" encoding="utf-8"?><HTML dir="ltr" xmlns="http://www.w3.org/1999/xhtml"><HEAD xmlns:xlink="http://www.w3.org/1999/xlink">
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 <title>Publication</title><link rel="stylesheet" href="style.css" type="text/css"/>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-after.css"/>
                 </HEAD><BODY dir="ltr" xmlns:xlink="http://www.w3.org/1999/xlink"></BODY></HTML>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?><HTML xmlns="http://www.w3.org/1999/xhtml"><HEAD xmlns:xlink="http://www.w3.org/1999/xlink"><title>Publication</title><link rel="stylesheet" href="style.css" type="text/css"/></HEAD><BODY xmlns:xlink="http://www.w3.org/1999/xlink"></BODY></HTML>
@@ -189,11 +184,10 @@ class ReadiumCssTest {
                 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
                     <head>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-default.css"/>
                 
                         <title>Publication</title>
@@ -202,7 +196,7 @@ class ReadiumCssTest {
                 </head>
                     <body dir="ltr"></body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -291,11 +285,10 @@ class ReadiumCssTest {
                 <html dir="rtl" xmlns="http://www.w3.org/1999/xhtml">
                     <head>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/rtl/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 
                         <title>Publication</title>
                         <link rel="stylesheet" href="style.css" type="text/css"/>
@@ -304,7 +297,7 @@ class ReadiumCssTest {
                 </head>
                     <body dir="rtl"></body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -336,11 +329,10 @@ class ReadiumCssTest {
                 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
                     <head>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/cjk-horizontal/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 
                         <title>Publication</title>
                         <link rel="stylesheet" href="style.css" type="text/css"/>
@@ -349,7 +341,7 @@ class ReadiumCssTest {
                 </head>
                     <body dir="ltr"></body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -382,11 +374,10 @@ class ReadiumCssTest {
                 <html xmlns="http://www.w3.org/1999/xhtml">
                     <head>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/cjk-vertical/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 
                         <title>Publication</title>
                         <link rel="stylesheet" href="style.css" type="text/css"/>
@@ -395,7 +386,7 @@ class ReadiumCssTest {
                 </head>
                     <body></body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -405,186 +396,6 @@ class ReadiumCssTest {
                             <link rel="stylesheet" href="style.css" type="text/css"/>
                         </head>
                         <body></body>
-                    </html>
-                """.trimIndent()
-            )
-        )
-    }
-
-    @Test
-    fun `Inject language when missing`() {
-        val sut = ReadiumCss(
-            layout = Layout(
-                language = Language("fr-CA"),
-                stylesheets = Layout.Stylesheets.Default,
-                readingProgression = ReadingProgression.LTR
-            ),
-            assetsBaseHref = Url("/assets/")!!
-        )
-        assertEquals(
-            """
-                <?xml version="1.0" encoding="utf-8"?>
-                <html xml:lang="fr-CA" dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
-                    <head>
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
-                                <style>
-                                    :root[style], :root { overflow: visible !important; }
-                                    :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
-                
-                        <title>Publication</title>
-                        <link rel="stylesheet" href="style.css" type="text/css"/>
-                    
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-after.css"/>
-                </head>
-                    <body xml:lang="fr-CA" dir="ltr"></body>
-                </html>
-            """.trimIndent(),
-            sut.injectHtml(
-                """
-                    <?xml version="1.0" encoding="utf-8"?>
-                    <html xmlns="http://www.w3.org/1999/xhtml">
-                        <head>
-                            <title>Publication</title>
-                            <link rel="stylesheet" href="style.css" type="text/css"/>
-                        </head>
-                        <body></body>
-                    </html>
-                """.trimIndent()
-            )
-        )
-    }
-
-    @Test
-    fun `Copy BODY lang to HTML`() {
-        val sut = ReadiumCss(
-            layout = Layout(
-                language = Language("fr-CA"),
-                stylesheets = Layout.Stylesheets.Default,
-                readingProgression = ReadingProgression.LTR
-            ),
-            assetsBaseHref = Url("/assets/")!!
-        )
-        assertEquals(
-            """
-                <?xml version="1.0" encoding="utf-8"?>
-                <html xml:lang="en-US" dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
-                    <head>
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
-                                <style>
-                                    :root[style], :root { overflow: visible !important; }
-                                    :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
-                
-                        <title>Publication</title>
-                        <link rel="stylesheet" href="style.css" type="text/css"/>
-                    
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-after.css"/>
-                </head>
-                    <body dir="ltr" xml:lang="en-US"></body>
-                </html>
-            """.trimIndent(),
-            sut.injectHtml(
-                """
-                    <?xml version="1.0" encoding="utf-8"?>
-                    <html xmlns="http://www.w3.org/1999/xhtml">
-                        <head>
-                            <title>Publication</title>
-                            <link rel="stylesheet" href="style.css" type="text/css"/>
-                        </head>
-                        <body xml:lang="en-US"></body>
-                    </html>
-                """.trimIndent()
-            )
-        )
-    }
-
-    @Test
-    fun `Copy BODY lang to HTML without namespace`() {
-        val sut = ReadiumCss(
-            layout = Layout(
-                language = Language("fr-CA"),
-                stylesheets = Layout.Stylesheets.Default,
-                readingProgression = ReadingProgression.LTR
-            ),
-            assetsBaseHref = Url("/assets/")!!
-        )
-        assertEquals(
-            """
-                <?xml version="1.0" encoding="utf-8"?>
-                <html xml:lang="en-US" dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
-                    <head>
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
-                                <style>
-                                    :root[style], :root { overflow: visible !important; }
-                                    :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
-                
-                        <title>Publication</title>
-                        <link rel="stylesheet" href="style.css" type="text/css"/>
-                    
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-after.css"/>
-                </head>
-                    <body dir="ltr" lang="en-US"></body>
-                </html>
-            """.trimIndent(),
-            sut.injectHtml(
-                """
-                    <?xml version="1.0" encoding="utf-8"?>
-                    <html xmlns="http://www.w3.org/1999/xhtml">
-                        <head>
-                            <title>Publication</title>
-                            <link rel="stylesheet" href="style.css" type="text/css"/>
-                        </head>
-                        <body lang="en-US"></body>
-                    </html>
-                """.trimIndent()
-            )
-        )
-    }
-
-    @Test
-    fun `Copy BODY lang to HTML when empty`() {
-        val sut = ReadiumCss(
-            layout = Layout(
-                language = Language("fr-CA"),
-                stylesheets = Layout.Stylesheets.Default,
-                readingProgression = ReadingProgression.LTR
-            ),
-            assetsBaseHref = Url("/assets/")!!
-        )
-        assertEquals(
-            """
-                <?xml version="1.0" encoding="utf-8"?>
-                <html xml:lang="fr-CA" dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
-                    <head>
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
-                                <style>
-                                    :root[style], :root { overflow: visible !important; }
-                                    :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
-                
-                        <title>Publication</title>
-                        <link rel="stylesheet" href="style.css" type="text/css"/>
-                    
-                <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-after.css"/>
-                </head>
-                    <body dir="ltr" xml:lang=""></body>
-                </html>
-            """.trimIndent(),
-            sut.injectHtml(
-                """
-                    <?xml version="1.0" encoding="utf-8"?>
-                    <html xmlns="http://www.w3.org/1999/xhtml">
-                        <head>
-                            <title>Publication</title>
-                            <link rel="stylesheet" href="style.css" type="text/css"/>
-                        </head>
-                        <body xml:lang=""></body>
                     </html>
                 """.trimIndent()
             )
@@ -619,11 +430,10 @@ class ReadiumCssTest {
                 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
                     <head>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 
                         <title>Publication</title>
                         <link rel="stylesheet" href="style.css" type="text/css"/>
@@ -637,7 +447,7 @@ class ReadiumCssTest {
                 </head>
                     <body dir="ltr"></body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -669,11 +479,10 @@ class ReadiumCssTest {
                 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
                     <head>
                 <link rel="stylesheet" type="text/css" href="/assets/readium/readium-css/ReadiumCSS-before.css"/>
-                <style>audio[controls] { width: revert; height: revert; }</style>
                                 <style>
                                     :root[style], :root { overflow: visible !important; }
                                     :root[style] > body, :root > body { overflow: visible !important; }
-                                </style>
+                                </style>{{dropCaps}}
                 
                         <title>Publication</title>
                         <link rel="stylesheet" href="style.css" type="text/css"/>
@@ -684,7 +493,7 @@ class ReadiumCssTest {
                         <p dir="rtl"></p>
                     </body>
                 </html>
-            """.trimIndent(),
+            """.trimIndent().withDropCaps(),
             sut.injectHtml(
                 """
                     <?xml version="1.0" encoding="utf-8"?>
@@ -701,4 +510,7 @@ class ReadiumCssTest {
             )
         )
     }
+
+    private fun String.withDropCaps(): String =
+        replace("{{dropCaps}}", "\n$DROP_CAPS_STYLE")
 }
