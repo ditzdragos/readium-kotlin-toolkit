@@ -138,7 +138,13 @@ function isDomIsolated(element, text) {
  * `before` — an unanchored one fires on a blank line 200 characters back and
  * swallows the number in "Chapter 1".
  */
-export function isIsolatedPageNumber({ text, before, after, element }) {
+export function isIsolatedPageNumber({
+  text,
+  before,
+  after,
+  element,
+  isDrawnOutOfTextOrder = false,
+}) {
   const beforeIsIsolated =
     before.length === 0 || before.endsWith("\n") || !/[a-zA-Z0-9]/.test(before);
   const afterIsIsolated =
@@ -151,6 +157,7 @@ export function isIsolatedPageNumber({ text, before, after, element }) {
   const domIsolated = isDomIsolated(element, text);
 
   return (
+    (domIsolated && isDrawnOutOfTextOrder) ||
     (beforeIsIsolated && afterIsIsolated) ||
     (domIsolated && afterIsIsolated) ||
     (beforeEndsWithPunctuationAndWhitespace &&
@@ -162,11 +169,32 @@ export function isIsolatedPageNumber({ text, before, after, element }) {
   );
 }
 
+function isAbove(rect, other) {
+  return rect.bottom <= other.top;
+}
+
+/**
+ * Whether the number is drawn above the text that precedes it, or below the
+ * text that follows it. A fixed-layout page can place its folio anywhere in the
+ * markup: "Ocean Animals" (9780744073003) opens each page's text with the folio
+ * printed in the bottom band, so the extracted text reads "4 Many animals…" and
+ * no window around the number looks isolated (RR-7607). A number that is part
+ * of the text is drawn where the text order puts it.
+ */
+export function isDrawnOutOfTextOrder({ rect, previousRect, nextRect }) {
+  if (!rect) return false;
+  return (
+    (!!nextRect && isAbove(nextRect, rect)) ||
+    (!!previousRect && isAbove(rect, previousRect))
+  );
+}
+
 /**
  * @param text the decoration's highlighted text
  * @param before text preceding it on the page, `after` the text following it
  * @param element the element holding the number
  * @param isAtTopOrBottom whether it sits in the page's top or bottom band
+ * @param isDrawnOutOfTextOrder see {@link isDrawnOutOfTextOrder}
  */
 export function shouldSkipPageNumber({
   text,
@@ -174,6 +202,7 @@ export function shouldSkipPageNumber({
   after = "",
   element = null,
   isAtTopOrBottom = false,
+  isDrawnOutOfTextOrder = false,
 }) {
   if (!isPageNumberText(text)) return false;
   if (!isExplicitPageBreak(element)) {
@@ -181,5 +210,11 @@ export function shouldSkipPageNumber({
     if (isOcrOverlayNumber(element)) return false;
   }
   if (!isAtTopOrBottom) return false;
-  return isIsolatedPageNumber({ text, before, after, element });
+  return isIsolatedPageNumber({
+    text,
+    before,
+    after,
+    element,
+    isDrawnOutOfTextOrder,
+  });
 }

@@ -18,6 +18,7 @@ import {
 } from "./utils";
 import { processSpansForTextSpacing } from "./spanTextSpacing.mjs";
 import {
+  isDrawnOutOfTextOrder,
   isExplicitPageBreak,
   isPageNumberText,
   isTitleNumber,
@@ -181,6 +182,32 @@ function getContainingElement(node) {
 /**
  * Rotates a positioned decoration element, returning the element to append.
  */
+const ADJACENT_TEXT_LOOKUP_LIMIT = 8;
+
+function adjacentTextRect(range, forward) {
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) =>
+        node.textContent.trim()
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP,
+    }
+  );
+  walker.currentNode = forward ? range.endContainer : range.startContainer;
+  for (let i = 0; i < ADJACENT_TEXT_LOOKUP_LIMIT; i++) {
+    const node = forward ? walker.nextNode() : walker.previousNode();
+    if (!node) return null;
+    if (range.intersectsNode(node)) continue;
+    const nodeRange = document.createRange();
+    nodeRange.selectNodeContents(node);
+    const rects = nodeRange.getClientRects();
+    if (rects.length > 0) return forward ? rects[0] : rects[rects.length - 1];
+  }
+  return null;
+}
+
 function rotateElement(element, rotationAngle) {
   const supportsIndependentRotate =
     typeof CSS !== "undefined" &&
@@ -857,6 +884,14 @@ export function DecorationGroup(groupId, groupName) {
           after,
           element: startNode,
           isAtTopOrBottom,
+          isDrawnOutOfTextOrder:
+            window.readium.isFixedLayout &&
+            isAtTopOrBottom &&
+            isDrawnOutOfTextOrder({
+              rect: boundingRect,
+              previousRect: adjacentTextRect(item.range, false),
+              nextRect: adjacentTextRect(item.range, true),
+            }),
         });
       } catch (error) {
         pageNumberLog(`PAGE NUMBER :: classification failed: ${error.message}`);
