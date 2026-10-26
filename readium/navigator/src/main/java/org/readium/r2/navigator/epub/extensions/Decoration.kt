@@ -31,23 +31,38 @@ internal fun Decoration.addedChangeFor(layout: EpubLayout): DecorationChange =
 
 /**
  * Generates the JavaScript used to apply the receiver list of [DecorationChange] in a web view.
+ *
+ * A few changes to a laid out page, such as moving the next word to read, are applied as soon as
+ * the script runs, so the frame that draws them only paints. Others wait for the next frame, which
+ * makes sure the page is laid out first.
  */
 internal fun List<DecorationChange>.javascriptForGroup(
     group: String,
     templates: HtmlDecorationTemplates,
-    enhanced: Boolean = false
+    enhanced: Boolean = false,
+    immediate: Boolean = size <= IMMEDIATE_CHANGES_MAX_SIZE
 ): String? {
     if (isEmpty()) return null
 
-    return """
-        // Using requestAnimationFrame helps to make sure the page is fully laid out before adding the
-        // decorations.
-        requestAnimationFrame(function () {
-            let group = readium.getDecorations('$group');
-            ${mapNotNull { it.javascript(templates, enhanced) }.joinToString("\n")}
-        });
-        """
+    return groupChangesScript(
+        group,
+        mapNotNull { it.javascript(templates, enhanced) }.joinToString("\n"),
+        immediate
+    )
 }
+
+/**
+ * Runs [changes], statements on `group`, against the decoration [group] of a web view, after the
+ * changes already waiting for the next frame.
+ */
+internal fun groupChangesScript(group: String, changes: String, immediate: Boolean = false): String =
+    """
+    readium.applyDecorationChanges('$group', function (group) {
+        $changes
+    }, $immediate);
+    """
+
+private const val IMMEDIATE_CHANGES_MAX_SIZE = 4
 
 /**
  * Generates the JavaScript used to apply the receiver [DecorationChange] in a web view.

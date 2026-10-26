@@ -38,6 +38,7 @@ import org.readium.r2.navigator.SimpleOverflow
 import org.readium.r2.navigator.changesByHref
 import org.readium.r2.navigator.epub.css.ReadiumCss
 import org.readium.r2.navigator.epub.extensions.addedChangeFor
+import org.readium.r2.navigator.epub.extensions.groupChangesScript
 import org.readium.r2.navigator.epub.extensions.javascript
 import org.readium.r2.navigator.epub.extensions.javascriptForGroup
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
@@ -208,7 +209,8 @@ internal class EpubNavigatorViewModel(
                     .filter { it.locator.href == link.url() }
                     .map { it.addedChangeFor(layout) }
 
-                val groupScript = changes.javascriptForGroup(group, decorationTemplates) ?: continue
+                val groupScript = changes.javascriptForGroup(group, decorationTemplates, immediate = false)
+                    ?: continue
                 add(
                     RunScriptCommand(
                         groupScript,
@@ -378,13 +380,7 @@ internal class EpubNavigatorViewModel(
             Timber.d("clearing all decorations $group")
             cmds.add(
                 RunScriptCommand(
-                    // The updates command are using `requestAnimationFrame()`, so we need it for
-                    // `clear()` as well otherwise we might recreate a highlight after it has been
-                    // cleared.
-                    "requestAnimationFrame(function () { " +
-                        "readium.getDecorations('$group').clearAllEnhanced();" +
-                        "readium.getDecorations('$group').clear();" +
-                        "});",
+                    groupChangesScript(group, "group.clearAllEnhanced(); group.clear();"),
                     scope = RunScriptCommand.Scope.LoadedResources
                 )
             )
@@ -405,12 +401,11 @@ internal class EpubNavigatorViewModel(
         decorations.add(decoration)
         this.decorations[group] = decorations
         return RunScriptCommand(
-            script = """
-                requestAnimationFrame(function () {
-                    let group = readium.getDecorations('$group');
-                    ${decoration.addedChangeFor(layout).javascript(decorationTemplates)}
-                });
-        """,
+            script = groupChangesScript(
+                group,
+                decoration.addedChangeFor(layout).javascript(decorationTemplates).orEmpty(),
+                immediate = true
+            ),
             scope = RunScriptCommand.Scope.LoadedResource(decoration.locator.href)
         )
     }
@@ -420,7 +415,7 @@ internal class EpubNavigatorViewModel(
         val href = decorations.firstOrNull { it.id == id }?.locator?.href
         this.decorations[group] = decorations.filter { it.id != id }
         return RunScriptCommand(
-            script = "requestAnimationFrame(function () { readium.getDecorations('$group').clearEnhanced('$id');});",
+            script = groupChangesScript(group, "group.clearEnhanced('$id');", immediate = true),
             scope = href
                 ?.let { RunScriptCommand.Scope.LoadedResource(it) }
                 ?: RunScriptCommand.Scope.LoadedResources
@@ -431,7 +426,7 @@ internal class EpubNavigatorViewModel(
         Timber.d("clearEnhancedDecorations: $group")
         this.decorations.remove(group)
         return RunScriptCommand(
-            script = "requestAnimationFrame(function () { readium.getDecorations('$group').clearAllEnhanced();});",
+            script = groupChangesScript(group, "group.clearAllEnhanced();"),
             scope = RunScriptCommand.Scope.LoadedResources
         )
     }

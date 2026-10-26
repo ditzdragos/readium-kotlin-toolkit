@@ -29,7 +29,11 @@ import {
 } from "./utils";
 import { findFirstVisibleLocator } from "./dom";
 import { getCurrentSelection } from "./selection";
-import { getDecorations, registerTemplates } from "./decorator";
+import {
+  applyDecorationChanges,
+  getDecorations,
+  registerTemplates,
+} from "./decorator";
 
 // Public API used by the navigator.
 window.readium = {
@@ -52,6 +56,7 @@ window.readium = {
   // decoration
   registerDecorationTemplates: registerTemplates,
   getDecorations: getDecorations,
+  applyDecorationChanges: applyDecorationChanges,
 
   // DOM
   findFirstVisibleLocator: findFirstVisibleLocator,

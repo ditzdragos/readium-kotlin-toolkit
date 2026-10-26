@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ChangeQueue,
   DecorationBuckets,
   DeferredAppends,
   oncePerFrame,
@@ -114,6 +115,93 @@ describe("oncePerFrame", () => {
     frames.flush();
 
     assert.equal(runs, 2);
+  });
+});
+
+describe("ChangeQueue", () => {
+  function fakeFrames() {
+    const queued = [];
+    return {
+      requestFrame: (callback) => queued.push(callback),
+      flush() {
+        queued.splice(0).forEach((callback) => callback());
+      },
+      get pending() {
+        return queued.length;
+      },
+    };
+  }
+
+  it("applies an immediate change at once", () => {
+    const frames = fakeFrames();
+    const log = [];
+    const queue = new ChangeQueue(frames.requestFrame);
+
+    queue.run(() => log.push("next word"), true);
+
+    assert.deepEqual(log, ["next word"]);
+    assert.equal(frames.pending, 0);
+  });
+
+  it("holds other changes for the next frame", () => {
+    const frames = fakeFrames();
+    const log = [];
+    const queue = new ChangeQueue(frames.requestFrame);
+
+    queue.run(() => log.push("restore"), false);
+    queue.run(() => log.push("clear"), false);
+
+    assert.deepEqual(log, []);
+    assert.equal(frames.pending, 1);
+    frames.flush();
+    assert.deepEqual(log, ["restore", "clear"]);
+  });
+
+  it("keeps an immediate change behind the ones waiting for the frame", () => {
+    const frames = fakeFrames();
+    const log = [];
+    const queue = new ChangeQueue(frames.requestFrame);
+
+    queue.run(() => log.push("clear"), false);
+    queue.run(() => log.push("next word"), true);
+
+    assert.deepEqual(log, []);
+    frames.flush();
+    assert.deepEqual(log, ["clear", "next word"]);
+    queue.run(() => log.push("word after"), true);
+    assert.deepEqual(log, ["clear", "next word", "word after"]);
+  });
+
+  it("says whether it is applying the frame's changes", () => {
+    const frames = fakeFrames();
+    const seen = [];
+    const queue = new ChangeQueue(frames.requestFrame);
+
+    queue.run(() => seen.push(queue.inFrame), true);
+    queue.run(() => seen.push(queue.inFrame), false);
+    frames.flush();
+
+    assert.deepEqual(seen, [false, true]);
+    assert.equal(queue.inFrame, false);
+  });
+
+  it("applies the rest of the frame's changes when one throws", () => {
+    const frames = fakeFrames();
+    const log = [];
+    const failures = [];
+    const queue = new ChangeQueue(frames.requestFrame, (error) =>
+      failures.push(error.message)
+    );
+
+    queue.run(() => {
+      throw new Error("stale range");
+    }, false);
+    queue.run(() => log.push("next word"), false);
+    frames.flush();
+
+    assert.deepEqual(log, ["next word"]);
+    assert.deepEqual(failures, ["stale range"]);
+    assert.equal(queue.inFrame, false);
   });
 });
 
