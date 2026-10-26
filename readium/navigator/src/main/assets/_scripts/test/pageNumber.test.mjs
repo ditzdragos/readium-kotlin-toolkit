@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  isDrawnOutOfTextOrder,
   isPageNumberText,
   isTitleNumber,
   isExplicitPageBreak,
@@ -202,6 +203,140 @@ describe("shouldSkipPageNumber", () => {
         after: " of them.",
         element: paragraph,
         isAtTopOrBottom: true,
+      }),
+      false
+    );
+  });
+});
+
+/**
+ * Rects of "DK Super Readers: Ocean Animals" (9780744073003), page006.xhtml,
+ * read off a device: the folio "4" is the first span of the page's text but is
+ * printed in the bottom band, under the prose that follows it (RR-7607).
+ */
+const OCEAN_ANIMALS_FOLIO = { top: 2049, bottom: 2093 };
+const OCEAN_ANIMALS_FIRST_LINE = { top: 1705, bottom: 1797 };
+const LINE_BELOW_A_HEADING = { top: 260, bottom: 300 };
+const HEADING_NUMBER = { top: 200, bottom: 240 };
+
+describe("isDrawnOutOfTextOrder", () => {
+  it("is true of a number drawn below the text that follows it", () => {
+    assert.equal(
+      isDrawnOutOfTextOrder({
+        rect: OCEAN_ANIMALS_FOLIO,
+        previousRect: null,
+        nextRect: OCEAN_ANIMALS_FIRST_LINE,
+      }),
+      true
+    );
+  });
+
+  it("is true of a number drawn above the text that precedes it", () => {
+    assert.equal(
+      isDrawnOutOfTextOrder({
+        rect: HEADING_NUMBER,
+        previousRect: LINE_BELOW_A_HEADING,
+        nextRect: null,
+      }),
+      true
+    );
+  });
+
+  it("is false of a number drawn above the text that follows it", () => {
+    assert.equal(
+      isDrawnOutOfTextOrder({
+        rect: HEADING_NUMBER,
+        previousRect: null,
+        nextRect: LINE_BELOW_A_HEADING,
+      }),
+      false
+    );
+  });
+
+  it("is false of a number on the same line as its neighbours", () => {
+    const line = { top: 100, bottom: 140 };
+    assert.equal(
+      isDrawnOutOfTextOrder({
+        rect: { top: 102, bottom: 138 },
+        previousRect: line,
+        nextRect: line,
+      }),
+      false
+    );
+  });
+
+  it("is false without neighbours", () => {
+    assert.equal(
+      isDrawnOutOfTextOrder({
+        rect: OCEAN_ANIMALS_FOLIO,
+        previousRect: null,
+        nextRect: null,
+      }),
+      false
+    );
+  });
+});
+
+describe("shouldSkipPageNumber on a fixed-layout page", () => {
+  it("skips a folio that opens the page text but is printed under it (RR-7607)", () => {
+    const span = element("span", { text: "4" });
+
+    assert.equal(
+      shouldSkipPageNumber({
+        text: "4",
+        before: "",
+        after: " Many animals live in  the ocean.",
+        element: span,
+        isAtTopOrBottom: true,
+        isDrawnOutOfTextOrder: true,
+      }),
+      true
+    );
+  });
+
+  it("keeps a number that opens the page text where it is drawn", () => {
+    const span = element("span", { text: "4" });
+
+    assert.equal(
+      shouldSkipPageNumber({
+        text: "4",
+        before: "",
+        after: " Many animals live in  the ocean.",
+        element: span,
+        isAtTopOrBottom: true,
+        isDrawnOutOfTextOrder: false,
+      }),
+      false
+    );
+  });
+
+  it("keeps a number drawn out of order inside a longer element", () => {
+    const span = element("span", { text: "There were 4 of them." });
+
+    assert.equal(
+      shouldSkipPageNumber({
+        text: "4",
+        before: "There were ",
+        after: " of them.",
+        element: span,
+        isAtTopOrBottom: true,
+        isDrawnOutOfTextOrder: true,
+      }),
+      false
+    );
+  });
+
+  it("keeps a chapter number drawn out of order", () => {
+    const heading = element("h1", { text: "4" });
+
+    assert.equal(
+      shouldSkipPageNumber({
+        text: "4",
+        before: "",
+        after: " Many animals",
+        element: heading,
+        isAtTopOrBottom: true,
+        isDrawnOutOfTextOrder: true,
       }),
       false
     );
