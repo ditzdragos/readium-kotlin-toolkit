@@ -61,6 +61,53 @@ export function oncePerFrame(
 }
 
 /**
+ * Orders the changes made to one decoration group.
+ *
+ * Changes wait for the next frame, which makes sure the page is laid out first. A small change to a
+ * laid out page, such as the next word to read, may instead run at once: laid out in the frame that
+ * draws it, it held that frame past the following vsync. It still waits behind changes already
+ * queued, or it could be undone by a clear queued before it.
+ */
+export class ChangeQueue {
+  constructor(
+    requestFrame = (frameCallback) => requestAnimationFrame(frameCallback),
+    onError = () => {}
+  ) {
+    this.requestFrame = requestFrame;
+    this.onError = onError;
+    this.queued = [];
+    this.inFrame = false;
+  }
+
+  run(changes, immediate) {
+    if (immediate && this.queued.length === 0) {
+      changes();
+      return;
+    }
+    this.queued.push(changes);
+    if (this.queued.length === 1) {
+      this.requestFrame(() => this.flush());
+    }
+  }
+
+  flush() {
+    const batch = this.queued.splice(0);
+    this.inFrame = true;
+    try {
+      batch.forEach((changes) => {
+        try {
+          changes();
+        } catch (error) {
+          this.onError(error);
+        }
+      });
+    } finally {
+      this.inFrame = false;
+    }
+  }
+}
+
+/**
  * Spreads a group's decorations over boxes the web view can lay out on their own.
  *
  * Decorations are absolutely positioned, and inserting one dirtied the box holding every other

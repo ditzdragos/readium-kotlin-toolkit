@@ -29,6 +29,7 @@ import { isUnfilledDuplicateLayer } from "./duplicateLayer.mjs";
 import { mergeIntoLines } from "./rangeRects.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
+  ChangeQueue,
   DecorationBuckets,
   DeferredAppends,
   oncePerFrame,
@@ -365,6 +366,14 @@ export function getDecorations(groupName) {
 }
 
 /**
+ * Applies [changes], a function of the decoration group [groupName], in the group's order: on the
+ * next frame, or at once when [immediate] and nothing is waiting for it (see ChangeQueue).
+ */
+export function applyDecorationChanges(groupName, changes, immediate = false) {
+  getDecorations(groupName).applyChanges(changes, immediate);
+}
+
+/**
  * Handles click events on a Decoration.
  * Returns whether a decoration matched this event.
  */
@@ -431,6 +440,10 @@ export function DecorationGroup(groupId, groupName) {
   var deferredAppends = new DeferredAppends();
   var buckets = new DecorationBuckets(createBucket);
   var scheduleLayout = oncePerFrame(requestLayout);
+  var changeQueue = new ChangeQueue(undefined, (error) =>
+    logError(`Failed to apply decorations of ${groupName}: ${error.message}`)
+  );
+  var group = null;
 
   function isActivable() {
     return activable;
@@ -440,15 +453,28 @@ export function DecorationGroup(groupId, groupName) {
     activable = true;
   }
 
-  function emitHighlightRect(item, rect, ocrLayout = false) {
-    Android.onHighlightRect(
-      JSON.stringify({
-        id: item.decoration.id,
-        group: groupName,
-        rect: rect,
-        ocrLayout: ocrLayout,
-      })
-    );
+  // A bridge call blocks the page until the app answers, and converting the rect may make one too.
+  // Made before the frame that draws the decoration has committed, they held it past its vsync.
+  function emitHighlightRect(item, nativeRect, ocrLayout = false) {
+    const send = () =>
+      Android.onHighlightRect(
+        JSON.stringify({
+          id: item.decoration.id,
+          group: groupName,
+          rect: nativeRect(),
+          ocrLayout: ocrLayout,
+        })
+      );
+    if (changeQueue.inFrame) {
+      setTimeout(send, 0);
+    } else {
+      requestAnimationFrame(() => setTimeout(send, 0));
+    }
+  }
+
+  /** Runs [changes], a function of this group, in its order: see [ChangeQueue]. */
+  function applyChanges(changes, immediate) {
+    changeQueue.run(() => changes(group), immediate);
   }
 
   /**
@@ -806,7 +832,7 @@ export function DecorationGroup(groupId, groupName) {
     }
 
     if (postMessage) {
-      emitHighlightRect(item, toNativeRect(boundingRect), false);
+      emitHighlightRect(item, () => toNativeRect(boundingRect), false);
     }
   }
 
@@ -822,7 +848,7 @@ export function DecorationGroup(groupId, groupName) {
       if (postMessage) {
         emitHighlightRect(
           item,
-          { left: 0, top: 0, width: 0, height: 0 },
+          () => ({ left: 0, top: 0, width: 0, height: 0 }),
           false
         );
       }
@@ -1061,7 +1087,7 @@ export function DecorationGroup(groupId, groupName) {
     item.container = itemContainer;
 
     if (postMessage) {
-      emitHighlightRect(item, toNativeRect(boundingRect), ocrLayout);
+      emitHighlightRect(item, () => toNativeRect(boundingRect), ocrLayout);
     }
   }
 
@@ -1106,7 +1132,7 @@ export function DecorationGroup(groupId, groupName) {
     buckets.clear();
   }
 
-  return {
+  group = {
     add,
     addEnhanced,
     remove,
@@ -1119,7 +1145,9 @@ export function DecorationGroup(groupId, groupName) {
     scheduleLayout,
     isActivable,
     setActivable,
+    applyChanges,
   };
+  return group;
 }
 
 window.addEventListener(
