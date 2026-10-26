@@ -17,6 +17,7 @@ import {
   rangeFromLocator,
 } from "./utils";
 import { processSpansForTextSpacing } from "./spanTextSpacing.mjs";
+import { joinSvgTextRuns } from "./svgTextRuns.mjs";
 import {
   isDrawnOutOfTextOrder,
   isExplicitPageBreak,
@@ -299,6 +300,8 @@ export function registerTemplates(newStyles) {
   normalizeTextNodes();
 
   processSpansForTextSpacing(document);
+
+  joinSvgTextRuns(document);
 
   setupViewportRelayoutListeners();
 }
