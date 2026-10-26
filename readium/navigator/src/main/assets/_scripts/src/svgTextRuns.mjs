@@ -8,6 +8,10 @@
 // glyph box height.
 const TOUCHING_GAP_PER_HEIGHT = 0.12;
 
+// Glyphs following a curve drift by under a fifth of their height from one to the next; the next
+// line sits at least most of a box height lower, even when tight leading makes the boxes overlap.
+const SAME_LINE_DRIFT_PER_HEIGHT = 0.5;
+
 const TEXT_NODE = 3;
 
 function isBlank(text) {
@@ -22,6 +26,15 @@ function isTextElement(node) {
   return (node.localName || "").toLowerCase() === "text";
 }
 
+function boxHeight(a, b) {
+  return Math.max(a.bottom - a.top, b.bottom - b.top);
+}
+
+function followsOnSameLine(a, b) {
+  const drift = Math.abs(b.top + b.bottom - (a.top + a.bottom)) / 2;
+  return drift < SAME_LINE_DRIFT_PER_HEIGHT * boxHeight(a, b) && b.left > a.left;
+}
+
 /**
  * Whether [current] carries on the word [previous] ends: it starts on the same line, right where
  * [previous] stops. Each is a `{ text, rect }` of one SVG <text> element.
@@ -32,12 +45,21 @@ export function continuesWord(previous, current) {
   }
   const a = previous.rect;
   const b = current.rect;
-  const sameLine = b.top < a.bottom && b.bottom > a.top;
-  const height = Math.max(a.bottom - a.top, b.bottom - b.top);
   return (
-    sameLine &&
-    b.left > a.left &&
-    b.left - a.right < TOUCHING_GAP_PER_HEIGHT * height
+    followsOnSameLine(a, b) &&
+    b.left - a.right < TOUCHING_GAP_PER_HEIGHT * boxHeight(a, b)
+  );
+}
+
+/**
+ * Whether [current] starts a new line after [previous]. Letter-spaced lettering leaves gaps on
+ * one line too wide to count as touching, so only a line break proves a word ended there.
+ */
+function startsNewLine(previous, current) {
+  return (
+    !isBlank(previous.text) &&
+    !isBlank(current.text) &&
+    !followsOnSameLine(previous.rect, current.rect)
   );
 }
 
@@ -103,8 +125,7 @@ export function joinSvgTextRuns(document) {
       between.forEach((node) => node.parentNode.removeChild(node));
     } else if (
       between.length === 0 &&
-      !isBlank(measure(previous).text) &&
-      !isBlank(measure(current).text)
+      startsNewLine(measure(previous), measure(current))
     ) {
       current.parentNode.insertBefore(document.createTextNode("\n"), current);
     }

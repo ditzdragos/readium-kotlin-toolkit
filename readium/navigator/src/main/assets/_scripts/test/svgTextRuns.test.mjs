@@ -128,6 +128,19 @@ describe("joinSvgTextRuns", () => {
     assert.equal(textOf(root), "go.\nDa");
   });
 
+  it("keeps letter-spaced lettering written back to back as one word", () => {
+    const root = svg();
+    let left = 100;
+    for (const letter of "CHAPTER") {
+      text(root, letter, box(left, left + 40, 100, 160));
+      left += 52;
+    }
+
+    joinSvgTextRuns(documentWith(root));
+
+    assert.equal(textOf(root), "CHAPTER");
+  });
+
   it("does not join across another element", () => {
     const root = svg();
     text(root, "R", box(169, 220, 104, 180));
@@ -148,6 +161,16 @@ describe("continuesWord", () => {
       continuesWord(
         { text: "e", rect: box(318, 355, 99, 171) },
         { text: " ", rect: box(345, 345, 156, 156) }
+      ),
+      false
+    );
+  });
+
+  it("does not continue onto a centred next line whose box overlaps", () => {
+    assert.equal(
+      continuesWord(
+        { text: "Once upon a time", rect: box(100, 500, 100, 172) },
+        { text: "there was", rect: box(200, 400, 160, 232) }
       ),
       false
     );
