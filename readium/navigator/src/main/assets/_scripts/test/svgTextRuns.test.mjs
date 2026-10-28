@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { boundaries } from "./support/fakeRange.mjs";
+import {
+  ASCENT,
+  DESCENT,
+  SVG_SCALE,
+  TUMBLE,
+  advances,
+  assertReachesEveryCorner,
+  curvedWord,
+  uprightBox,
+} from "./support/lettering.mjs";
 import { mergeIntoLines } from "../src/rangeRects.mjs";
 import {
   continuesWord,
   joinSvgTextRuns,
-  turnedBoxAround,
+  svgLineBoxes,
   turnedBoxesByLine,
 } from "../src/svgTextRuns.mjs";
 
@@ -161,75 +172,6 @@ describe("joinSvgTextRuns", () => {
   });
 });
 
-// The transforms page003 of 9781338747836 places "tumble," with, in its SVG's user units; the
-// SVG draws them at twice that size. Each glyph's box spans its advance to the next glyph.
-const TUMBLE = [
-  [0.9894, 0.1452, -0.1452, 0.9894, 96.5546, 27.5771],
-  [0.9775, 0.2108, -0.2108, 0.9775, 104.8498, 28.7334],
-  [0.9496, 0.3135, -0.3135, 0.9496, 118.5258, 31.5928],
-  [0.9269, 0.3753, -0.3753, 0.9269, 138.0346, 38.2382],
-  [0.9154, 0.4025, -0.4025, 0.9154, 149.7128, 43.0489],
-  [0.9082, 0.4186, -0.4186, 0.9082, 156.1958, 45.8936],
-  [0.9058, 0.4237, -0.4237, 0.9058, 168.0928, 51.4002],
-];
-const ASCENT = 27;
-const DESCENT = 7;
-const SVG_SCALE = 2;
-
-function placedGlyph([a, b, c, d, e, f], advance) {
-  const onScreen = (x, y) => ({
-    x: SVG_SCALE * (a * x + c * y + e),
-    y: SVG_SCALE * (b * x + d * y + f),
-  });
-  return {
-    corners: [
-      onScreen(0, -ASCENT),
-      onScreen(advance, -ASCENT),
-      onScreen(advance, DESCENT),
-      onScreen(0, DESCENT),
-    ],
-  };
-}
-
-function curvedWord(matrices) {
-  return matrices.map((matrix, index) => {
-    const next = matrices[index + 1];
-    const advance = next
-      ? Math.hypot(next[4] - matrix[4], next[5] - matrix[5])
-      : 7.5;
-    return placedGlyph(matrix, advance);
-  });
-}
-
-function uprightBox(glyph) {
-  const xs = glyph.corners.map((corner) => corner.x);
-  const ys = glyph.corners.map((corner) => corner.y);
-  const left = Math.min(...xs);
-  const top = Math.min(...ys);
-  const right = Math.max(...xs);
-  const bottom = Math.max(...ys);
-  return {
-    left,
-    top,
-    right,
-    bottom,
-    width: right - left,
-    height: bottom - top,
-  };
-}
-
-function inTurnedFrame(box, point) {
-  const angle = (box.rotationAngle * Math.PI) / 180;
-  const centreX = box.rect.left + box.rect.width / 2;
-  const centreY = box.rect.top + box.rect.height / 2;
-  const dx = point.x - centreX;
-  const dy = point.y - centreY;
-  return {
-    along: dx * Math.cos(angle) + dy * Math.sin(angle),
-    across: -dx * Math.sin(angle) + dy * Math.cos(angle),
-  };
-}
-
 describe("turnedBoxesByLine", () => {
   it("gives a word set along a curve one box, turned to follow it", () => {
     const glyphs = curvedWord(TUMBLE);
@@ -241,15 +183,7 @@ describe("turnedBoxesByLine", () => {
     const boxes = turnedBoxesByLine(glyphs);
 
     assert.equal(boxes.length, 1);
-    const [box] = boxes;
-    assert.ok(box.rotationAngle > 8 && box.rotationAngle < 25);
-    for (const glyph of glyphs) {
-      for (const corner of glyph.corners) {
-        const { along, across } = inTurnedFrame(box, corner);
-        assert.ok(Math.abs(along) <= box.rect.width / 2 + 0.01);
-        assert.ok(Math.abs(across) <= box.rect.height / 2 + 0.01);
-      }
-    }
+    assertReachesEveryCorner(assert, boxes[0], glyphs);
   });
 
   it("keeps the box as tall as one glyph, so its bottom edge runs under the word", () => {
@@ -261,41 +195,170 @@ describe("turnedBoxesByLine", () => {
   it("gives each line of lettering its own box", () => {
     const firstLine = curvedWord(TUMBLE);
     const secondLine = curvedWord(
-      TUMBLE.map(([a, b, c, d, e, f]) => [a, b, c, d, e - 60, f + 60])
+      TUMBLE.map(([a, b, c, d, e, f]) => [a, b, c, d, e + 100, f + 60])
     );
 
     assert.equal(turnedBoxesByLine([...firstLine, ...secondLine]).length, 2);
   });
 });
 
-describe("turnedBoxAround", () => {
-  it("turns a single glyph's box by the glyph's own angle", () => {
-    const glyph = placedGlyph(TUMBLE[2], 20);
+/**
+ * An SVG holding one <text> per part, in document order. A string part is whitespace between
+ * them; an object part is `{ text, matrix, advance, ascent, clientRects }`.
+ */
+function letteringSvg(parts) {
+  let source = "";
+  const page = { createRange: () => boundaries(0, 0, source) };
+  const svg = { nodeType: 1, localName: "svg", texts: [] };
+  svg.closest = (selector) => (selector === "svg" ? svg : null);
+  svg.querySelectorAll = () => svg.texts;
+  for (const part of parts) {
+    if (typeof part === "string") {
+      source += part;
+      continue;
+    }
+    const [a, b, c, d, e, f] = part.matrix;
+    const ascent = part.ascent ?? ASCENT;
+    const element = {
+      nodeType: 1,
+      localName: "text",
+      parentElement: svg,
+      ownerDocument: page,
+      textContent: part.text,
+      start: source.length,
+      end: source.length + part.text.length,
+      clientRects: part.clientRects ?? [],
+      closest: svg.closest,
+      getBBox: () => ({
+        x: 0,
+        y: -ascent,
+        width: part.advance,
+        height: part.advance > 0 ? ascent + DESCENT : 0,
+      }),
+      getScreenCTM: () => ({
+        a: SVG_SCALE * a,
+        b: SVG_SCALE * b,
+        c: SVG_SCALE * c,
+        d: SVG_SCALE * d,
+        e: SVG_SCALE * e,
+        f: SVG_SCALE * f,
+      }),
+    };
+    source += part.text;
+    svg.texts.push(element);
+  }
+  return svg;
+}
 
-    const box = turnedBoxAround([glyph]);
+function textNodeIn(element) {
+  return { nodeType: 3, parentElement: element, position: element.start };
+}
 
-    assert.ok(
-      Math.abs(
-        box.rotationAngle - (Math.atan2(0.3135, 0.9496) * 180) / Math.PI
-      ) < 0.01
-    );
-    assert.ok(Math.abs(box.rect.width - SVG_SCALE * 20) < 0.01);
-    assert.ok(
-      Math.abs(box.rect.height - SVG_SCALE * (ASCENT + DESCENT)) < 0.01
+/** A range from [startOffset] into [first] to [endOffset] into [last]. */
+function rangeOver(
+  svg,
+  first,
+  last,
+  startOffset = 0,
+  endOffset = last.textContent.length
+) {
+  const range = boundaries(first.start + startOffset, last.start + endOffset);
+  range.startContainer = textNodeIn(first);
+  range.startOffset = startOffset;
+  range.endContainer = textNodeIn(last);
+  range.endOffset = endOffset;
+  range.commonAncestorContainer = first === last ? range.startContainer : svg;
+  return range;
+}
+
+function tumbleGlyphs(word = "tumble,") {
+  const widths = advances(TUMBLE);
+  return [...word].flatMap((text, index) => [
+    "\n",
+    { text, matrix: TUMBLE[index], advance: widths[index] },
+  ]);
+}
+
+const RUMBLE = { text: "Rumble", matrix: [1, 0, 0, 1, 20, 30], advance: 60 };
+const SPACE = { text: " ", matrix: [1, 0, 0, 1, 90, 30], advance: 0 };
+
+describe("svgLineBoxes", () => {
+  it("gives a word set one glyph per <text> along a curve one turned box", () => {
+    const svg = letteringSvg(tumbleGlyphs());
+    const [first, last] = [svg.texts[0], svg.texts[svg.texts.length - 1]];
+
+    const boxes = svgLineBoxes(rangeOver(svg, first, last));
+
+    assert.equal(boxes.length, 1);
+    assertReachesEveryCorner(assert, boxes[0], curvedWord(TUMBLE));
+  });
+
+  it("measures only the glyphs the range covers", () => {
+    const alone = letteringSvg(tumbleGlyphs());
+    const amongOthers = letteringSvg([
+      RUMBLE,
+      SPACE,
+      ...tumbleGlyphs(),
+      "\n",
+      { text: "o", matrix: [1, 0, 0, 1, 400, 30], advance: 20 },
+    ]);
+    const tumble = amongOthers.texts.slice(2);
+
+    assert.deepEqual(
+      svgLineBoxes(rangeOver(amongOthers, tumble[0], tumble[6])),
+      svgLineBoxes(rangeOver(alone, alone.texts[0], alone.texts[6]))
     );
   });
 
-  it("leaves a level word upright", () => {
-    const glyphs = [0, 15, 30].map((x) => placedGlyph([1, 0, 0, 1, x, 30], 15));
+  it("passes over the space glyphs between words", () => {
+    const svg = letteringSvg([RUMBLE, SPACE, ...tumbleGlyphs()]);
 
-    const box = turnedBoxAround(glyphs);
+    const boxes = svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[8]));
 
-    assert.ok(Math.abs(box.rotationAngle) < 0.01);
+    assert.ok(boxes.length > 0);
+  });
+
+  it("keeps the client rects for a range covering part of a <text>", () => {
+    const svg = letteringSvg([RUMBLE]);
+
     assert.deepEqual(
-      [box.rect.left, box.rect.top, box.rect.right, box.rect.bottom].map(
-        Math.round
-      ),
-      [0, 6, 90, 74]
+      svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0], 0, 3)),
+      []
+    );
+  });
+
+  it("keeps the client rects for a <text> set on several lines", () => {
+    const svg = letteringSvg([
+      {
+        ...RUMBLE,
+        clientRects: [
+          { left: 40, right: 100, top: 0, bottom: 20, height: 20 },
+          { left: 40, right: 120, top: 60, bottom: 80, height: 20 },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0])),
+      []
+    );
+  });
+
+  it("keeps the client rects for a glyph it cannot measure", () => {
+    const svg = letteringSvg([{ ...RUMBLE, advance: 0 }]);
+
+    assert.deepEqual(
+      svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0])),
+      []
+    );
+  });
+
+  it("keeps the client rects outside SVG", () => {
+    const paragraph = { nodeType: 1, closest: () => null };
+
+    assert.deepEqual(
+      svgLineBoxes({ commonAncestorContainer: textNodeIn(paragraph) }),
+      []
     );
   });
 });

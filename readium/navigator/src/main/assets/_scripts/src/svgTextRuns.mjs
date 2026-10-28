@@ -4,6 +4,10 @@
 //  available in the top-level LICENSE file of the project.
 //
 
+import { containingElement, elementsCoveredByRange } from "./rangeCoverage.mjs";
+import { mergeIntoLines } from "./rangeRects.mjs";
+import { turnedBoxAround } from "./turnedBox.mjs";
+
 // Within a word, glyph boxes overlap or touch; the narrowest word space is about a fifth of the
 // glyph box height.
 const TOUCHING_GAP_PER_HEIGHT = 0.12;
@@ -65,13 +69,6 @@ function startsNewLine(previous, current) {
   );
 }
 
-function centreOf(corners) {
-  return {
-    x: corners.reduce((sum, corner) => sum + corner.x, 0) / corners.length,
-    y: corners.reduce((sum, corner) => sum + corner.y, 0) / corners.length,
-  };
-}
-
 function boundsOf(corners) {
   const xs = corners.map((corner) => corner.x);
   const ys = corners.map((corner) => corner.y);
@@ -84,63 +81,7 @@ function boundsOf(corners) {
 }
 
 /**
- * The box around glyphs set along one line, turned to follow it: its long side runs from the
- * first glyph's centre to the last's, and it reaches every corner of every glyph. Each glyph is
- * `{ corners }`, the four corners of its box on screen, clockwise from its top left. Returns the
- * box as it stands before the turn, and the turn in degrees about its centre.
- */
-export function turnedBoxAround(glyphs) {
-  const first = glyphs[0].corners;
-  const from = centreOf(first);
-  const to = centreOf(glyphs[glyphs.length - 1].corners);
-  let dx = to.x - from.x;
-  let dy = to.y - from.y;
-  if (Math.hypot(dx, dy) < 1) {
-    dx = first[1].x - first[0].x;
-    dy = first[1].y - first[0].y;
-  }
-  const length = Math.hypot(dx, dy);
-  const along = { x: dx / length, y: dy / length };
-  const across = { x: -along.y, y: along.x };
-
-  let start = Infinity;
-  let end = -Infinity;
-  let top = Infinity;
-  let bottom = -Infinity;
-  for (const glyph of glyphs) {
-    for (const corner of glyph.corners) {
-      const distanceAlong = corner.x * along.x + corner.y * along.y;
-      const distanceAcross = corner.x * across.x + corner.y * across.y;
-      start = Math.min(start, distanceAlong);
-      end = Math.max(end, distanceAlong);
-      top = Math.min(top, distanceAcross);
-      bottom = Math.max(bottom, distanceAcross);
-    }
-  }
-
-  const width = end - start;
-  const height = bottom - top;
-  const middleAlong = (start + end) / 2;
-  const middleAcross = (top + bottom) / 2;
-  const left = along.x * middleAlong + across.x * middleAcross - width / 2;
-  const boxTop = along.y * middleAlong + across.y * middleAcross - height / 2;
-  return {
-    rect: {
-      left,
-      top: boxTop,
-      right: left + width,
-      bottom: boxTop + height,
-      width,
-      height,
-      x: left,
-      y: boxTop,
-    },
-    rotationAngle: (Math.atan2(along.y, along.x) * 180) / Math.PI,
-  };
-}
-
-/**
- * Splits glyphs in reading order into the lines they are set on, each turned to follow its line.
+ * Splits glyphs in reading order into the lines they are set on, each turned the way it reads.
  */
 export function turnedBoxesByLine(glyphs) {
   const lines = [];
@@ -158,12 +99,6 @@ export function turnedBoxesByLine(glyphs) {
 }
 
 function glyphCorners(element) {
-  if (
-    typeof element.getBBox !== "function" ||
-    typeof element.getScreenCTM !== "function"
-  ) {
-    return null;
-  }
   const box = element.getBBox();
   const matrix = element.getScreenCTM();
   if (!matrix || !(box.width > 0) || !(box.height > 0)) {
@@ -181,10 +116,6 @@ function glyphCorners(element) {
   ];
 }
 
-function containingElement(node) {
-  return node && node.nodeType === TEXT_NODE ? node.parentNode : node;
-}
-
 /** The part of [element]'s text that [range] covers. */
 function coveredText(range, element) {
   const part = element.ownerDocument.createRange();
@@ -198,41 +129,43 @@ function coveredText(range, element) {
   return part.toString();
 }
 
+/** A <text> set on several lines, through <tspan> positions, has one bounding box for them all. */
+function spansSeveralLines(element) {
+  const contents = element.ownerDocument.createRange();
+  contents.selectNodeContents(element);
+  return mergeIntoLines(Array.from(contents.getClientRects())).length > 1;
+}
+
 /**
- * The boxes a decoration on lettering drawn one glyph per SVG <text> element must occupy: one per
- * line the range covers, turned to follow it. Each glyph is placed by its own transform, so its
- * client rect is the upright box around a turned glyph. Along a curve those boxes step up or
- * down letter by letter, and grouping them into lines cuts one word into several (RR-9333).
+ * The boxes a decoration on SVG lettering must occupy: one per line the range covers, turned the
+ * way its glyphs read. Lettering drawn one glyph per <text> element places each glyph by its own
+ * transform, so its client rect is the upright box around a turned glyph. Along a curve those
+ * boxes step up or down letter by letter, and grouping them into lines cuts one word into
+ * several (RR-9333).
  *
  * Returns [], leaving the caller on its client rects, unless the range lies in one SVG and covers
- * whole <text> elements: a box measured on a whole element would overreach a range covering part
- * of it.
+ * whole <text> elements, each set on one line: a box measured on a whole element would overreach
+ * a range covering part of it, or span the lines it is set on.
  */
-export function svgGlyphBoxes(range) {
-  const ancestor = containingElement(range && range.commonAncestorContainer);
-  const svg =
-    ancestor && typeof ancestor.closest === "function"
-      ? ancestor.closest("svg")
-      : null;
+export function svgLineBoxes(range) {
+  const svg = containingElement(range.commonAncestorContainer).closest("svg");
   if (!svg) {
     return [];
   }
 
   const glyphs = [];
-  const probe = svg.ownerDocument.createRange();
-  for (const element of svg.querySelectorAll("text")) {
-    probe.selectNodeContents(element);
-    if (range.compareBoundaryPoints(Range.START_TO_END, probe) <= 0) {
-      break;
-    }
-    if (range.compareBoundaryPoints(Range.END_TO_START, probe) >= 0) {
-      continue;
-    }
+  for (const element of elementsCoveredByRange(
+    range,
+    svg.querySelectorAll("text")
+  )) {
     const covered = coveredText(range, element);
     if (isBlank(covered)) {
       continue;
     }
-    if (covered.trim() !== (element.textContent || "").trim()) {
+    if (
+      covered.trim() !== element.textContent.trim() ||
+      spansSeveralLines(element)
+    ) {
       return [];
     }
     const corners = glyphCorners(element);
