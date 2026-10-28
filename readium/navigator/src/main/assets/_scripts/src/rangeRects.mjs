@@ -23,19 +23,32 @@ function gapFitsInsideTheLine(rect1, rect2) {
   return rect2.left - rect1.right <= Math.min(rect1.height, rect2.height);
 }
 
+/**
+ * A rect with every field a DOMRect has: a caller reading `right` or `x` off a partial one writes
+ * NaN into the position it computes, and the browser drops the declaration.
+ */
+export function rectAt(left, top, width, height) {
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    x: left,
+    y: top,
+  };
+}
+
 function union(rect1, rect2) {
   const left = Math.min(rect1.left, rect2.left);
-  const right = Math.max(rect1.right, rect2.right);
   const top = Math.min(rect1.top, rect2.top);
-  const bottom = Math.max(rect1.bottom, rect2.bottom);
-  return {
-    bottom,
-    height: bottom - top,
+  return rectAt(
     left,
-    right,
     top,
-    width: right - left,
-  };
+    Math.max(rect1.right, rect2.right) - left,
+    Math.max(rect1.bottom, rect2.bottom) - top
+  );
 }
 
 /**

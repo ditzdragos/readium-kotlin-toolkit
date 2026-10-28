@@ -4,6 +4,10 @@
 //  available in the top-level LICENSE file of the project.
 //
 
+import { containingElement, elementsCoveredByRange } from "./rangeCoverage.mjs";
+import { mergeIntoLines } from "./rangeRects.mjs";
+import { turnedBoxAround } from "./turnedBox.mjs";
+
 // Within a word, glyph boxes overlap or touch; the narrowest word space is about a fifth of the
 // glyph box height.
 const TOUCHING_GAP_PER_HEIGHT = 0.12;
@@ -95,6 +99,114 @@ function startsNewLine(previous, current) {
     !isBlank(current.text) &&
     !followsOnSameLine(previous.rect, current.rect)
   );
+}
+
+function boundsOf(corners) {
+  const xs = corners.map((corner) => corner.x);
+  const ys = corners.map((corner) => corner.y);
+  return {
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    top: Math.min(...ys),
+    bottom: Math.max(...ys),
+  };
+}
+
+/**
+ * Splits glyphs in reading order into the lines they are set on, each turned the way it reads.
+ */
+export function turnedBoxesByLine(glyphs) {
+  const lines = [];
+  let previous = null;
+  for (const glyph of glyphs) {
+    const bounds = boundsOf(glyph.corners);
+    if (previous && followsOnSameLine(previous, bounds)) {
+      lines[lines.length - 1].push(glyph);
+    } else {
+      lines.push([glyph]);
+    }
+    previous = bounds;
+  }
+  return lines.map(turnedBoxAround);
+}
+
+function glyphCorners(element) {
+  const box = element.getBBox();
+  const matrix = element.getScreenCTM();
+  if (!matrix || !(box.width > 0) || !(box.height > 0)) {
+    return null;
+  }
+  const onScreen = (x, y) => ({
+    x: matrix.a * x + matrix.c * y + matrix.e,
+    y: matrix.b * x + matrix.d * y + matrix.f,
+  });
+  return [
+    onScreen(box.x, box.y),
+    onScreen(box.x + box.width, box.y),
+    onScreen(box.x + box.width, box.y + box.height),
+    onScreen(box.x, box.y + box.height),
+  ];
+}
+
+/** The part of [element]'s text that [range] covers. */
+function coveredText(range, element) {
+  const part = element.ownerDocument.createRange();
+  part.selectNodeContents(element);
+  if (range.compareBoundaryPoints(Range.START_TO_START, part) > 0) {
+    part.setStart(range.startContainer, range.startOffset);
+  }
+  if (range.compareBoundaryPoints(Range.END_TO_END, part) < 0) {
+    part.setEnd(range.endContainer, range.endOffset);
+  }
+  return part.toString();
+}
+
+/** A <text> set on several lines, through <tspan> positions, has one bounding box for them all. */
+function spansSeveralLines(element) {
+  const contents = element.ownerDocument.createRange();
+  contents.selectNodeContents(element);
+  return mergeIntoLines(Array.from(contents.getClientRects())).length > 1;
+}
+
+/**
+ * The boxes a decoration on SVG lettering must occupy: one per line the range covers, turned the
+ * way its glyphs read. Lettering drawn one glyph per <text> element places each glyph by its own
+ * transform, so its client rect is the upright box around a turned glyph. Along a curve those
+ * boxes step up or down letter by letter, and grouping them into lines cuts one word into
+ * several (RR-9333).
+ *
+ * Returns [], leaving the caller on its client rects, unless the range lies in one SVG and covers
+ * whole <text> elements, each set on one line: a box measured on a whole element would overreach
+ * a range covering part of it, or span the lines it is set on.
+ */
+export function svgLineBoxes(range) {
+  const svg = containingElement(range.commonAncestorContainer).closest("svg");
+  if (!svg) {
+    return [];
+  }
+
+  const glyphs = [];
+  for (const element of elementsCoveredByRange(
+    range,
+    svg.querySelectorAll("text")
+  )) {
+    const covered = coveredText(range, element);
+    if (isBlank(covered)) {
+      continue;
+    }
+    if (
+      covered.trim() !== element.textContent.trim() ||
+      spansSeveralLines(element)
+    ) {
+      return [];
+    }
+    const corners = glyphCorners(element);
+    if (!corners) {
+      return [];
+    }
+    glyphs.push({ corners });
+  }
+  return glyphs.length > 0 ? turnedBoxesByLine(glyphs) : [];
 }
 
 /**

@@ -14,9 +14,8 @@
  * the overlay box can carry a decoration.
  */
 
-function containingElement(node) {
-  return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-}
+import { containingElement, elementsCoveredByRange } from "./rangeCoverage.mjs";
+import { rectAt } from "./rangeRects.mjs";
 
 export function rotationDegreesFromTransform(transform) {
   if (!transform || transform === "none") {
@@ -107,13 +106,9 @@ function overlayRotationDegrees(textOverlayElement) {
 }
 
 /**
- * The `.text-overlay` elements a range covers, in reading order.
- *
- * Overlays are laid out in document order and a range is contiguous, so the
- * scan stops at the first overlay starting past the range's end. Touching
- * boundaries are excluded: a range ending where the next word begins covers no
- * part of it, and washing that word would read as a highlight running one word
- * long.
+ * The `.text-overlay` elements a range covers, in reading order. A range
+ * ending where the next word begins covers none of it: washing that word would
+ * read as a highlight running one word long.
  *
  * Returns [] when the range is not inside an OCR overlay, or when it reaches
  * past the container the scan can see.
@@ -136,18 +131,10 @@ export function overlayElementsInRange(range) {
     return [];
   }
 
-  const probe = ocrContainer.ownerDocument.createRange();
-  const covered = [];
-  for (const overlay of ocrContainer.querySelectorAll(".text-overlay")) {
-    probe.selectNodeContents(overlay);
-    if (range.compareBoundaryPoints(Range.START_TO_END, probe) <= 0) {
-      break;
-    }
-    if (range.compareBoundaryPoints(Range.END_TO_START, probe) < 0) {
-      covered.push(overlay);
-    }
-  }
-
+  const covered = elementsCoveredByRange(
+    range,
+    ocrContainer.querySelectorAll(".text-overlay")
+  );
   return covered.length > 0 ? covered : [startOverlay];
 }
 
@@ -226,21 +213,12 @@ export function textRunsAlongBoxHeight(element, boxRect) {
 }
 
 function quarterTurn(rect) {
-  const left = rect.left + rect.width / 2 - rect.height / 2;
-  const top = rect.top + rect.height / 2 - rect.width / 2;
-  // The swapped box stands in for the authored one, so it has to carry the same
-  // eight fields: a caller reading `right` off a four-field rect writes NaN into
-  // the position it computes, and the browser drops the declaration.
-  return {
-    left,
-    top,
-    right: left + rect.height,
-    bottom: top + rect.width,
-    width: rect.height,
-    height: rect.width,
-    x: left,
-    y: top,
-  };
+  return rectAt(
+    rect.left + rect.width / 2 - rect.height / 2,
+    rect.top + rect.height / 2 - rect.width / 2,
+    rect.height,
+    rect.width
+  );
 }
 
 function uprightAngle(rotationAngle) {
