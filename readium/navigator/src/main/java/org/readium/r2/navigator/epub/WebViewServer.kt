@@ -162,12 +162,12 @@ internal class WebViewServer(
      * everything twice and to keep peak memory flat (see the BufferingResource note in
      * [buildResource]).
      */
-    internal suspend fun prewarm(href: Url, css: ReadiumCss) {
+    internal suspend fun prewarm(href: Url, css: ReadiumCss, pageBox: PixelSize) {
         val pageUrl = href.removeFragment()
         val pageLink = publication.linkWithHref(pageUrl)?.copy(href = Href(pageUrl)) ?: return
 
         if (pageLink.mediaType?.isHtml != true) {
-            prewarmResource(pageUrl, pageLink, css)
+            prewarmResource(pageUrl, pageLink, css, pageBox)
             return
         }
 
@@ -190,16 +190,16 @@ internal class WebViewServer(
             val assetUrl = Url(ref)?.let { pageUrl.resolve(it) }?.removeFragment() ?: continue
             val assetLink = publication.linkWithHref(assetUrl)?.copy(href = Href(assetUrl))
                 ?: continue // Not a publication resource (absolute/external URL) — skip.
-            prewarmResource(assetUrl, assetLink, css)
+            prewarmResource(assetUrl, assetLink, css, pageBox)
         }
     }
 
-    private suspend fun prewarmResource(url: Url, link: Link, css: ReadiumCss) {
+    private suspend fun prewarmResource(url: Url, link: Link, css: ReadiumCss, pageBox: PixelSize) {
         // HTML is built per-request; only non-HTML resources are cacheable.
         if (link.mediaType?.isHtml == true) return
         // Same key and build recipe as servePublicationResource, so the WebView's request hits
         // this exact entry.
-        val resource = cachedResource(url) { buildResource(link, url, css).synchronized() }
+        val resource = cachedResource(url) { buildResource(link, url, css, pageBox).synchronized() }
         // Warm one BufferingResource window; result is intentionally discarded.
         resource.borrow().use { it.read(0 until PREWARM_READ_BYTES) }
     }
@@ -259,7 +259,11 @@ internal class WebViewServer(
      * [publicationBaseHref] serves the publication resources through its fetcher.
      * https://readium/assets/ serves the application assets.
      */
-    fun shouldInterceptRequest(request: WebResourceRequest, css: ReadiumCss): WebResourceResponse? {
+    fun shouldInterceptRequest(
+        request: WebResourceRequest,
+        css: ReadiumCss,
+        pageBox: PixelSize,
+    ): WebResourceResponse? {
         if (request.url.host != "readium") return null
         val path = request.url.path ?: return null
 
@@ -271,7 +275,8 @@ internal class WebViewServer(
                 servePublicationResource(
                     href = href,
                     range = HttpHeaders(request.requestHeaders).range,
-                    css = css
+                    css = css,
+                    pageBox = pageBox
                 )
             }
             path.startsWith("/assets/") && isServedAsset(path.removePrefix("/assets/")) -> {
@@ -287,7 +292,12 @@ internal class WebViewServer(
      *
      * If the [Resource] is an HTML document, injects the required JavaScript and CSS files.
      */
-    private fun servePublicationResource(href: Url, range: HttpRange?, css: ReadiumCss): WebResourceResponse {
+    private fun servePublicationResource(
+        href: Url,
+        range: HttpRange?,
+        css: ReadiumCss,
+        pageBox: PixelSize,
+    ): WebResourceResponse {
         val link = publication.linkWithHref(href)
             // Query parameters must be kept as they might be relevant for the fetcher.
             ?.copy(href = Href(href))
@@ -299,9 +309,9 @@ internal class WebViewServer(
 
         val resource = if (isHtml) {
             // HTML injects request-scoped ReadiumCss; can't cache across requests.
-            buildResource(link, urlWithoutAnchor, css)
+            buildResource(link, urlWithoutAnchor, css, pageBox)
         } else {
-            cachedResource(urlWithoutAnchor) { buildResource(link, urlWithoutAnchor, css).synchronized() }
+            cachedResource(urlWithoutAnchor) { buildResource(link, urlWithoutAnchor, css, pageBox).synchronized() }
         }
 
         // For cached (non-HTML) resources, serve through a borrowed view: WebView closes
@@ -313,10 +323,10 @@ internal class WebViewServer(
         val headers = mutableMapOf("Accept-Ranges" to "bytes")
         if (!isHtml) headers["Cache-Control"] = "max-age=86400, immutable"
 
-        // originalLength describes the RAW (pre-injection) bytes. For HTML the served
-        // stream is the injected document (longer), so only trust originalLength for
-        // non-HTML resources; otherwise fall back to the served stream's own length.
-        val knownLength: Long? = if (isHtml) null else link.properties.encryption?.originalLength
+        // originalLength describes the RAW bytes. Injected HTML and downscaled JPEGs serve
+        // other bytes, so they fall back to the served stream's own length.
+        val knownLength: Long? =
+            if (isHtml || link.isJpeg) null else link.properties.encryption?.originalLength
 
         return if (range == null) {
             val body = if (isHtml) {
@@ -348,7 +358,7 @@ internal class WebViewServer(
         }
     }
 
-    private fun buildResource(link: Link, url: Url, css: ReadiumCss): Resource {
+    private fun buildResource(link: Link, url: Url, css: ReadiumCss, pageBox: PixelSize): Resource {
         val handedOver = if (link.mediaType?.isHtml == true) rawHtml.take(url) else null
         var resource = handedOver?.let { InMemoryResource(it) }
             ?: publication
@@ -363,6 +373,10 @@ internal class WebViewServer(
                 onResourceLoadFailed(url, error)
                 errorResource()
             }
+
+        if (link.isJpeg) {
+            return DownscaledJpegResource(resource, pageBox)
+        }
 
         val mediaType = link.mediaType
         when {
@@ -402,6 +416,9 @@ internal class WebViewServer(
         responseHeaders = responseHeaders?.toMutableMap() ?: mutableMapOf()
         responseHeaders["Access-Control-Allow-Origin"] = "*"
     }
+
+    private val Link.isJpeg: Boolean
+        get() = mediaType?.matches(MediaType.JPEG) == true
 
     private fun errorResource(): Resource =
         StringResource {

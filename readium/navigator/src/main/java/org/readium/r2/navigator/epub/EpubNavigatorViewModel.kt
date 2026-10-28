@@ -269,7 +269,13 @@ internal class EpubNavigatorViewModel(
     }
 
     fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
-        server.shouldInterceptRequest(request, css.value)
+        server.shouldInterceptRequest(request, css.value, pageBox())
+
+    private fun pageBox(): PixelSize =
+        pageBox(
+            display = displaySize(getApplication()),
+            isSpread = layout == EpubLayout.FIXED && settings.value.spread == Spread.ALWAYS
+        )
 
     /** The page box declared by the fixed-layout resource at [href]. */
     internal suspend fun fixedLayoutViewport(href: AbsoluteUrl): FixedLayoutViewport? {
@@ -284,7 +290,7 @@ internal class EpubNavigatorViewModel(
      */
     fun prewarmResources(hrefs: List<Url>) {
         viewModelScope.launch(Dispatchers.IO) {
-            hrefs.forEach { server.prewarm(it, css.value) }
+            hrefs.forEach { server.prewarm(it, css.value, pageBox()) }
         }
     }
 
