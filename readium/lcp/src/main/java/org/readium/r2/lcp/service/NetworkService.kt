@@ -12,12 +12,16 @@ package org.readium.r2.lcp.service
 import android.net.Uri
 import java.io.File
 import java.io.IOException
+import java.net.UnknownHostException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.round
 import kotlin.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -108,7 +112,7 @@ internal class NetworkService {
                     }
                 }
             } catch (e: Exception) {
-                Timber.e(e)
+                e.reportNetworkFailure(describeLcpCall(method, url))
                 Try.failure(NetworkException(status = null, cause = e))
             }
         }
@@ -188,11 +192,63 @@ internal class NetworkService {
         } catch (e: LcpException) {
             throw e
         } catch (e: Exception) {
-            Timber.e(e)
+            e.reportNetworkFailure("publication download from ${request.url.host}")
             throw LcpException(LcpError.Network(e))
         }
     }
 }
+
+/**
+ * RallyReader fork patch: every caller classifies a failed call itself, so name resolution (the
+ * device is offline) is a warning with no throwable, since the reading app's Timber tree forwards
+ * any throwable at warning or above to crash reporting. Any other failure stays an error.
+ *
+ * [call] names the method, kind and host only: LCP URLs carry licence and device ids and the
+ * device name.
+ */
+internal fun Throwable.reportNetworkFailure(call: String) {
+    if (isOfflineLike()) {
+        Timber.w(
+            "LCP $call failed, the device could not resolve the host (${javaClass.name}: $message)"
+        )
+    } else {
+        Timber.e(this, "LCP $call failed")
+    }
+}
+
+internal fun describeLcpCall(method: NetworkService.Method, url: String): String {
+    val httpUrl = url.toHttpUrlOrNull() ?: return "${method.value} call to an unparsable URL"
+    return "${method.value} ${httpUrl.lcpCallKind()} call to ${httpUrl.host}"
+}
+
+private fun HttpUrl.lcpCallKind(): String {
+    val segments = pathSegments.map { it.lowercase(Locale.ROOT) }
+    return segments.lastOrNull { it in LSD_INTERACTIONS }
+        ?: if (segments.lastOrNull().orEmpty().endsWith(".crl")) "crl" else "license"
+}
+
+private val LSD_INTERACTIONS = setOf("status", "register", "renew", "return")
+
+internal fun Throwable.isOfflineLike(): Boolean = when {
+    this is UnknownHostException -> true
+    message.isOfflineLikeMessage() -> true
+    else -> cause?.isOfflineLike() == true
+}
+
+// The wording differs by API level, and the underlying failure often arrives as an
+// android.system.GaiException this module cannot reference directly, so match the message too.
+private fun String?.isOfflineLikeMessage(): Boolean {
+    if (isNullOrBlank()) return false
+    val normalizedMessage = lowercase(Locale.ROOT)
+    return OFFLINE_MESSAGE_PATTERNS.any { pattern -> normalizedMessage.contains(pattern) }
+}
+
+private val OFFLINE_MESSAGE_PATTERNS = listOf(
+    "unable to resolve host",
+    "no address associated with hostname",
+    "eai_nodata",
+    "eai_noname"
+)
 
 /**
  * Fails the download before a single byte is written when the volume cannot hold the publication.
