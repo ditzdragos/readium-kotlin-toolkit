@@ -89,6 +89,7 @@ import org.readium.r2.navigator.pager.R2ViewPager
 import org.readium.r2.navigator.preferences.Configurable
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.navigator.util.ReadiumTrace
 import org.readium.r2.navigator.util.createFragmentFactory
 import org.readium.r2.navigator.util.isChromeBook
 import org.readium.r2.shared.DelicateReadiumApi
@@ -562,6 +563,7 @@ public class EpubNavigatorFragment public constructor(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        locationGate = LocationNotificationGate(viewLifecycleOwner.lifecycleScope) { notifyCurrentLocation() }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -938,7 +940,8 @@ public class EpubNavigatorFragment public constructor(
         }
 
         override fun onProgressionChanged() {
-            notifyCurrentLocation()
+            val gate = locationGate ?: return notifyCurrentLocation()
+            gate.onChange(currentLocationKey())
         }
 
         override fun goToPreviousResource(jump: Boolean, animated: Boolean): Boolean {
@@ -1333,6 +1336,7 @@ public class EpubNavigatorFragment public constructor(
      * debounce the notification.
      */
     private var debounceLocationNotificationJob: Job? = null
+    private var locationGate: LocationNotificationGate? = null
 
     /**
      * Mapping between reading order hrefs and the table of contents title.
@@ -1366,52 +1370,57 @@ public class EpubNavigatorFragment public constructor(
 
         debounceLocationNotificationJob?.cancel()
         debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch {
-            Timber.d("notifyCurrentLocation: ${currentReflowablePageFragment?.isLoaded?.value} $state")
-            // We don't want to notify the current location if the navigator is still loading a
-            // locator, to avoid notifying intermediate locations.
-            if (state != State.Ready) {
-                return@launch
-            }
-
-            when (val pageResource = adapter.getResource(resourcePager.currentItem)) {
-                is PageResource.EpubFxl -> {
-                    // Handle dual-page layout
-                    val leftLocator = pageResource.leftLink?.let { link ->
-                        createLocatorForLink(link, 0.0)
-                    }
-                    val rightLocator = pageResource.rightLink?.let { link ->
-                        createLocatorForLink(link, 0.0)
-                    }
-
-                    _currentLocators.value = Pair(leftLocator, rightLocator)
-                    // For backward compatibility, use the left locator as the primary one
-                    _currentLocator.value = leftLocator ?: rightLocator ?: _currentLocator.value
+            ReadiumTrace.section(ReadiumTrace.NOTIFY_LOCATION) {
+                Timber.d("notifyCurrentLocation: ${currentReflowablePageFragment?.isLoaded?.value} $state")
+                // We don't want to notify the current location if the navigator is still loading a
+                // locator, to avoid notifying intermediate locations.
+                if (state != State.Ready) {
+                    return@section
                 }
 
-                is PageResource.EpubReflowable -> {
-                    // Handle single-page layout
-                    val reflowableWebView = currentReflowablePageFragment?.webView
-                    val progression = reflowableWebView?.run {
-                        updateCurrentItem()
-                        progression.coerceIn(0.0, 1.0)
-                    } ?: 0.0
+                when (val pageResource = adapter.getResource(resourcePager.currentItem)) {
+                    is PageResource.EpubFxl -> {
+                        // Handle dual-page layout
+                        val leftLocator = pageResource.leftLink?.let { link ->
+                            createLocatorForLink(link, 0.0)
+                        }
+                        val rightLocator = pageResource.rightLink?.let { link ->
+                            createLocatorForLink(link, 0.0)
+                        }
 
-                    val locator = createLocatorForLink(pageResource.link, progression)
-                    _currentLocators.value = Pair(locator, null)
-                    _currentLocator.value = locator
+                        _currentLocators.value = Pair(leftLocator, rightLocator)
+                        // For backward compatibility, use the left locator as the primary one
+                        _currentLocator.value = leftLocator ?: rightLocator ?: _currentLocator.value
+                    }
+
+                    is PageResource.EpubReflowable -> {
+                        // Handle single-page layout
+                        val reflowableWebView = currentReflowablePageFragment?.webView
+                        val progression = reflowableWebView?.run {
+                            updateCurrentItem()
+                            progression.coerceIn(0.0, 1.0)
+                        } ?: 0.0
+
+                        val locator = createLocatorForLink(pageResource.link, progression)
+                        _currentLocators.value = Pair(locator, null)
+                        _currentLocator.value = locator
+                    }
+
+                    else -> throw IllegalStateException("Expected EpubFxl or EpubReflowable page resources")
                 }
 
-                else -> throw IllegalStateException("Expected EpubFxl or EpubReflowable page resources")
-            }
-
-            // Notify pagination listeners
-            currentReflowablePageFragment?.webView?.let {
-                paginationListener?.onPageChanged(
-                    pageIndex = it.mCurItem, totalPages = it.numPages, locator = _currentLocator.value
-                )
+                // Notify pagination listeners
+                currentReflowablePageFragment?.webView?.let {
+                    paginationListener?.onPageChanged(
+                        pageIndex = it.mCurItem, totalPages = it.numPages, locator = _currentLocator.value
+                    )
+                }
             }
         }
     }
+
+    private fun currentLocationKey(): Pair<Int, Int?> =
+        resourcePager.currentItem to currentReflowablePageFragment?.webView?.pageIndexAtScroll()
 
     private fun createLocatorForLink(link: Link, progression: Double): Locator {
         val positionLocator = publication.positionsByResource[link.url()]?.let { positions ->
@@ -1613,6 +1622,8 @@ public class EpubNavigatorFragment public constructor(
     }
 
     override fun onDestroyView() {
+        locationGate?.cancel()
+        locationGate = null
         super.onDestroyView()
         cleanupResources()
         _binding = null
