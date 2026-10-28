@@ -6,6 +6,7 @@
 
 import { resetViewportRatioCache, toNativeRect } from "./rect";
 import { overlayElement } from "./ocrOverlay.mjs";
+import { continuesJoinedWord } from "./letteringRuns.mjs";
 import {
   scrollPageLeft,
   scrollPageRight,
@@ -1241,7 +1242,11 @@ export function calculateHorizontalPageRanges() {
     // log("process node <" + node.textContent + ">");
 
     // Use tracked lastRangeKey instead of Object.keys() for better performance
-    if (node.nodeName === "p" && lastRangeKey !== null) {
+    if (
+      node.nodeName === "p" &&
+      lastRangeKey !== null &&
+      !continuesJoinedWord(node)
+    ) {
       const lastItem = rangeData[lastRangeKey];
       if (lastItem && !/\s$/.test(lastItem)) {
         if (DEBUG_MODE) log(`appending new line before paragraph`);
