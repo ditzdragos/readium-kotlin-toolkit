@@ -16,7 +16,19 @@ const TOUCHING_GAP_PER_HEIGHT = 0.12;
 // line sits at least most of a box height lower, even when tight leading makes the boxes overlap.
 const SAME_LINE_DRIFT_PER_HEIGHT = 0.5;
 
+const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+const wordContinuations = new WeakSet();
+
+/**
+ * Whether [element] is a glyph joined onto the word before it, so a reader of the page that
+ * separates blocks must not separate it.
+ */
+export function continuesJoinedWord(element) {
+  return wordContinuations.has(element);
+}
 
 function isBlank(text) {
   return !/\S/.test(text);
@@ -26,8 +38,28 @@ function isWhitespaceNode(node) {
   return node.nodeType === TEXT_NODE && isBlank(node.nodeValue || "");
 }
 
-function isTextElement(node) {
-  return (node.localName || "").toLowerCase() === "text";
+function isSvgElement(node, localName) {
+  return (
+    node.nodeType === ELEMENT_NODE &&
+    node.namespaceURI === SVG_NAMESPACE &&
+    (node.localName || "").toLowerCase() === localName
+  );
+}
+
+function isSvgGlyph(node) {
+  return isSvgElement(node, "text");
+}
+
+function isHtmlGlyph(node) {
+  return (
+    node.nodeType === ELEMENT_NODE &&
+    node.namespaceURI !== SVG_NAMESPACE &&
+    Array.prototype.every.call(
+      node.childNodes,
+      (child) => child.nodeType === TEXT_NODE
+    ) &&
+    /^\s*\S+\s*$/.test(node.textContent || "")
+  );
 }
 
 function boxHeight(a, b) {
@@ -43,7 +75,7 @@ function followsOnSameLine(a, b) {
 
 /**
  * Whether [current] carries on the word [previous] ends: it starts on the same line, right where
- * [previous] stops. Each is a `{ text, rect }` of one SVG <text> element.
+ * [previous] stops. Each is a `{ text, rect }` of one glyph element.
  */
 export function continuesWord(previous, current) {
   if (isBlank(previous.text) || isBlank(current.text)) {
@@ -178,53 +210,79 @@ export function svgLineBoxes(range) {
 }
 
 /**
- * Lettering set along a curve is drawn one glyph per SVG <text> element, each placed by its own
- * transform (RR-6148). The publisher's indentation leaves a newline between every pair, so the
- * page's text reads "R\nu\nm\nb\nl\ne" and each letter becomes a word. Whitespace outside a
- * <text> is never drawn, so it can be removed between glyphs that touch, and kept (or added)
- * where a new word or line starts, without changing the page.
+ * Pairs each glyph element with the glyph element before it, collecting the whitespace between.
+ * An SVG <g> only groups glyphs, so a run carries on into and out of it ("C" beside a <g> holding
+ * "REEAAK"); any other element or text ends the run. HTML glyphs pair only across whitespace:
+ * blocks written back to back already read as one word.
  */
-export function joinSvgTextRuns(document) {
-  const runs = [];
-  const containers = new Set();
-  const texts = document.body.querySelectorAll("svg text");
-  for (let i = 0; i < texts.length; i++) {
-    if (texts[i].parentNode) {
-      containers.add(texts[i].parentNode);
+function collectRuns(parent, state, runs) {
+  const children = parent.childNodes;
+  for (let i = 0; i < children.length; i++) {
+    const node = children[i];
+    if (isWhitespaceNode(node)) {
+      state.between.push(node);
+      continue;
+    }
+    if (isSvgGlyph(node) || isHtmlGlyph(node)) {
+      const previous = state.previous;
+      if (
+        previous &&
+        isSvgGlyph(previous) === isSvgGlyph(node) &&
+        (isSvgGlyph(node) || state.between.length > 0)
+      ) {
+        runs.push({ previous, current: node, between: state.between });
+      }
+      state.previous = node;
+      state.between = [];
+      continue;
+    }
+    if (isSvgElement(node, "g")) {
+      collectRuns(node, state, runs);
+      continue;
+    }
+    state.previous = null;
+    state.between = [];
+    if (node.nodeType === ELEMENT_NODE) {
+      collectRuns(node, { previous: null, between: [] }, runs);
     }
   }
+}
 
-  for (const container of containers) {
-    let previous = null;
-    let between = [];
-    const children = container.childNodes;
-    for (let i = 0; i < children.length; i++) {
-      const node = children[i];
-      if (isWhitespaceNode(node)) {
-        between.push(node);
-        continue;
-      }
-      if (isTextElement(node)) {
-        if (previous) {
-          runs.push({ previous, current: node, between });
-        }
-        previous = node;
-      } else {
-        previous = null;
-      }
-      between = [];
-    }
-  }
-  if (runs.length === 0) {
+/**
+ * Lettering set along a curve is drawn one glyph per element, each placed by its own transform
+ * (RR-6148): an SVG <text> per glyph, or an HTML block per glyph or two (`<p>ju</p><p>m</p>
+ * <p>p</p>`). The publisher's indentation leaves a newline between every pair, so the page's text
+ * reads "R\nu\nm\nb\nl\ne" and each letter becomes a word. Whitespace outside an SVG <text> or
+ * between two blocks is never drawn, so it can be removed between glyphs that touch, and kept (or
+ * added) where a new word or line starts, without changing the page. Whitespace between inline
+ * boxes is drawn, so inline glyphs never join.
+ */
+export function joinLetteringRuns(document) {
+  const candidates = [];
+  collectRuns(document.body, { previous: null, between: [] }, candidates);
+  if (candidates.length === 0) {
     return;
   }
+
+  const blockLevel = new Map();
+  const isBlockLevel = (element) => {
+    if (!blockLevel.has(element)) {
+      const display = document.defaultView.getComputedStyle(element).display;
+      blockLevel.set(element, !/^(inline|none|contents)/.test(display));
+    }
+    return blockLevel.get(element);
+  };
+  const runs = candidates.filter(
+    ({ previous, current }) =>
+      isSvgGlyph(current) || (isBlockLevel(previous) && isBlockLevel(current))
+  );
 
   const measured = new Map();
   const measure = (element) => {
     if (!measured.has(element)) {
       measured.set(element, {
         text: element.textContent || "",
-        rect: element.getBoundingClientRect(),
+        rect: glyphRect(document, element),
       });
     }
     return measured.get(element);
@@ -237,6 +295,7 @@ export function joinSvgTextRuns(document) {
     const { previous, current, between } = runs[i];
     if (joins[i]) {
       between.forEach((node) => node.parentNode.removeChild(node));
+      wordContinuations.add(current);
     } else if (
       between.length === 0 &&
       startsNewLine(measure(previous), measure(current))
@@ -244,4 +303,13 @@ export function joinSvgTextRuns(document) {
       current.parentNode.insertBefore(document.createTextNode("\n"), current);
     }
   }
+}
+
+function glyphRect(document, element) {
+  if (isSvgGlyph(element)) {
+    return element.getBoundingClientRect();
+  }
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  return range.getBoundingClientRect();
 }
