@@ -17,7 +17,7 @@ import {
   rangeFromLocator,
 } from "./utils";
 import { processSpansForTextSpacing } from "./spanTextSpacing.mjs";
-import { joinSvgTextRuns } from "./svgTextRuns.mjs";
+import { joinSvgTextRuns, svgGlyphBoxes } from "./svgTextRuns.mjs";
 import {
   isDrawnOutOfTextOrder,
   isExplicitPageBreak,
@@ -433,6 +433,21 @@ function lineOrBoxRects(range, layout, doNotMergeHorizontallyAlignedRects) {
 }
 
 /**
+ * A line decoration on lettering drawn one glyph per SVG <text> element follows the glyphs'
+ * own turn: their upright client rects step along a curve and would split one word into
+ * several lines (RR-9333).
+ */
+function svgGlyphPlacements(range, style) {
+  if (style.layout !== "lines" || style.width !== "wrap") {
+    return [];
+  }
+  return svgGlyphBoxes(range).map((box) => ({
+    rect: box.rect,
+    overlayBox: box,
+  }));
+}
+
+/**
  * Creates a DecorationGroup object from a unique HTML ID and its name.
  */
 export function DecorationGroup(groupId, groupName) {
@@ -782,6 +797,8 @@ export function DecorationGroup(groupId, groupName) {
         item.range,
         getOCRCorrectedRectForOverlay
       );
+      const glyphPlacements =
+        overlayBoxes.length > 0 ? [] : svgGlyphPlacements(item.range, style);
       // Only `wrap` takes its geometry from the box it decorates; the other
       // widths span the viewport or the bounding box, so they stay on one
       // element per client rect.
@@ -791,6 +808,8 @@ export function DecorationGroup(groupId, groupName) {
               rect: overlayBox.rect,
               overlayBox,
             }))
+          : glyphPlacements.length > 0
+          ? glyphPlacements
           : clientRects.map((clientRect) => ({
               rect: clientRect,
               overlayBox: overlayBoxes[0],
@@ -1045,12 +1064,17 @@ export function DecorationGroup(groupId, groupName) {
         // Only `wrap` takes its geometry from the box it decorates; the other
         // widths span the viewport or the bounding box, so they stay on one
         // element per client rect — one per word would stack identical bands.
+        const glyphPlacements = ocrLayout
+          ? []
+          : svgGlyphPlacements(item.range, style);
         const placements =
           ocrLayout && style.width === "wrap"
             ? overlayBoxes.map((overlayBox) => ({
                 rect: overlayBox.rect,
                 overlayBox,
               }))
+            : glyphPlacements.length > 0
+            ? glyphPlacements
             : lineOrBoxRects(item.range, style.layout, true)
                 .sort((rectA, rectB) => rectA.top - rectB.top)
                 .map((clientRect) => ({
