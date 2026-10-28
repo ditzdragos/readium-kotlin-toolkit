@@ -8,15 +8,9 @@ import {
   rotationDegreesFromTransform,
   textRunsAlongBoxHeight,
 } from "../src/ocrOverlay.mjs";
+import { boundaries } from "./support/fakeRange.mjs";
 
 globalThis.Node = { ELEMENT_NODE: 1, TEXT_NODE: 3 };
-
-globalThis.Range = {
-  START_TO_START: 0,
-  START_TO_END: 1,
-  END_TO_END: 2,
-  END_TO_START: 3,
-};
 
 globalThis.DOMMatrixReadOnly = class {
   constructor(transform) {
@@ -98,27 +92,6 @@ function element({
     return null;
   };
   return el;
-}
-
-/**
- * A pair of boundary points on one document-order axis, comparable the way the
- * DOM compares two ranges.
- */
-function boundaries(start, end) {
-  return {
-    start,
-    end,
-    selectNodeContents(element) {
-      this.start = element.start;
-      this.end = element.end;
-    },
-    compareBoundaryPoints(how, other) {
-      const mine = how === Range.END_TO_START ? this.start : this.end;
-      const theirs = how === Range.END_TO_START ? other.end : other.start;
-      if (mine === theirs) return 0;
-      return mine < theirs ? -1 : 1;
-    },
-  };
 }
 
 function rangeInside(parent) {

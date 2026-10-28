@@ -17,7 +17,7 @@ import {
   rangeFromLocator,
 } from "./utils";
 import { processSpansForTextSpacing } from "./spanTextSpacing.mjs";
-import { joinSvgTextRuns } from "./svgTextRuns.mjs";
+import { joinSvgTextRuns, svgLineBoxes } from "./svgTextRuns.mjs";
 import {
   isDrawnOutOfTextOrder,
   isExplicitPageBreak,
@@ -28,6 +28,8 @@ import {
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
 import { isUnfilledDuplicateLayer } from "./duplicateLayer.mjs";
 import { mergeIntoLines } from "./rangeRects.mjs";
+import { containingElement } from "./rangeCoverage.mjs";
+import { decorationPlacements } from "./decorationPlacements.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
   ChangeQueue,
@@ -172,13 +174,6 @@ function viewportSignature() {
     visual ? Math.round(visual.width) : -1,
     visual ? Math.round(visual.height) : -1,
   ].join("x");
-}
-
-/**
- * Returns the closest element ancestor of the given node.
- */
-function getContainingElement(node) {
-  return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
 }
 
 /**
@@ -649,7 +644,7 @@ export function DecorationGroup(groupId, groupName) {
       rect,
       boundingRect,
       writingMode,
-      overlayBox
+      turnedBox
     ) {
       element.style.position = "absolute";
       const isVerticalRL = writingMode === "vertical-rl";
@@ -707,7 +702,7 @@ export function DecorationGroup(groupId, groupName) {
         }
       } else {
         if (style.width === "wrap") {
-          const box = overlayBox?.rect ?? rect;
+          const box = turnedBox?.rect ?? rect;
           element.style.width = `${box.width}px`;
           element.style.height = `${box.height}px`;
           element.style.left = `${box.left + xOffset}px`;
@@ -732,8 +727,8 @@ export function DecorationGroup(groupId, groupName) {
         }
       }
 
-      if (overlayBox?.rotationAngle !== undefined) {
-        return rotateElement(element, overlayBox.rotationAngle);
+      if (turnedBox?.rotationAngle !== undefined) {
+        return rotateElement(element, turnedBox.rotationAngle);
       }
 
       return element;
@@ -759,42 +754,32 @@ export function DecorationGroup(groupId, groupName) {
       const doNotMergeHorizontallyAlignedRects =
         !documentWritingMode.startsWith("vertical");
       const startElement =
-        getContainingElement(item.range.startContainer) || document.body;
+        containingElement(item.range.startContainer) || document.body;
       // Decorated text may have a different writingMode from document body
       const decoratorWritingMode = getComputedStyle(startElement).writingMode;
 
-      const clientRects = lineOrBoxRects(
-        item.range,
-        style.layout,
-        doNotMergeHorizontallyAlignedRects
-      ).sort((r1, r2) => {
-        if (r1.top !== r2.top) return r1.top - r2.top;
-        if (decoratorWritingMode === "vertical-rl") {
-          return r2.left - r1.left;
-        } else if (decoratorWritingMode === "vertical-lr") {
-          return r1.left - r2.left;
-        } else {
-          return r1.left - r2.left;
-        }
+      const placements = decorationPlacements(style, {
+        overlayBoxes: ocrOverlayBoxes(
+          item.range,
+          getOCRCorrectedRectForOverlay
+        ),
+        svgLineBoxes: () => svgLineBoxes(item.range),
+        clientRects: () =>
+          lineOrBoxRects(
+            item.range,
+            style.layout,
+            doNotMergeHorizontallyAlignedRects
+          ).sort((r1, r2) => {
+            if (r1.top !== r2.top) return r1.top - r2.top;
+            if (decoratorWritingMode === "vertical-rl") {
+              return r2.left - r1.left;
+            } else if (decoratorWritingMode === "vertical-lr") {
+              return r1.left - r2.left;
+            } else {
+              return r1.left - r2.left;
+            }
+          }),
       });
-
-      const overlayBoxes = ocrOverlayBoxes(
-        item.range,
-        getOCRCorrectedRectForOverlay
-      );
-      // Only `wrap` takes its geometry from the box it decorates; the other
-      // widths span the viewport or the bounding box, so they stay on one
-      // element per client rect.
-      const placements =
-        overlayBoxes.length > 0 && style.width === "wrap"
-          ? overlayBoxes.map((overlayBox) => ({
-              rect: overlayBox.rect,
-              overlayBox,
-            }))
-          : clientRects.map((clientRect) => ({
-              rect: clientRect,
-              overlayBox: overlayBoxes[0],
-            }));
 
       for (const placement of placements) {
         const line = elementTemplate.cloneNode(true);
@@ -806,7 +791,7 @@ export function DecorationGroup(groupId, groupName) {
             placement.rect,
             boundingRect,
             documentWritingMode,
-            placement.overlayBox
+            placement.turnedBox
           )
         );
       }
@@ -991,12 +976,12 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    function positionElement(element, rect, elementBoundingRect, overlayBox) {
-      element.style.position = overlayBox ? "fixed" : "absolute";
+    function positionElement(element, rect, elementBoundingRect, turnedBox) {
+      element.style.position = turnedBox ? "fixed" : "absolute";
       const width = style.width;
 
-      const leftPos = overlayBox ? overlayBox.rect.left : rect.left;
-      const topPos = overlayBox ? overlayBox.rect.top : rect.top;
+      const leftPos = turnedBox ? turnedBox.rect.left : rect.left;
+      const topPos = turnedBox ? turnedBox.rect.top : rect.top;
       // `.visible-area` sets `contain: layout`, which makes it the containing block for
       // fixed-position descendants too, so an overlay is placed relative to its own page
       // rather than the viewport. Both branches therefore have to turn the viewport rect
@@ -1006,9 +991,9 @@ export function DecorationGroup(groupId, groupName) {
       const finalYOffset = yOffset;
 
       if (width === "wrap") {
-        if (overlayBox) {
-          element.style.width = `${overlayBox.rect.width}px`;
-          element.style.height = `${overlayBox.rect.height}px`;
+        if (turnedBox) {
+          element.style.width = `${turnedBox.rect.width}px`;
+          element.style.height = `${turnedBox.rect.height}px`;
         } else {
           element.style.width = `${rect.width}px`;
           element.style.height = `${rect.height}px`;
@@ -1033,8 +1018,8 @@ export function DecorationGroup(groupId, groupName) {
         element.style.top = `${topPos + finalYOffset}px`;
       }
 
-      if (overlayBox?.rotationAngle !== undefined) {
-        return rotateElement(element, overlayBox.rotationAngle);
+      if (turnedBox?.rotationAngle !== undefined) {
+        return rotateElement(element, turnedBox.rotationAngle);
       }
 
       return element;
@@ -1042,21 +1027,14 @@ export function DecorationGroup(groupId, groupName) {
 
     try {
       if (style.layout === "boxes" || style.layout === "lines") {
-        // Only `wrap` takes its geometry from the box it decorates; the other
-        // widths span the viewport or the bounding box, so they stay on one
-        // element per client rect — one per word would stack identical bands.
-        const placements =
-          ocrLayout && style.width === "wrap"
-            ? overlayBoxes.map((overlayBox) => ({
-                rect: overlayBox.rect,
-                overlayBox,
-              }))
-            : lineOrBoxRects(item.range, style.layout, true)
-                .sort((rectA, rectB) => rectA.top - rectB.top)
-                .map((clientRect) => ({
-                  rect: clientRect,
-                  overlayBox: overlayBoxes[0],
-                }));
+        const placements = decorationPlacements(style, {
+          overlayBoxes,
+          svgLineBoxes: () => svgLineBoxes(item.range),
+          clientRects: () =>
+            lineOrBoxRects(item.range, style.layout, true).sort(
+              (rectA, rectB) => rectA.top - rectB.top
+            ),
+        });
 
         for (const placement of placements) {
           const line = elementTemplate.cloneNode(true);
@@ -1065,7 +1043,7 @@ export function DecorationGroup(groupId, groupName) {
             line,
             placement.rect,
             boundingRect,
-            placement.overlayBox
+            placement.turnedBox
           );
           itemContainer.append(positionedLine);
         }
