@@ -100,8 +100,13 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         fun onPageEnded(end: Boolean) {}
         fun onTap(point: PointF): Boolean = false
         fun onTap(point: PointF, clickCount: Int, isMouse: Boolean): Boolean = onTap(point)
-        fun onTap(point: PointF, clickCount: Int, isMouse: Boolean, resourceUrl: AbsoluteUrl?): Boolean =
-            onTap(point, clickCount, isMouse)
+        fun onTap(
+            point: PointF,
+            clickCount: Int,
+            isMouse: Boolean,
+            selectsText: Boolean,
+            resourceUrl: AbsoluteUrl?,
+        ): Boolean = onTap(point, clickCount, isMouse)
         fun onLongTap(point: PointF): Boolean = false
         fun onDragStart(event: DragEvent): Boolean = false
         fun onDragMove(event: DragEvent): Boolean = false
@@ -362,7 +367,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         }
 
         return runBlocking(uiScope.coroutineContext) {
-            listener?.onTap(event.point, event.clickCount, event.isMouse, resourceUrl) == true
+            listener?.onTap(event.point, event.clickCount, event.isMouse, event.selectsText, resourceUrl) == true
         }
     }
 
@@ -406,6 +411,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         val interactiveElement: String?,
         val clickCount: Int,
         val isMouse: Boolean,
+        val selectsText: Boolean,
     ) {
         companion object {
             fun fromJSONObject(obj: JSONObject?): TapEvent? {
@@ -420,7 +426,8 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
                     targetElement = obj.optString("targetElement"),
                     interactiveElement = obj.optNullableString("interactiveElement"),
                     clickCount = obj.optInt("clickCount", 1).coerceAtLeast(1),
-                    isMouse = obj.optNullableString("pointerType") == "mouse"
+                    isMouse = obj.optNullableString("pointerType") == "mouse",
+                    selectsText = obj.optBoolean("selectsText"),
                 )
             }
 

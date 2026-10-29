@@ -23,7 +23,13 @@ function onClick(event) {
     interactiveElement: nearestInteractiveElement(event.target),
     clickCount: event.detail,
     pointerType: event.pointerType || null,
+    selectsText: event.detail >= 2 && isSelectionUnderPointer(event),
   };
+
+  // A double click on blank space still selects the nearest word.
+  if (event.detail >= 2 && !clickEvent.selectsText) {
+    window.getSelection().removeAllRanges();
+  }
 
   if (handleDecorationClickEvent(event, clickEvent)) {
     return;
@@ -37,6 +43,19 @@ function onClick(event) {
     event.stopPropagation();
     event.preventDefault();
   }
+}
+
+function isSelectionUnderPointer(event) {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    return false;
+  }
+  const x = event.clientX;
+  const y = event.clientY;
+  return Array.from(selection.getRangeAt(0).getClientRects()).some(
+    (rect) =>
+      x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+  );
 }
 
 function bindDragGesture(element) {

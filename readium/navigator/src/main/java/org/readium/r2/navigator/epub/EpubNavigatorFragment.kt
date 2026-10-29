@@ -899,9 +899,15 @@ public class EpubNavigatorFragment public constructor(
         override fun onTap(point: PointF, clickCount: Int, isMouse: Boolean): Boolean =
             inputListener.onTap(TapEvent(point, clickCount, isMouse))
 
-        override fun onTap(point: PointF, clickCount: Int, isMouse: Boolean, resourceUrl: AbsoluteUrl?): Boolean {
+        override fun onTap(
+            point: PointF,
+            clickCount: Int,
+            isMouse: Boolean,
+            selectsText: Boolean,
+            resourceUrl: AbsoluteUrl?,
+        ): Boolean {
             val href = resourceUrl?.let { viewModel.internalLinkFromUrl(it)?.url() }
-            return inputListener.onTap(TapEvent(point, clickCount, isMouse, href))
+            return inputListener.onTap(TapEvent(point, clickCount, isMouse, href, selectsText))
         }
 
         override fun onLongTap(point: PointF): Boolean = inputListener.onLongTap(TapEvent(point))
