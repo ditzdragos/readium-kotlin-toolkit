@@ -99,6 +99,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         fun onPageChanged(pageIndex: Int, totalPages: Int, url: String) {}
         fun onPageEnded(end: Boolean) {}
         fun onTap(point: PointF): Boolean = false
+        fun onTap(point: PointF, clickCount: Int, isMouse: Boolean): Boolean = onTap(point)
+        fun onTap(point: PointF, clickCount: Int, isMouse: Boolean, resourceUrl: AbsoluteUrl?): Boolean =
+            onTap(point, clickCount, isMouse)
         fun onLongTap(point: PointF): Boolean = false
         fun onDragStart(event: DragEvent): Boolean = false
         fun onDragMove(event: DragEvent): Boolean = false
@@ -353,11 +356,14 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
         // We ignore taps on interactive element, unless it's an element we handle ourselves such as
         // pop-up footnotes.
-        if (event.interactiveElement != null) {
+        // A double click selects a word, even inside an interactive element: the app opens its menu.
+        if (event.interactiveElement != null && event.clickCount < 2) {
             return handleFootnote(event.interactiveElement)
         }
 
-        return runBlocking(uiScope.coroutineContext) { listener?.onTap(event.point) == true }
+        return runBlocking(uiScope.coroutineContext) {
+            listener?.onTap(event.point, event.clickCount, event.isMouse, resourceUrl) == true
+        }
     }
 
     /**
@@ -398,6 +404,8 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         val point: PointF,
         val targetElement: String,
         val interactiveElement: String?,
+        val clickCount: Int,
+        val isMouse: Boolean,
     ) {
         companion object {
             fun fromJSONObject(obj: JSONObject?): TapEvent? {
@@ -410,7 +418,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
                     defaultPrevented = obj.optBoolean("defaultPrevented"),
                     point = PointF(x, y),
                     targetElement = obj.optString("targetElement"),
-                    interactiveElement = obj.optNullableString("interactiveElement")
+                    interactiveElement = obj.optNullableString("interactiveElement"),
+                    clickCount = obj.optInt("clickCount", 1).coerceAtLeast(1),
+                    isMouse = obj.optNullableString("pointerType") == "mouse"
                 )
             }
 

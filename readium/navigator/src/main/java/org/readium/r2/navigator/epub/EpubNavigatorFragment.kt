@@ -896,6 +896,14 @@ public class EpubNavigatorFragment public constructor(
 
         override fun onTap(point: PointF): Boolean = inputListener.onTap(TapEvent(point))
 
+        override fun onTap(point: PointF, clickCount: Int, isMouse: Boolean): Boolean =
+            inputListener.onTap(TapEvent(point, clickCount, isMouse))
+
+        override fun onTap(point: PointF, clickCount: Int, isMouse: Boolean, resourceUrl: AbsoluteUrl?): Boolean {
+            val href = resourceUrl?.let { viewModel.internalLinkFromUrl(it)?.url() }
+            return inputListener.onTap(TapEvent(point, clickCount, isMouse, href))
+        }
+
         override fun onLongTap(point: PointF): Boolean = inputListener.onLongTap(TapEvent(point))
 
         override fun onDragStart(event: R2BasicWebView.DragEvent): Boolean = onDrag(DragEvent.Type.Start, event)

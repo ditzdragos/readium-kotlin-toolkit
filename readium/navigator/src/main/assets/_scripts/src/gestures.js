@@ -21,6 +21,8 @@ function onClick(event) {
     y: event.clientY * pixelRatio,
     targetElement: event.target.outerHTML,
     interactiveElement: nearestInteractiveElement(event.target),
+    clickCount: event.detail,
+    pointerType: event.pointerType || null,
   };
 
   if (handleDecorationClickEvent(event, clickEvent)) {
