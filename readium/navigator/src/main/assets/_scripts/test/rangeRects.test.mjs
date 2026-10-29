@@ -165,6 +165,30 @@ describe("mergeIntoLines", () => {
     assert.deepEqual(mergeIntoLines(floated), floated);
   });
 
+  /**
+   * "“Help!" opening chapter 1 of Dinosaurs Before Dark (9780375894183): a
+   * stick-up cap "“H" set inline at 3em with `line-height: 0`, standing on the
+   * baseline of the line it starts and rising above it.
+   */
+  const stickUpCap = rect(20, 59.7, 89.3, 56.6);
+  const help = rect(81.7, 28.7, 119, 18.9);
+
+  it("gives a stick-up cap and the rest of its word one box", () => {
+    const lines = mergeIntoLines([stickUpCap, help]);
+
+    assert.equal(lines.length, 1);
+    assert.equal(round(lines[0].left), 20);
+    assert.equal(round(lines[0].right), 110.4);
+    assert.equal(round(lines[0].top), 89.3);
+    assert.equal(round(lines[0].bottom), 145.9);
+  });
+
+  it("keeps the line after a stick-up cap apart from it", () => {
+    const nextLine = rect(20, 200, 138.2, 18.9);
+
+    assert.equal(mergeIntoLines([stickUpCap, help, nextLine]).length, 2);
+  });
+
   it("keeps one box per line for a word that wraps", () => {
     const wrapped = [rect(300, 40, 100, 32), rect(10, 30, 140, 32)];
 
