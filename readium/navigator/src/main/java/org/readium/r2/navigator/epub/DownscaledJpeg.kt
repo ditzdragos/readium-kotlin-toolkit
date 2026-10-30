@@ -188,7 +188,11 @@ internal class DownscaledJpegResource(
         val head = source.read(0 until HEADER_READ_BYTES).getOrElse { return Try.failure(it) }
         val original = jpegSize(head) ?: return Try.success(source)
         val target = downscaledSize(original, box) ?: return Try.success(source)
-        val bytes = source.read().getOrElse { return Try.failure(it) }
+        val cookie = System.identityHashCode(this)
+        ReadiumTrace.beginAsync(ReadiumTrace.READ_JPEG, cookie)
+        val read = source.read()
+        ReadiumTrace.endAsync(ReadiumTrace.READ_JPEG, cookie)
+        val bytes = read.getOrElse { return Try.failure(it) }
         val downscaled = ReadiumTrace.section(ReadiumTrace.DOWNSCALE_JPEG) {
             downscaleJpeg(bytes, original, target)
         } ?: return Try.success(source)

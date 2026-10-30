@@ -16,6 +16,7 @@ internal object ReadiumTrace {
     const val INJECT_HTML = "readium:injectHtml"
     const val NOTIFY_LOCATION = "readium:notifyLocation"
     const val DOWNSCALE_JPEG = "readium:downscaleJpeg"
+    const val READ_JPEG = "readium:readJpeg"
 
     inline fun <T> section(name: String, block: () -> T): T {
         Trace.beginSection(name)

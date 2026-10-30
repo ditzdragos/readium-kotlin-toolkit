@@ -16,6 +16,8 @@ import androidx.webkit.WebViewAssetLoader
 import java.io.BufferedInputStream
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
 import org.readium.r2.navigator.util.ReadiumTrace
@@ -86,6 +88,10 @@ internal class WebViewServer(
 
         // One BufferingResource window (see buildResource).
         private const val PREWARM_READ_BYTES = 256L * 1024
+
+        // Images a page takes from its stylesheets, such as a background per page; bounds what a
+        // broad rule can pull in.
+        private const val MAX_STYLESHEET_IMAGES = 4
 
         // Asset references in the page HTML: <img src>, <image xlink:href>, <link href>, etc.
         private val assetRefRegex =
@@ -184,14 +190,47 @@ internal class WebViewServer(
             cacheFixedLayoutViewport(pageUrl, html)
         }
 
-        for (match in assetRefRegex.findAll(html)) {
-            val ref = match.groupValues[1]
-            if (ref.startsWith("data:") || ref.startsWith("javascript:")) continue
-            val assetUrl = Url(ref)?.let { pageUrl.resolve(it) }?.removeFragment() ?: continue
-            val assetLink = publication.linkWithHref(assetUrl)?.copy(href = Href(assetUrl))
-                ?: continue // Not a publication resource (absolute/external URL) — skip.
-            prewarmResource(assetUrl, assetLink, css, pageBox)
+        val assets = assetRefRegex.findAll(html)
+            .map { it.groupValues[1] }
+            .filterNot { it.startsWith("data:") || it.startsWith("javascript:") }
+            .mapNotNull { publicationLink(pageUrl, it) }
+            .toList()
+        val images = (
+            inlineUrlRefs(html).mapNotNull { publicationLink(pageUrl, it) } +
+                assets.filter { it.mediaType?.matches(MediaType.CSS) == true }.flatMap { stylesheet ->
+                    val cssUrl = stylesheet.url()
+                    stylesheetText(cssUrl)
+                        ?.let { cssUrlRefsFor(it, html) }
+                        .orEmpty()
+                        .mapNotNull { publicationLink(cssUrl, it) }
+                }
+            )
+            .filter { it.mediaType?.isBitmap == true }
+            .take(MAX_STYLESHEET_IMAGES)
+
+        coroutineScope {
+            (assets + images).distinctBy { it.url() }.forEach { link ->
+                launch { prewarmResource(link.url(), link, css, pageBox) }
+            }
         }
+    }
+
+    /** The publication resource [ref] points to, resolved against [base], or null when outside it. */
+    private fun publicationLink(base: Url, ref: String): Link? {
+        val url = Url(ref)?.let { base.resolve(it) }?.removeFragment() ?: return null
+        return publication.linkWithHref(url)?.copy(href = Href(url))
+    }
+
+    private val stylesheets = mutableMapOf<Url, String?>()
+
+    /** The raw text of the stylesheet at [url], read once per publication. */
+    private suspend fun stylesheetText(url: Url): String? {
+        synchronized(stylesheets) {
+            if (stylesheets.containsKey(url)) return stylesheets[url]
+        }
+        val text = publication.get(url)?.use { it.read().getOrNull() }?.decodeToString()
+        synchronized(stylesheets) { stylesheets[url] = text }
+        return text
     }
 
     private suspend fun prewarmResource(url: Url, link: Link, css: ReadiumCss, pageBox: PixelSize) {

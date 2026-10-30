@@ -301,7 +301,7 @@ internal class EpubNavigatorViewModel(
     fun prewarmResources(hrefs: List<Url>, display: Display?) {
         onDisplay(display)
         viewModelScope.launch(Dispatchers.IO) {
-            hrefs.forEach { server.prewarm(it, css.value, pageBox()) }
+            hrefs.forEach { launch { server.prewarm(it, css.value, pageBox()) } }
         }
     }
 
