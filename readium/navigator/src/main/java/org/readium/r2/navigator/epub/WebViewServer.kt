@@ -195,12 +195,13 @@ internal class WebViewServer(
             .filterNot { it.startsWith("data:") || it.startsWith("javascript:") }
             .mapNotNull { publicationLink(pageUrl, it) }
             .toList()
+        val pageNames = PageNames(html)
         val images = (
             inlineUrlRefs(html).mapNotNull { publicationLink(pageUrl, it) } +
                 assets.filter { it.mediaType?.matches(MediaType.CSS) == true }.flatMap { stylesheet ->
                     val cssUrl = stylesheet.url()
-                    stylesheetText(cssUrl)
-                        ?.let { cssUrlRefsFor(it, html) }
+                    stylesheetImageRules(cssUrl)
+                        ?.urlRefsFor(pageNames)
                         .orEmpty()
                         .mapNotNull { publicationLink(cssUrl, it) }
                 }
@@ -221,16 +222,17 @@ internal class WebViewServer(
         return publication.linkWithHref(url)?.copy(href = Href(url))
     }
 
-    private val stylesheets = mutableMapOf<Url, String?>()
+    private val stylesheets = mutableMapOf<Url, StylesheetImageRules?>()
 
-    /** The raw text of the stylesheet at [url], read once per publication. */
-    private suspend fun stylesheetText(url: Url): String? {
+    /** The image rules of the stylesheet at [url], read and parsed once per publication. */
+    private suspend fun stylesheetImageRules(url: Url): StylesheetImageRules? {
         synchronized(stylesheets) {
             if (stylesheets.containsKey(url)) return stylesheets[url]
         }
-        val text = publication.get(url)?.use { it.read().getOrNull() }?.decodeToString()
-        synchronized(stylesheets) { stylesheets[url] = text }
-        return text
+        val rules = publication.get(url)?.use { it.read().getOrNull() }
+            ?.let { StylesheetImageRules(it.decodeToString()) }
+        synchronized(stylesheets) { stylesheets[url] = rules }
+        return rules
     }
 
     private suspend fun prewarmResource(url: Url, link: Link, css: ReadiumCss, pageBox: PixelSize) {
