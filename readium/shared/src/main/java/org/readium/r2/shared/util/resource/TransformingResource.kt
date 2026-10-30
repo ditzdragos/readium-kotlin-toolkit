@@ -10,6 +10,7 @@ package org.readium.r2.shared.util.resource
 
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.coerceIn
+import org.readium.r2.shared.extensions.copyOfRange
 import org.readium.r2.shared.extensions.requireLengthFitInt
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Try
@@ -80,7 +81,7 @@ public abstract class TransformingResource(
                 .coerceIn(0L until it.size)
                 .requireLengthFitInt()
 
-            it.sliceArray(range.map(Long::toInt))
+            it.copyOfRange(range)
         }
 
     override suspend fun length(): Try<Long, ReadError> =

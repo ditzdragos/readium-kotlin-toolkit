@@ -64,5 +64,9 @@ internal fun ByteArray.read(range: LongRange?): ByteArray {
         .coerceIn(0L until size)
         .requireLengthFitInt()
 
-    return sliceArray(range.map(Long::toInt))
+    return copyOfRange(range)
 }
+
+/** The bytes in [range], copied as one block. */
+internal fun ByteArray.copyOfRange(range: LongRange): ByteArray =
+    if (range.isEmpty()) ByteArray(0) else copyOfRange(range.first.toInt(), range.last.toInt() + 1)

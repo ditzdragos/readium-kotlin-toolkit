@@ -11,6 +11,7 @@ package org.readium.r2.shared.util.data
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.coerceIn
 import org.readium.r2.shared.extensions.contains
+import org.readium.r2.shared.extensions.length
 import org.readium.r2.shared.extensions.requireLengthFitInt
 import org.readium.r2.shared.util.Try
 
@@ -119,8 +120,8 @@ internal class ReadableBuffer internal constructor(
         return source.read(readRange).map { data ->
             saveBuffer(data, readRange)
 
-            val res = if (data.count() > requestedRange.count()) {
-                data.copyOfRange(0, requestedRange.count())
+            val res = if (data.size > requestedRange.length) {
+                data.copyOfRange(0, requestedRange.length.toInt())
             } else {
                 data
             }
@@ -136,8 +137,8 @@ internal class ReadableBuffer internal constructor(
      * @param range Range of the read data in the resource.
      */
     private fun saveBuffer(data: ByteArray, range: LongRange) {
-        val lastChunk = data.takeLast(bufferSize).toByteArray()
-        val chunkRange = (range.last + 1 - lastChunk.count())..range.last
+        val lastChunk = data.copyOfRange((data.size - bufferSize).coerceAtLeast(0), data.size)
+        val chunkRange = (range.last + 1 - lastChunk.size)..range.last
         buffer = Pair(lastChunk, chunkRange)
     }
 
@@ -147,9 +148,9 @@ internal class ReadableBuffer internal constructor(
      */
     private fun extractRange(requestedRange: LongRange, data: ByteArray, start: Long): ByteArray {
         val first = requestedRange.first - start
-        val lastExclusive = first + requestedRange.count()
+        val lastExclusive = first + requestedRange.length
         require(first >= 0)
-        require(lastExclusive <= data.count()) { "$lastExclusive > ${data.count()}" }
+        require(lastExclusive <= data.size) { "$lastExclusive > ${data.size}" }
         return data.copyOfRange(first.toInt(), lastExclusive.toInt())
     }
 
