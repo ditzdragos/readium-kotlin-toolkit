@@ -11,6 +11,9 @@
 
 package org.readium.r2.lcp
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.coerceFirstNonNegative
 import org.readium.r2.shared.extensions.inflate
@@ -172,7 +175,7 @@ internal class CbcLcpResource(
 
     override suspend fun read(range: LongRange?): Try<ByteArray, ReadError> {
         if (range == null) {
-            return license.decryptFully(resource.read(), isDeflated = false)
+            return resource.read().flatMap { decryptWhole(it) }
         }
 
         @Suppress("NAME_SHADOWING")
@@ -256,8 +259,50 @@ internal class CbcLcpResource(
         return Try.success(bytes.sliceArray(dataSlice))
     }
 
+    /**
+     * Decrypts the whole of [encrypted] in chunks run at the same time. liblcp decrypts in
+     * software, about 25 MB/s on a 2018 phone, so one core takes over 100 ms for the art of a
+     * single picture book page. A CBC block only needs the ciphertext block before it, so each
+     * chunk starts one block early and liblcp takes that block as its IV.
+     */
+    private suspend fun decryptWhole(encrypted: ByteArray): Try<ByteArray, ReadError> {
+        val blocks = encrypted.size / AES_BLOCK_SIZE - 1
+        val chunks = (encrypted.size / MIN_PARALLEL_CHUNK_BYTES)
+            .coerceAtMost(MAX_PARALLEL_CHUNKS)
+        if (chunks < 2 || encrypted.size % AES_BLOCK_SIZE != 0) {
+            return license.decryptFully(Try.success(encrypted), isDeflated = false)
+        }
+
+        val decrypted = ByteArray(blocks * AES_BLOCK_SIZE)
+        val failure = coroutineScope {
+            (0 until chunks).map { chunk ->
+                val firstBlock = blocks * chunk / chunks
+                val endBlock = blocks * (chunk + 1) / chunks
+                async {
+                    val input = encrypted.copyOfRange(
+                        firstBlock * AES_BLOCK_SIZE,
+                        (endBlock + 1) * AES_BLOCK_SIZE
+                    )
+                    license.decrypt(input)
+                        .getOrElse { return@async it }
+                        .also { check(it.size == input.size - AES_BLOCK_SIZE) }
+                        .copyInto(decrypted, firstBlock * AES_BLOCK_SIZE)
+                    null
+                }
+            }.awaitAll().firstNotNullOfOrNull { it }
+        }
+        if (failure != null) {
+            return Try.failure(
+                ReadError.Decoding(DebugError("Failed to decrypt the resource", failure))
+            )
+        }
+        return unpadded(decrypted, isDeflated = false)
+    }
+
     companion object {
         private const val AES_BLOCK_SIZE = 16 // bytes
+        private const val MIN_PARALLEL_CHUNK_BYTES = 256 * 1024
+        private const val MAX_PARALLEL_CHUNKS = 4
     }
 }
 
@@ -271,7 +316,7 @@ private suspend fun LcpLicense.decryptFully(
         }
 
         // Decrypts the resource.
-        var bytes = decrypt(encryptedData)
+        val bytes = decrypt(encryptedData)
             .getOrElse {
                 return Try.failure(
                     ReadError.Decoding(
@@ -279,38 +324,43 @@ private suspend fun LcpLicense.decryptFully(
                     )
                 )
             }
+        unpadded(bytes, isDeflated)
+    }
 
-        if (bytes.isEmpty()) {
-            throw IllegalStateException("Lcp.nativeDecrypt returned an empty ByteArray")
-        }
+/** Removes the CBC padding of [decrypted], then inflates them if [isDeflated]. */
+private fun unpadded(decrypted: ByteArray, isDeflated: Boolean): Try<ByteArray, ReadError> {
+    var bytes = decrypted
+    if (bytes.isEmpty()) {
+        throw IllegalStateException("Lcp.nativeDecrypt returned an empty ByteArray")
+    }
 
-        // Removes the padding.
-        val padding = bytes.last().toInt()
-        if (padding !in bytes.indices) {
-            return Try.failure(
-                ReadError.Decoding(
-                    DebugError(
-                        "The padding length of the encrypted resource is incorrect: $padding / ${bytes.size}"
-                    )
+    // Removes the padding.
+    val padding = bytes.last().toInt()
+    if (padding !in bytes.indices) {
+        return Try.failure(
+            ReadError.Decoding(
+                DebugError(
+                    "The padding length of the encrypted resource is incorrect: $padding / ${bytes.size}"
                 )
             )
-        }
-        bytes = bytes.copyOfRange(0, bytes.size - padding)
-
-        // If the resource was compressed using deflate, inflates it.
-        if (isDeflated) {
-            bytes = bytes.inflate(nowrap = true)
-                .getOrElse {
-                    return Try.failure(
-                        ReadError.Decoding(
-                            DebugError("Cannot deflate the decrypted resource", ThrowableError(it))
-                        )
-                    )
-                }
-        }
-
-        Try.success(bytes)
+        )
     }
+    bytes = bytes.copyOfRange(0, bytes.size - padding)
+
+    // If the resource was compressed using deflate, inflates it.
+    if (isDeflated) {
+        bytes = bytes.inflate(nowrap = true)
+            .getOrElse {
+                return Try.failure(
+                    ReadError.Decoding(
+                        DebugError("Cannot deflate the decrypted resource", ThrowableError(it))
+                    )
+                )
+            }
+    }
+
+    return Try.success(bytes)
+}
 
 /**
  * A resource caching the last bytes read on range requests.
