@@ -475,7 +475,7 @@ public class EpubNavigatorFragment public constructor(
             else -> emptyList()
         }
         if (hrefs.isNotEmpty()) {
-            viewModel.prewarmResources(hrefs)
+            viewModel.prewarmResources(hrefs, view?.display)
         }
     }
 
@@ -977,7 +977,7 @@ public class EpubNavigatorFragment public constructor(
         override fun shouldInterceptRequest(
             webView: WebView,
             request: WebResourceRequest,
-        ): WebResourceResponse? = viewModel.shouldInterceptRequest(request)
+        ): WebResourceResponse? = viewModel.shouldInterceptRequest(request, webView.display)
 
         override fun resourceAtUrl(url: Url): Resource? =
             viewModel.internalLinkFromUrl(url)?.let { publication.get(it) }

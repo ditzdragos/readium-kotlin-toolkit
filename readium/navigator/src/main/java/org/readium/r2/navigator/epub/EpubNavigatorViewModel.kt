@@ -11,6 +11,7 @@ package org.readium.r2.navigator.epub
 import android.app.Application
 import android.graphics.PointF
 import android.graphics.RectF
+import android.view.Display
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.lifecycle.AndroidViewModel
@@ -268,12 +269,21 @@ internal class EpubNavigatorViewModel(
         server.clearResourceCache()
     }
 
-    fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
-        server.shouldInterceptRequest(request, css.value, pageBox())
+    @Volatile
+    private var readerDisplaySize: PixelSize? = null
+
+    fun shouldInterceptRequest(request: WebResourceRequest, display: Display?): WebResourceResponse? {
+        onDisplay(display)
+        return server.shouldInterceptRequest(request, css.value, pageBox())
+    }
+
+    private fun onDisplay(display: Display?) {
+        display?.let { readerDisplaySize = displaySize(it) }
+    }
 
     private fun pageBox(): PixelSize =
         pageBox(
-            display = displaySize(getApplication()),
+            display = readerDisplaySize ?: defaultDisplaySize(getApplication()),
             isSpread = layout == EpubLayout.FIXED && settings.value.spread == Spread.ALWAYS
         )
 
@@ -288,7 +298,8 @@ internal class EpubNavigatorViewModel(
      * assets their HTML references) in the background, so the WebViews' first requests are
      * served from already-built Resources. See [WebViewServer.prewarm].
      */
-    fun prewarmResources(hrefs: List<Url>) {
+    fun prewarmResources(hrefs: List<Url>, display: Display?) {
+        onDisplay(display)
         viewModelScope.launch(Dispatchers.IO) {
             hrefs.forEach { server.prewarm(it, css.value, pageBox()) }
         }

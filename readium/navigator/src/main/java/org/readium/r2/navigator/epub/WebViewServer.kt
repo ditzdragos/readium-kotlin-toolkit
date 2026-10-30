@@ -374,10 +374,6 @@ internal class WebViewServer(
                 errorResource()
             }
 
-        if (link.isJpeg) {
-            return DownscaledJpegResource(resource, pageBox)
-        }
-
         val mediaType = link.mediaType
         when {
             mediaType?.isHtml == true -> {
@@ -401,10 +397,10 @@ internal class WebViewServer(
         // (critical on Chromebook ARC++), large enough that the LCP decrypt cost
         // amortises across ~32 WebView chunks. Do NOT switch to a full-buffer
         // ByteArrayInputStream — that path OOMs on Chromebook.
-        return if (link.mediaType?.isHtml == true) {
-            resource
-        } else {
-            resource.buffered(bufferSize = 256 * 1024)
+        return when {
+            link.mediaType?.isHtml == true -> resource
+            link.isJpeg -> DownscaledJpegResource(resource.buffered(bufferSize = 256 * 1024), pageBox)
+            else -> resource.buffered(bufferSize = 256 * 1024)
         }
     }
 

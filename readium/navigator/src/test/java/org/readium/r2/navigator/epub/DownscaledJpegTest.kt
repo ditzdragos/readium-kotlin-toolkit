@@ -67,4 +67,44 @@ class DownscaledJpegTest {
         assertNull(downscaledSize(PixelSize(0, 1410), pixelbookLandscape))
         assertNull(downscaledSize(brownBearPage, PixelSize(0, 0)))
     }
+
+    @Test
+    fun `a downscaled JPEG declares the original size as its natural size`() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+
+        val exif = readExif(withNaturalSize(jpeg, PixelSize(1200, 750), brownBearPage))!!
+
+        assertEquals(brownBearPage, exif.naturalSize)
+        assertEquals(brownBearPage, exif.densityCorrected(PixelSize(1200, 750)))
+    }
+
+    @Test
+    fun `the EXIF block goes after a JFIF block`() {
+        val jfif = byteArrayOf(0xFF.toByte(), 0xE0.toByte(), 0, 4, 1, 2)
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte()) + jfif + byteArrayOf(0xFF.toByte(), 0xD9.toByte())
+
+        val served = withNaturalSize(jpeg, PixelSize(10, 10), PixelSize(20, 20))
+
+        assertEquals(jfif.toList(), served.copyOfRange(2, 8).toList())
+        assertEquals(0xE1, served[9].toInt() and 0xFF)
+    }
+
+    @Test
+    fun `bytes that are not a JPEG are left alone`() {
+        val png = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte())
+
+        assertEquals(png.toList(), withNaturalSize(png, PixelSize(1, 1), PixelSize(2, 2)).toList())
+    }
+
+    @Test
+    fun `a decoder that turned the image turns its natural size too`() {
+        assertEquals(
+            PixelSize(1410, 2256),
+            naturalSize(brownBearPage, target = PixelSize(1200, 750), pixelSize = PixelSize(750, 1200))
+        )
+        assertEquals(
+            brownBearPage,
+            naturalSize(brownBearPage, target = PixelSize(1200, 750), pixelSize = PixelSize(1200, 750))
+        )
+    }
 }
