@@ -9,26 +9,26 @@
  *
  * Only `wrap` takes its geometry from the box it decorates; the other widths span the viewport or
  * the bounding box, so they stay on one element per client rect. An OCR overlay's boxes win over
- * everything; a line on SVG lettering follows its glyphs. Both box sources and the client rects
+ * everything; a line on lettering follows its glyphs. Both box sources and the client rects
  * are asked for lazily, so a range never pays for geometry it does not use.
  *
  * @param {{ width: string, layout: string }} style
  * @param {{
  *   overlayBoxes: import("./turnedBox.mjs").TurnedBox[],
- *   svgLineBoxes: () => import("./turnedBox.mjs").TurnedBox[],
+ *   letteringLineBoxes: () => import("./turnedBox.mjs").TurnedBox[],
  *   clientRects: () => DOMRect[],
  * }} sources
  */
 export function decorationPlacements(
   style,
-  { overlayBoxes, svgLineBoxes, clientRects }
+  { overlayBoxes, letteringLineBoxes, clientRects }
 ) {
   if (style.width === "wrap") {
     const boxes =
       overlayBoxes.length > 0
         ? overlayBoxes
         : style.layout === "lines"
-        ? svgLineBoxes()
+        ? letteringLineBoxes()
         : [];
     if (boxes.length > 0) {
       return boxes.map((turnedBox) => ({ rect: turnedBox.rect, turnedBox }));

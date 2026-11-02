@@ -176,22 +176,33 @@ function spansSeveralLines(element) {
 }
 
 /**
- * The boxes a decoration on SVG lettering must occupy: one per line the range covers, turned the
- * way its glyphs read. Lettering drawn one glyph per <text> element places each glyph by its own
- * transform, so its client rect is the upright box around a turned glyph. Along a curve those
- * boxes step up or down letter by letter, and grouping them into lines cuts one word into
- * several (RR-9333).
+ * The boxes a decoration on lettering must occupy: one per line the range covers, turned the way
+ * its glyphs read. Lettering drawn one glyph per element places each glyph by its own transform,
+ * so its client rect is the upright box around a turned glyph. Along a curve those boxes step up
+ * or down letter by letter, and grouping them into lines cuts one word into several (RR-9333).
+ * The range of a word set one HTML block per glyph also reports the whole box of every block it
+ * covers, which leaves slivers of underline beside and above the word.
  *
- * Returns [], leaving the caller on its client rects, unless the range lies in one SVG and covers
- * whole <text> elements, each set on one line: a box measured on a whole element would overreach
- * a range covering part of it, or span the lines it is set on.
+ * Returns [], leaving the caller on its client rects, unless the range covers whole glyph
+ * elements, each set on one line: a box measured on a whole element would overreach a range
+ * covering part of it, or span the lines it is set on. HTML text takes this path only when a
+ * glyph it covers is turned, so upright text keeps its client rects.
  */
-export function svgLineBoxes(range) {
-  const svg = containingElement(range.commonAncestorContainer).closest("svg");
-  if (!svg) {
-    return [];
-  }
+export function letteringLineBoxes(range) {
+  const ancestor = containingElement(range.commonAncestorContainer);
+  const svg = ancestor.closest("svg");
+  return svg ? svgLineBoxes(range, svg) : htmlLineBoxes(range, ancestor);
+}
 
+/** Whether [covered], the text a range covers of [element], is all of it, set on one line. */
+function coversWhole(covered, element) {
+  return (
+    covered.trim() === element.textContent.trim() &&
+    !spansSeveralLines(element)
+  );
+}
+
+function svgLineBoxes(range, svg) {
   const glyphs = [];
   for (const element of elementsCoveredByRange(
     range,
@@ -201,10 +212,7 @@ export function svgLineBoxes(range) {
     if (isBlank(covered)) {
       continue;
     }
-    if (
-      covered.trim() !== element.textContent.trim() ||
-      spansSeveralLines(element)
-    ) {
+    if (!coversWhole(covered, element)) {
       return [];
     }
     const corners = glyphCorners(element);
@@ -214,6 +222,133 @@ export function svgLineBoxes(range) {
     glyphs.push({ corners });
   }
   return glyphs.length > 0 ? turnedBoxesByLine(glyphs) : [];
+}
+
+function htmlLineBoxes(range, ancestor) {
+  const candidates = isHtmlGlyph(ancestor)
+    ? [ancestor]
+    : Array.prototype.filter.call(ancestor.querySelectorAll("*"), isHtmlGlyph);
+  const covered = elementsCoveredByRange(range, candidates);
+  const coveredGlyphText = covered.map((element) => element.textContent);
+  if (
+    covered.length === 0 ||
+    withoutWhitespace(range.toString()) !==
+      withoutWhitespace(coveredGlyphText.join(""))
+  ) {
+    return [];
+  }
+
+  const glyphs = [];
+  let anyTurned = false;
+  for (const element of covered) {
+    if (!coversWhole(coveredText(range, element), element)) {
+      return [];
+    }
+    const turn = screenTurn(element);
+    if (!turn) {
+      return [];
+    }
+    const corners = turnedTextCorners(textRect(element), turn);
+    if (!corners) {
+      return [];
+    }
+    anyTurned = anyTurned || Math.abs(turn.sin) > UPRIGHT_SINE;
+    glyphs.push({ corners });
+  }
+  return anyTurned ? turnedBoxesByLine(glyphs) : [];
+}
+
+function withoutWhitespace(text) {
+  return text.replace(/\s+/g, "");
+}
+
+function textRect(element) {
+  const range = element.ownerDocument.createRange();
+  range.selectNodeContents(element);
+  return range.getBoundingClientRect();
+}
+
+// A turn under a third of a degree leaves a glyph upright to within a pixel across 150px.
+const UPRIGHT_SINE = 0.006;
+
+// Near 45° an upright box fits a turned box of almost any proportion, so it no longer tells the
+// glyph's width from its height.
+const MIN_PROPORTION_DETERMINANT = 0.25;
+
+function parseMatrix(transform) {
+  const match = /^matrix\(([^)]*)\)$/.exec(transform || "");
+  return match ? match[1].split(",").map(Number) : null;
+}
+
+/**
+ * The turn CSS gives [element] on screen, its own transform after its ancestors', as `{ cos, sin }`
+ * of the angle its text reads at. Null when a transform does more than turn and scale evenly
+ * (a skew, a stretch, a mirror, a 3D transform), since the text box then is no rectangle on screen
+ * that its upright box describes.
+ */
+function screenTurn(element) {
+  const view = element.ownerDocument.defaultView;
+  let [a, b, c, d] = [1, 0, 0, 1];
+  for (let node = element; node; node = node.parentElement) {
+    const transform = view.getComputedStyle(node).transform;
+    if (!transform || transform === "none") {
+      continue;
+    }
+    const matrix = parseMatrix(transform);
+    if (!matrix || matrix.some(Number.isNaN)) {
+      return null;
+    }
+    const [ma, mb, mc, md] = matrix;
+    [a, b, c, d] = [
+      ma * a + mc * b,
+      mb * a + md * b,
+      ma * c + mc * d,
+      mb * c + md * d,
+    ];
+  }
+  const scale = Math.hypot(a, b);
+  const tolerance = scale / 100;
+  if (
+    !(scale > 0) ||
+    Math.abs(a - d) > tolerance ||
+    Math.abs(b + c) > tolerance
+  ) {
+    return null;
+  }
+  return { cos: a / scale, sin: b / scale };
+}
+
+/**
+ * The corners of a text box turned by [turn], from [rect], the upright box around it, clockwise
+ * from its top left. The upright box of a box w × h turned by θ is w|cos θ| + h|sin θ| wide and
+ * w|sin θ| + h|cos θ| high, centred where the turned box is, so both sides follow from it.
+ */
+function turnedTextCorners(rect, { cos, sin }) {
+  const c = Math.abs(cos);
+  const s = Math.abs(sin);
+  const determinant = c * c - s * s;
+  if (Math.abs(determinant) < MIN_PROPORTION_DETERMINANT) {
+    return null;
+  }
+  const uprightWidth = rect.right - rect.left;
+  const uprightHeight = rect.bottom - rect.top;
+  const width = (uprightWidth * c - uprightHeight * s) / determinant;
+  const height = (uprightHeight * c - uprightWidth * s) / determinant;
+  if (!(width > 0) || !(height > 0)) {
+    return null;
+  }
+  const centreX = (rect.left + rect.right) / 2;
+  const centreY = (rect.top + rect.bottom) / 2;
+  const at = (along, across) => ({
+    x: centreX + cos * along - sin * across,
+    y: centreY + sin * along + cos * across,
+  });
+  return [
+    at(-width / 2, -height / 2),
+    at(width / 2, -height / 2),
+    at(width / 2, height / 2),
+    at(-width / 2, height / 2),
+  ];
 }
 
 /**
