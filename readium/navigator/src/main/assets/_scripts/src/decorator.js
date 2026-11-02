@@ -286,6 +286,24 @@ export function registerTemplates(newStyles) {
   `;
   document.head.appendChild(imgStyle);
 
+  prepareText();
+
+  setupViewportRelayoutListeners();
+}
+
+let textPrepared = false;
+
+/**
+ * Shapes the page's text into what offsets and extraction read: blocks and line breaks separated,
+ * spacing restored, lettering joined into words. The navigator may extract a page before it
+ * registers the templates, so both run this, and only the first call changes the page (RR-9376).
+ */
+export function prepareText() {
+  if (textPrepared) {
+    return;
+  }
+  textPrepared = true;
+
   const originalHtml = document.body.innerHTML;
   const separatedHtml = originalHtml
     .replace(BLOCK_START_PATTERN, "$1\n<$2")
@@ -301,8 +319,6 @@ export function registerTemplates(newStyles) {
   processSpansForTextSpacing(document);
 
   joinLetteringRuns(document);
-
-  setupViewportRelayoutListeners();
 }
 
 /**
