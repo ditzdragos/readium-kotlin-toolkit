@@ -276,13 +276,21 @@ export function ocrReferenceRect(ocrContainer) {
  *
  * A cover page is laid out as a full spread whose background image is drawn smaller than
  * the spread and centred in it, and its OCR percentages are relative to that image
- * (RR-8804). Only a background drawn at an explicit pixel size can be placed without
- * loading the image; any other element keeps its own box.
+ * (RR-8804). Only that shape is trusted: one picture, drawn at an explicit pixel size,
+ * placed from the padding box and lying wholly inside it. A tiled pattern, or artwork
+ * cropped by the page, says nothing about the page's own picture, so the element keeps
+ * its own box.
  */
 function artworkRect(element) {
   const rect = element.getBoundingClientRect();
   const style = window.getComputedStyle(element);
-  if (!style || !style.backgroundImage || style.backgroundImage === "none") {
+  if (
+    !style ||
+    !style.backgroundImage ||
+    style.backgroundImage === "none" ||
+    !/^no-repeat( no-repeat)?$/.test(firstLayer(style.backgroundRepeat)) ||
+    firstLayer(style.backgroundOrigin || "padding-box") !== "padding-box"
+  ) {
     return rect;
   }
 
@@ -291,18 +299,30 @@ function artworkRect(element) {
     return rect;
   }
 
-  const boxLeft = rect.left + (element.clientLeft || 0);
-  const boxTop = rect.top + (element.clientTop || 0);
+  const boxWidth = element.clientWidth;
+  const boxHeight = element.clientHeight;
   const [positionX, positionY] = firstLayer(style.backgroundPosition).split(
     /\s+/
   );
-  const offsetX = backgroundOffset(positionX, rect.width - size[0]);
-  const offsetY = backgroundOffset(positionY, rect.height - size[1]);
-  if (offsetX === null || offsetY === null) {
+  const offsetX = backgroundOffset(positionX, boxWidth - size[0]);
+  const offsetY = backgroundOffset(positionY, boxHeight - size[1]);
+  if (
+    offsetX === null ||
+    offsetY === null ||
+    offsetX < 0 ||
+    offsetY < 0 ||
+    offsetX + size[0] > boxWidth ||
+    offsetY + size[1] > boxHeight
+  ) {
     return rect;
   }
 
-  return rectAt(boxLeft + offsetX, boxTop + offsetY, size[0], size[1]);
+  return rectAt(
+    rect.left + element.clientLeft + offsetX,
+    rect.top + element.clientTop + offsetY,
+    size[0],
+    size[1]
+  );
 }
 
 function firstLayer(value) {

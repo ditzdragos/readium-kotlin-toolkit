@@ -7,16 +7,26 @@ globalThis.window = {
   getComputedStyle: (element) => element.computedStyle,
 };
 
-function element({ rect, background = null, children = [], img = null }) {
+function element({
+  rect,
+  background = null,
+  border = 0,
+  children = [],
+  img = null,
+}) {
   const el = {
     children,
     parentElement: null,
-    clientLeft: 0,
-    clientTop: 0,
+    clientLeft: border,
+    clientTop: border,
+    clientWidth: rect.width - 2 * border,
+    clientHeight: rect.height - 2 * border,
     computedStyle: {
       backgroundImage: background ? 'url("page.jpg")' : "none",
       backgroundSize: background?.size ?? "auto",
       backgroundPosition: background?.position ?? "0% 0%",
+      backgroundRepeat: background?.repeat ?? "no-repeat",
+      backgroundOrigin: background?.origin ?? "padding-box",
     },
     getBoundingClientRect: () => ({
       left: rect.left,
@@ -75,6 +85,81 @@ describe("ocrReferenceRect", () => {
       left: 40,
       top: 0,
       width: 554,
+      height: 717,
+    });
+  });
+
+  it("centres the artwork inside the page's border", () => {
+    const page = element({
+      rect: { left: 10, top: 20, width: 1112, height: 721 },
+      border: 2,
+      background: { size: "554px 717px", position: "50% 50%" },
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(collapsedContainer(page))), {
+      left: 10 + 2 + 277,
+      top: 20 + 2,
+      width: 554,
+      height: 717,
+    });
+  });
+
+  it("keeps the page box when the artwork is a tiled pattern", () => {
+    const page = element({
+      rect: { left: 0, top: 0, width: 1108, height: 717 },
+      background: { size: "40px 40px", position: "0% 0%", repeat: "repeat" },
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(collapsedContainer(page))), {
+      left: 0,
+      top: 0,
+      width: 1108,
+      height: 717,
+    });
+  });
+
+  it("keeps the page box when the page crops a larger picture", () => {
+    const page = element({
+      rect: { left: 0, top: 0, width: 554, height: 717 },
+      background: { size: "1108px 717px", position: "100% 0%" },
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(collapsedContainer(page))), {
+      left: 0,
+      top: 0,
+      width: 554,
+      height: 717,
+    });
+  });
+
+  it("keeps the page box when the artwork is offset past its edge", () => {
+    const page = element({
+      rect: { left: 0, top: 0, width: 1108, height: 717 },
+      background: { size: "554px 717px", position: "600px 0px" },
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(collapsedContainer(page))), {
+      left: 0,
+      top: 0,
+      width: 1108,
+      height: 717,
+    });
+  });
+
+  it("keeps the page box when the artwork is placed from another box", () => {
+    const page = element({
+      rect: { left: 0, top: 0, width: 1108, height: 717 },
+      background: {
+        size: "554px 717px",
+        position: "50% 50%",
+        origin: "content-box",
+      },
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(collapsedContainer(page))), {
+      left: 0,
+      top: 0,
+      width: 1108,
       height: 717,
     });
   });
