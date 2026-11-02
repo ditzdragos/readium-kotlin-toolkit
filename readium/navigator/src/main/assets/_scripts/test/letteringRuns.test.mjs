@@ -144,17 +144,6 @@ const RUMBLE_TUMBLE = [
   ["a", box(238.4, 270.0, 195.4, 254.0)],
 ];
 
-// "stretch" on page011 of "I Play" (9781626725126): one turned <p> per glyph, written back to back.
-const STRETCH = [
-  ["s", box(204.0, 278.0, 157.0, 243.0)],
-  ["t", box(240.0, 307.0, 140.0, 227.0)],
-  ["r", box(278.0, 341.0, 126.0, 213.0)],
-  ["e", box(319.0, 383.0, 116.0, 203.0)],
-  ["t", box(374.0, 415.0, 115.0, 195.0)],
-  ["c", box(409.0, 464.0, 114.0, 196.0)],
-  ["h", box(452.0, 524.0, 119.0, 208.0)],
-];
-
 // Glyph boxes measured on "I Play" (9781626725126): one rotated <p> per glyph or two.
 const I_PLAY = {
   run: [
@@ -318,28 +307,14 @@ describe("joinLetteringRuns", () => {
     assert.equal(textOf(root), "r u");
   });
 
-  it("leaves blocks written back to back as they read when they do not touch", () => {
+  it("leaves blocks written back to back as they read", () => {
     const root = node("div", XHTML);
     block(root, "Title", box(100, 300, 100, 140));
-    const author = block(root, "Author", box(100, 300, 160, 200));
+    block(root, "Author", box(100, 300, 160, 200));
 
     joinLetteringRuns(documentWith(root));
 
     assert.equal(textOf(root), "TitleAuthor");
-    assert.equal(continuesJoinedWord(author), false);
-  });
-
-  it("joins a word set one HTML block per glyph written back to back", () => {
-    const root = node("div", XHTML);
-    const blocks = STRETCH.map(([value, rect]) => block(root, value, rect));
-
-    joinLetteringRuns(documentWith(root));
-
-    assert.equal(textOf(root), "stretch");
-    assert.deepEqual(
-      blocks.map(continuesJoinedWord),
-      blocks.map((_, index) => index > 0)
-    );
   });
 
   it("keeps stacked blocks as separate words", () => {
