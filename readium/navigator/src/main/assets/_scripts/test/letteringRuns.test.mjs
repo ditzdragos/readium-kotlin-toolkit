@@ -327,6 +327,25 @@ describe("joinLetteringRuns", () => {
 
     assert.equal(textOf(root), "Title\nAuthor");
   });
+
+  it("keeps OCR overlay words apart when their invisible text touches", () => {
+    const root = node("div", XHTML);
+    const overlays = [
+      ["“It", box(0.00022, 0.00022, 0, 18)],
+      ["ain’t", box(0.00165, 0.00165, 0, 18)],
+      ["easy", box(0.0019, 0.0019, 0, 18)],
+    ].map(([value, rect]) => {
+      const overlay = block(root, value, rect);
+      overlay.classList = { contains: (name) => name === "text-overlay" };
+      whitespace(root);
+      return overlay;
+    });
+
+    joinLetteringRuns(documentWith(root));
+
+    assert.equal(textOf(root), "“It\nain’t\neasy\n");
+    assert.ok(!overlays.some(continuesJoinedWord));
+  });
 });
 
 describe("turnedBoxesByLine", () => {
