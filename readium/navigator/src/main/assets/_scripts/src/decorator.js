@@ -17,7 +17,7 @@ import {
   rangeFromLocator,
 } from "./utils";
 import { processSpansForTextSpacing } from "./spanTextSpacing.mjs";
-import { joinLetteringRuns, svgLineBoxes } from "./letteringRuns.mjs";
+import { joinLetteringRuns, letteringLineBoxes } from "./letteringRuns.mjs";
 import {
   isDrawnOutOfTextOrder,
   isExplicitPageBreak,
@@ -763,7 +763,7 @@ export function DecorationGroup(groupId, groupName) {
           item.range,
           getOCRCorrectedRectForOverlay
         ),
-        svgLineBoxes: () => svgLineBoxes(item.range),
+        letteringLineBoxes: () => letteringLineBoxes(item.range),
         clientRects: () =>
           lineOrBoxRects(
             item.range,
@@ -1029,7 +1029,7 @@ export function DecorationGroup(groupId, groupName) {
       if (style.layout === "boxes" || style.layout === "lines") {
         const placements = decorationPlacements(style, {
           overlayBoxes,
-          svgLineBoxes: () => svgLineBoxes(item.range),
+          letteringLineBoxes: () => letteringLineBoxes(item.range),
           clientRects: () =>
             lineOrBoxRects(item.range, style.layout, true).sort(
               (rectA, rectB) => rectA.top - rectB.top
