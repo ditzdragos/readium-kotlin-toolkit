@@ -354,8 +354,9 @@ function turnedTextCorners(rect, { cos, sin }) {
 /**
  * Pairs each glyph element with the glyph element before it, collecting the whitespace between.
  * An SVG <g> only groups glyphs, so a run carries on into and out of it ("C" beside a <g> holding
- * "REEAAK"); any other element or text ends the run. HTML glyphs pair only across whitespace:
- * blocks written back to back already read as one word.
+ * "REEAAK"); any other element or text ends the run. HTML glyphs pair across whitespace and
+ * back to back alike: the page's text puts a line break before every <p> that does not carry on
+ * a joined word, so `<p>s</p><p>t</p><p>r</p>` reads as separate letters too (RR-9376).
  */
 function collectRuns(parent, state, runs) {
   const children = parent.childNodes;
@@ -367,11 +368,7 @@ function collectRuns(parent, state, runs) {
     }
     if (isSvgGlyph(node) || isHtmlGlyph(node)) {
       const previous = state.previous;
-      if (
-        previous &&
-        isSvgGlyph(previous) === isSvgGlyph(node) &&
-        (isSvgGlyph(node) || state.between.length > 0)
-      ) {
+      if (previous && isSvgGlyph(previous) === isSvgGlyph(node)) {
         runs.push({ previous, current: node, between: state.between });
       }
       state.previous = node;
@@ -440,6 +437,7 @@ export function joinLetteringRuns(document) {
       wordContinuations.add(current);
     } else if (
       between.length === 0 &&
+      isSvgGlyph(current) &&
       startsNewLine(measure(previous), measure(current))
     ) {
       current.parentNode.insertBefore(document.createTextNode("\n"), current);
