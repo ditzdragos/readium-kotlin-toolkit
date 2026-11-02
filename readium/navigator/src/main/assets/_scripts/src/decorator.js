@@ -27,7 +27,11 @@ import {
 } from "./pageNumber.mjs";
 import { ocrOverlayBoxes } from "./ocrOverlay.mjs";
 import { isUnfilledDuplicateLayer } from "./duplicateLayer.mjs";
-import { mergeIntoLines } from "./rangeRects.mjs";
+import {
+  gapBridgesRange,
+  mergeIntoLines,
+  mergeSteppedRuns,
+} from "./rangeRects.mjs";
 import { containingElement } from "./rangeCoverage.mjs";
 import { decorationPlacements } from "./decorationPlacements.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
@@ -424,7 +428,9 @@ function lineOrBoxRects(range, layout, doNotMergeHorizontallyAlignedRects) {
     range,
     doNotMergeHorizontallyAlignedRects
   );
-  return layout === "lines" ? mergeIntoLines(boxes) : boxes;
+  return layout === "lines"
+    ? mergeIntoLines(boxes)
+    : mergeSteppedRuns(boxes, gapBridgesRange(range, document));
 }
 
 /**
