@@ -50,10 +50,17 @@ function isSvgGlyph(node) {
   return isSvgElement(node, "text");
 }
 
+// An OCR overlay is one word by construction, and its invisible text is laid out in a container
+// that can be zero-width, so its geometry says nothing about the artwork (RR-8804).
+function isOcrOverlay(node) {
+  return Boolean(node.classList && node.classList.contains("text-overlay"));
+}
+
 function isHtmlGlyph(node) {
   return (
     node.nodeType === ELEMENT_NODE &&
     node.namespaceURI !== SVG_NAMESPACE &&
+    !isOcrOverlay(node) &&
     Array.prototype.every.call(
       node.childNodes,
       (child) => child.nodeType === TEXT_NODE
