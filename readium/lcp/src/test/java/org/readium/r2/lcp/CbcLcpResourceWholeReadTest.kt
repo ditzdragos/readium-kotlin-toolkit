@@ -78,4 +78,15 @@ class CbcLcpResourceWholeReadTest {
 
         assertTrue(read.failureOrNull() is ReadError.Decoding, "got $read")
     }
+
+    @Test
+    fun `a chunk decrypting to an unexpected size fails the read`() = runTest {
+        val short = mockk<LcpLicense>()
+        coEvery { short.decrypt(any()) } answers { Try.success(ByteArray(firstArg<ByteArray>().size - 32)) }
+        val plain = bytes(1024 * 1024)
+
+        val read = CbcLcpResource(InMemoryResource(encrypt(plain)), short).read()
+
+        assertTrue(read.failureOrNull() is ReadError.Decoding, "got $read")
+    }
 }

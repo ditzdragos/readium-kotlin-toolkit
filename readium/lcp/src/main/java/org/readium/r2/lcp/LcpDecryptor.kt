@@ -283,18 +283,23 @@ internal class CbcLcpResource(
                         firstBlock * AES_BLOCK_SIZE,
                         (endBlock + 1) * AES_BLOCK_SIZE
                     )
-                    license.decrypt(input)
-                        .getOrElse { return@async it }
-                        .also { check(it.size == input.size - AES_BLOCK_SIZE) }
-                        .copyInto(decrypted, firstBlock * AES_BLOCK_SIZE)
+                    val output = license.decrypt(input).getOrElse {
+                        return@async ReadError.Decoding(
+                            DebugError("Failed to decrypt the resource", it)
+                        )
+                    }
+                    if (output.size != input.size - AES_BLOCK_SIZE) {
+                        return@async ReadError.Decoding(
+                            DebugError("Decrypted ${output.size} bytes from a ${input.size} byte chunk")
+                        )
+                    }
+                    output.copyInto(decrypted, firstBlock * AES_BLOCK_SIZE)
                     null
                 }
             }.awaitAll().firstNotNullOfOrNull { it }
         }
         if (failure != null) {
-            return Try.failure(
-                ReadError.Decoding(DebugError("Failed to decrypt the resource", failure))
-            )
+            return Try.failure(failure)
         }
         return unpadded(decrypted, isDeflated = false)
     }

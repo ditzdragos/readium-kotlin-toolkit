@@ -18,6 +18,8 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.css.ReadiumCss
 import org.readium.r2.navigator.util.ReadiumTrace
@@ -32,6 +34,7 @@ import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.data.asInputStream
+import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.http.HttpHeaders
 import org.readium.r2.shared.util.http.HttpRange
 import org.readium.r2.shared.util.mediatype.MediaType
@@ -92,6 +95,10 @@ internal class WebViewServer(
         // Images a page takes from its stylesheets, such as a background per page; bounds what a
         // broad rule can pull in.
         private const val MAX_STYLESHEET_IMAGES = 4
+
+        // A JPEG warms by reading, decrypting and re-encoding the whole image, so this bounds the
+        // memory a chapter with many images holds at once.
+        private const val MAX_CONCURRENT_JPEG_PREWARMS = 4
 
         // Asset references in the page HTML: <img src>, <image xlink:href>, <link href>, etc.
         private val assetRefRegex =
@@ -224,16 +231,21 @@ internal class WebViewServer(
 
     private val stylesheets = mutableMapOf<Url, StylesheetImageRules?>()
 
-    /** The image rules of the stylesheet at [url], read and parsed once per publication. */
+    /**
+     * The image rules of the stylesheet at [url], read and parsed once per publication. A failed
+     * read is not kept, so the next page reads it again.
+     */
     private suspend fun stylesheetImageRules(url: Url): StylesheetImageRules? {
         synchronized(stylesheets) {
             if (stylesheets.containsKey(url)) return stylesheets[url]
         }
-        val rules = publication.get(url)?.use { it.read().getOrNull() }
-            ?.let { StylesheetImageRules(it.decodeToString()) }
+        val css = publication.get(url)?.use { it.read() }?.getOrElse { return null }
+        val rules = css?.let { StylesheetImageRules(it.decodeToString()) }
         synchronized(stylesheets) { stylesheets[url] = rules }
         return rules
     }
+
+    private val jpegPrewarms = Semaphore(MAX_CONCURRENT_JPEG_PREWARMS)
 
     private suspend fun prewarmResource(url: Url, link: Link, css: ReadiumCss, pageBox: PixelSize) {
         // HTML is built per-request; only non-HTML resources are cacheable.
@@ -241,7 +253,15 @@ internal class WebViewServer(
         // Same key and build recipe as servePublicationResource, so the WebView's request hits
         // this exact entry.
         val resource = cachedResource(url) { buildResource(link, url, css, pageBox).synchronized() }
-        // Warm one BufferingResource window; result is intentionally discarded.
+        if (link.isJpeg) {
+            jpegPrewarms.withPermit { warm(resource) }
+        } else {
+            warm(resource)
+        }
+    }
+
+    /** Reads one BufferingResource window of [resource]; the bytes are discarded. */
+    private suspend fun warm(resource: Resource) {
         resource.borrow().use { it.read(0 until PREWARM_READ_BYTES) }
     }
 
