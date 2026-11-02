@@ -181,7 +181,7 @@ function spansSeveralLines(element) {
  * so its client rect is the upright box around a turned glyph. Along a curve those boxes step up
  * or down letter by letter, and grouping them into lines cuts one word into several (RR-9333).
  * The range of a word set one HTML block per glyph also reports the whole box of every block it
- * covers, which leaves slivers of underline beside and above the word.
+ * covers, which leaves slivers of underline or read highlight beside and above the word.
  *
  * Returns [], leaving the caller on its client rects, unless the range covers whole glyph
  * elements, each set on one line: a box measured on a whole element would overreach a range

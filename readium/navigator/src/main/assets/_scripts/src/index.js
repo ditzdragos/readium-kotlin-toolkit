@@ -25,15 +25,23 @@ import {
   calculateHorizontalPageRanges,
   getColumnCountPerScreen,
   getFirstVisibleWordText,
-  getFirstVisibleWordTextOnSide
+  getFirstVisibleWordTextOnSide,
 } from "./utils";
 import { findFirstVisibleLocator } from "./dom";
 import { getCurrentSelection } from "./selection";
 import {
   applyDecorationChanges,
   getDecorations,
+  prepareText,
   registerTemplates,
 } from "./decorator";
+
+function afterPreparingText(read) {
+  return () => {
+    prepareText();
+    return read();
+  };
+}
 
 // Public API used by the navigator.
 window.readium = {
@@ -60,9 +68,11 @@ window.readium = {
 
   // DOM
   findFirstVisibleLocator: findFirstVisibleLocator,
-  getHtmlBodyTextContent: getHtmlBodyTextContent,
-  calculateHorizontalPageRanges: calculateHorizontalPageRanges,
+  getHtmlBodyTextContent: afterPreparingText(getHtmlBodyTextContent),
+  calculateHorizontalPageRanges: afterPreparingText(
+    calculateHorizontalPageRanges
+  ),
   getColumnCountPerScreen: getColumnCountPerScreen,
   getFirstVisibleWordText: getFirstVisibleWordText,
-  getFirstVisibleWordTextOnSide: getFirstVisibleWordTextOnSide
+  getFirstVisibleWordTextOnSide: getFirstVisibleWordTextOnSide,
 };

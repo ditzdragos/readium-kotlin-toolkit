@@ -55,12 +55,14 @@ describe("decorationPlacements", () => {
     ]);
   });
 
-  it("keeps box decorations on client rects, even on lettering", () => {
+  it("places a read highlight on lettering on its turned line boxes", () => {
     const from = sources({ letteringLineBoxes: [LETTERING_LINE_BOX] });
 
-    decorationPlacements({ width: "wrap", layout: "boxes" }, from);
-
-    assert.deepEqual(from.asked, ["clientRects"]);
+    assert.deepEqual(
+      decorationPlacements({ width: "wrap", layout: "boxes" }, from),
+      [{ rect: LETTERING_LINE_BOX.rect, turnedBox: LETTERING_LINE_BOX }]
+    );
+    assert.deepEqual(from.asked, ["letteringLineBoxes"]);
   });
 
   it("keeps decorations that span the viewport on client rects, turned like their overlay", () => {
