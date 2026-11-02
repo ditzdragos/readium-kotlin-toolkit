@@ -56,13 +56,13 @@ function union(rect1, rect2) {
  * against the rect that opened the group rather than the previous one, so a
  * long line cannot drift a whole line away one tolerance at a time.
  */
-function byLine(rects) {
+function byLine(rects, sameLine) {
   const lines = [];
   for (const rect of rects
     .slice()
     .sort((rect1, rect2) => rect1.top - rect2.top)) {
     const line = lines[lines.length - 1];
-    if (line && onSameLine(line[0], rect)) {
+    if (line && sameLine(line[0], rect)) {
       line.push(rect);
     } else {
       lines.push([rect]);
@@ -83,12 +83,25 @@ function byLine(rects) {
  * the run built so far, so the point it probes is always a real gap.
  */
 export function mergeRectRuns(rects, bridges) {
+  return mergeRuns(rects, bridges, onSameLine);
+}
+
+/**
+ * Like `mergeRectRuns`, but a line also holds boxes whose tops and bottoms differ while they share
+ * it (`shareALine`), so letters a word raises or lowers one by one (`vertical-align`) read as one
+ * run instead of a staircase of boxes (RR-9376).
+ */
+export function mergeSteppedRuns(rects, bridges) {
+  return mergeRuns(rects, bridges, shareALine);
+}
+
+function mergeRuns(rects, bridges, sameLine) {
   if (rects.length < 2) {
     return rects;
   }
 
   const merged = [];
-  for (const line of byLine(rects)) {
+  for (const line of byLine(rects, sameLine)) {
     let previous = null;
     for (const rect of line) {
       if (

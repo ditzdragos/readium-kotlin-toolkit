@@ -108,6 +108,7 @@ internal class R2EpubPageFragment : Fragment() {
     private var isLoading: Boolean = false
     private var isLoadingRight: Boolean = false
     private val _isLoaded = MutableStateFlow(false)
+    private val laidOutPages = LaidOutPages()
     private var deferredLoadPending = false
 
     // Sticky: the release can arrive while the page box is still being read.
@@ -149,6 +150,7 @@ internal class R2EpubPageFragment : Fragment() {
                         // apply decorations synchronously from onPageLoaded(), and those
                         // LoadedResource scripts are otherwise dropped because isLoaded is still
                         // false at that point.
+                        laidOutPages.laidOut(LaidOutPages.Page.LEFT)
                         onLoadPage()
 
                         // Call onPageLoaded for left page
@@ -168,6 +170,7 @@ internal class R2EpubPageFragment : Fragment() {
                         Timber.d("Right page finished loading and made visible")
 
                         // Keep the same ordering as the left page for decoration consistency.
+                        laidOutPages.laidOut(LaidOutPages.Page.RIGHT)
                         onLoadPage()
 
                         // Call onPageLoaded for right page
@@ -440,6 +443,7 @@ internal class R2EpubPageFragment : Fragment() {
             resourceUrl?.let { url ->
                 isLoading = true
                 _isLoaded.value = false
+                laidOutPages.loading(LaidOutPages.Page.LEFT)
                 Timber.d("Loading left page: $url")
                 ReadiumTrace.beginAsync(ReadiumTrace.PAGE_LOAD, System.identityHashCode(it))
                 it.loadUrl(url.toString())
@@ -451,6 +455,7 @@ internal class R2EpubPageFragment : Fragment() {
         webViewRight?.let {
             rightResourceUrl?.let { url ->
                 isLoadingRight = true
+                laidOutPages.loading(LaidOutPages.Page.RIGHT)
                 Timber.d("Loading right page in parallel: $url")
                 ReadiumTrace.beginAsync(ReadiumTrace.PAGE_LOAD, System.identityHashCode(it))
                 it.loadUrl(url.toString())
@@ -480,12 +485,26 @@ internal class R2EpubPageFragment : Fragment() {
         isLoading = false
         isLoadingRight = false
         _isLoaded.value = false
+        laidOutPages.clear()
         deferredLoadPending = true
     }
 
     /** Whether every page of this spread (left, and right when present) finished loading. */
     internal fun isSpreadLoaded(): Boolean =
         _isLoaded.value && !isLoadingRight
+
+    /**
+     * The web views whose page has laid out since it last started loading.
+     *
+     * [isLoaded] turns true with whichever page of a spread lays out first. Sent through
+     * [runJavaScript] instead, a script waits for the left page and then also runs in the right
+     * one, over the decorations it restored in the meantime (RR-6420).
+     */
+    internal fun laidOutWebViews(): List<R2WebView> = laidOutPages.select(webView, webViewRight)
+
+    /** The web view showing [href], if its page has laid out. */
+    internal fun laidOutWebView(href: Url): R2WebView? =
+        getWebView(href)?.takeIf { it in laidOutWebViews() }
 
     fun setupWebView(webView: R2WebView, resourceUrl: AbsoluteUrl?) {
         webView.settings.javaScriptEnabled = true
@@ -606,6 +625,7 @@ internal class R2EpubPageFragment : Fragment() {
     }
 
     private fun destroyWebViews() {
+        laidOutPages.clear()
         webView?.let { runCatching { destroyWebViewSilently(it) } }
         webView = null
         webViewRight?.let { runCatching { destroyWebViewSilently(it) } }
