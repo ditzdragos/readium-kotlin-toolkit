@@ -5,7 +5,7 @@
 //
 
 import { resetViewportRatioCache, toNativeRect } from "./rect";
-import { overlayElement } from "./ocrOverlay.mjs";
+import { ocrReferenceRect, overlayElement } from "./ocrOverlay.mjs";
 import { continuesJoinedWord } from "./letteringRuns.mjs";
 import {
   scrollPageLeft,
@@ -847,48 +847,6 @@ export function logError(message) {
 }
 
 /**
- * Resolves the page box the OCR overlay percentages are relative to.
- *
- * An `.ocr-container` whose children are all absolutely positioned has no in-flow content
- * and a 0x0 box; its sized child then carries both the page dimensions and the container's
- * offset. An ancestor is a last resort, as it loses that offset.
- *
- * @param {Element} ocrContainer
- * @returns {DOMRect | null}
- */
-function getOCRReferenceRect(ocrContainer) {
-  const hasArea = (rect) => rect.width > 0 && rect.height > 0;
-
-  const img = ocrContainer.querySelector("img");
-  if (img && hasArea(img.getBoundingClientRect())) {
-    return img.getBoundingClientRect();
-  }
-
-  const containerRect = ocrContainer.getBoundingClientRect();
-  if (hasArea(containerRect)) {
-    return containerRect;
-  }
-
-  for (const child of ocrContainer.children) {
-    const childRect = child.getBoundingClientRect();
-    if (hasArea(childRect)) {
-      return childRect;
-    }
-  }
-
-  let element = ocrContainer.parentElement;
-  while (element) {
-    const rect = element.getBoundingClientRect();
-    if (hasArea(rect)) {
-      return rect;
-    }
-    element = element.parentElement;
-  }
-
-  return null;
-}
-
-/**
  * Calculates corrected viewport coordinates for one OCR text-overlay element.
  *
  * Returns null when the element is not an OCR overlay authored in percentages.
@@ -903,7 +861,7 @@ export function getOCRCorrectedRectForOverlay(textOverlayElement) {
     return null;
   }
 
-  const containerRect = getOCRReferenceRect(ocrContainer);
+  const containerRect = ocrReferenceRect(ocrContainer);
   if (!containerRect) {
     return null;
   }

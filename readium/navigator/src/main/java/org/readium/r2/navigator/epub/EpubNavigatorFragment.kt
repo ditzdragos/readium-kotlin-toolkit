@@ -475,7 +475,7 @@ public class EpubNavigatorFragment public constructor(
             else -> emptyList()
         }
         if (hrefs.isNotEmpty()) {
-            viewModel.prewarmResources(hrefs)
+            viewModel.prewarmResources(hrefs, view?.display)
         }
     }
 
@@ -749,7 +749,8 @@ public class EpubNavigatorFragment public constructor(
             RunScriptCommand.Scope.LoadedResources -> {
                 r2PagerAdapter?.mFragments?.forEach { _, fragment ->
                     if (!fragment.isAdded || fragment.isDetached) return@forEach
-                    (fragment as? R2EpubPageFragment)?.takeIf { it.isLoaded.value }?.runJavaScript(command.script)
+                    (fragment as? R2EpubPageFragment)?.laidOutWebViews()
+                        ?.forEach { it.runJavaScript(command.script) }
                 }
             }
 
@@ -757,8 +758,8 @@ public class EpubNavigatorFragment public constructor(
                 // Every fragment showing the resource, not just the first: a publication may place
                 // one resource at several positions, and the model is already updated by now.
                 loadedFragmentsForHref(command.scope.href)
-                    .filter { it.isLoaded.value }
-                    .forEach { it.getWebView(command.scope.href)?.runJavaScript(command.script) }
+                    .mapNotNull { it.laidOutWebView(command.scope.href) }
+                    .forEach { it.runJavaScript(command.script) }
             }
 
             is RunScriptCommand.Scope.WebView -> {
@@ -991,7 +992,7 @@ public class EpubNavigatorFragment public constructor(
         override fun shouldInterceptRequest(
             webView: WebView,
             request: WebResourceRequest,
-        ): WebResourceResponse? = viewModel.shouldInterceptRequest(request)
+        ): WebResourceResponse? = viewModel.shouldInterceptRequest(request, webView.display)
 
         override fun resourceAtUrl(url: Url): Resource? =
             viewModel.internalLinkFromUrl(url)?.let { publication.get(it) }

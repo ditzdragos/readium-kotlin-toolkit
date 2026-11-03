@@ -27,5 +27,8 @@ public fun LongRange.requireLengthFitInt(): LongRange = this.apply {
     )
 }
 
+/** The number of values in the range, computed instead of iterated like [Iterable.count] does. */
+internal val LongRange.length: Long get() = if (isEmpty()) 0 else last - first + 1
+
 internal fun LongRange.contains(range: LongRange) =
     contains(range.first) && contains(range.last)

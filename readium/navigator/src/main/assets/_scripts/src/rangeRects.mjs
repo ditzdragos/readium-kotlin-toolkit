@@ -56,13 +56,13 @@ function union(rect1, rect2) {
  * against the rect that opened the group rather than the previous one, so a
  * long line cannot drift a whole line away one tolerance at a time.
  */
-function byLine(rects) {
+function byLine(rects, sameLine) {
   const lines = [];
   for (const rect of rects
     .slice()
     .sort((rect1, rect2) => rect1.top - rect2.top)) {
     const line = lines[lines.length - 1];
-    if (line && onSameLine(line[0], rect)) {
+    if (line && sameLine(line[0], rect)) {
       line.push(rect);
     } else {
       lines.push([rect]);
@@ -83,12 +83,25 @@ function byLine(rects) {
  * the run built so far, so the point it probes is always a real gap.
  */
 export function mergeRectRuns(rects, bridges) {
+  return mergeRuns(rects, bridges, onSameLine);
+}
+
+/**
+ * Like `mergeRectRuns`, but a line also holds boxes whose tops and bottoms differ while they share
+ * it (`shareALine`), so letters a word raises or lowers one by one (`vertical-align`) read as one
+ * run instead of a staircase of boxes (RR-9376).
+ */
+export function mergeSteppedRuns(rects, bridges) {
+  return mergeRuns(rects, bridges, shareALine);
+}
+
+function mergeRuns(rects, bridges, sameLine) {
   if (rects.length < 2) {
     return rects;
   }
 
   const merged = [];
-  for (const line of byLine(rects)) {
+  for (const line of byLine(rects, sameLine)) {
     let previous = null;
     for (const rect of line) {
       if (
@@ -107,17 +120,39 @@ export function mergeRectRuns(rects, bridges) {
 }
 
 /**
+ * Whether the shorter box stands on the taller one's baseline: it lies inside
+ * the taller box, in its lower half. A stick-up cap rises from the line it
+ * starts, so that line sits at the cap's foot; a drop cap floated over several
+ * lines hangs from the first one, which sits at the cap's head. The quarter of
+ * a line allowed below the taller box absorbs a cap whose descent is shallower
+ * than the text's.
+ */
+function standsOnTheSameBaseline(rect1, rect2) {
+  const [shorter, taller] =
+    rect1.height <= rect2.height ? [rect1, rect2] : [rect2, rect1];
+  return (
+    shorter.top >= taller.top &&
+    shorter.bottom <= taller.bottom + shorter.height / 4 &&
+    shorter.top + shorter.bottom > taller.top + taller.bottom
+  );
+}
+
+/**
  * Whether two boxes sit on one visual line: their heights overlap by more than
- * half of the taller one. A drop cap set in the line and the small caps after
- * it share a line while their tops and bottoms differ; two lines set with tight
- * leading only graze each other, and a drop cap floated over several lines
- * stays apart from the line it starts, so the rest of the word keeps its own
- * underline.
+ * half of the taller one, or the shorter stands on the taller one's baseline.
+ * A drop cap set in the line and the small caps after it share a line while
+ * their tops and bottoms differ, and so do a stick-up cap and the rest of its
+ * word; two lines set with tight leading only graze each other, and a drop cap
+ * floated over several lines stays apart from the line it starts, so the rest
+ * of the word keeps its own underline.
  */
 function shareALine(rect1, rect2) {
   const overlap =
     Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top);
-  return overlap > Math.max(rect1.height, rect2.height) / 2;
+  return (
+    overlap > Math.max(rect1.height, rect2.height) / 2 ||
+    standsOnTheSameBaseline(rect1, rect2)
+  );
 }
 
 /**

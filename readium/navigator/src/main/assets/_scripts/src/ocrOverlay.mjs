@@ -227,6 +227,123 @@ function uprightAngle(rotationAngle) {
 }
 
 /**
+ * Resolves the page box the OCR overlay percentages are relative to.
+ *
+ * An `.ocr-container` whose children are all absolutely positioned has no in-flow content
+ * and a 0x0 box; its sized child then carries both the page dimensions and the container's
+ * offset. An ancestor is a last resort, as it loses that offset.
+ *
+ * Pages that paint their artwork as a background are measured by that artwork, not by
+ * their own box: see [artworkRect].
+ *
+ * @param {Element} ocrContainer
+ * @returns {DOMRect | null}
+ */
+export function ocrReferenceRect(ocrContainer) {
+  const hasArea = (rect) => rect.width > 0 && rect.height > 0;
+
+  const img = ocrContainer.querySelector("img");
+  if (img && hasArea(img.getBoundingClientRect())) {
+    return img.getBoundingClientRect();
+  }
+
+  const containerRect = artworkRect(ocrContainer);
+  if (hasArea(containerRect)) {
+    return containerRect;
+  }
+
+  for (const child of ocrContainer.children) {
+    const childRect = artworkRect(child);
+    if (hasArea(childRect)) {
+      return childRect;
+    }
+  }
+
+  let element = ocrContainer.parentElement;
+  while (element) {
+    const rect = element.getBoundingClientRect();
+    if (hasArea(rect)) {
+      return rect;
+    }
+    element = element.parentElement;
+  }
+
+  return null;
+}
+
+/**
+ * The box [element] paints its artwork into.
+ *
+ * A cover page is laid out as a full spread whose background image is drawn smaller than
+ * the spread and centred in it, and its OCR percentages are relative to that image
+ * (RR-8804). Only that shape is trusted: one picture, drawn at an explicit pixel size,
+ * placed from the padding box and lying wholly inside it. A tiled pattern, or artwork
+ * cropped by the page, says nothing about the page's own picture, so the element keeps
+ * its own box.
+ */
+function artworkRect(element) {
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  if (
+    !style ||
+    !style.backgroundImage ||
+    style.backgroundImage === "none" ||
+    !/^no-repeat( no-repeat)?$/.test(firstLayer(style.backgroundRepeat)) ||
+    firstLayer(style.backgroundOrigin || "padding-box") !== "padding-box"
+  ) {
+    return rect;
+  }
+
+  const size = pixelPair(firstLayer(style.backgroundSize));
+  if (!size) {
+    return rect;
+  }
+
+  const boxWidth = element.clientWidth;
+  const boxHeight = element.clientHeight;
+  const [positionX, positionY] = firstLayer(style.backgroundPosition).split(
+    /\s+/
+  );
+  const offsetX = backgroundOffset(positionX, boxWidth - size[0]);
+  const offsetY = backgroundOffset(positionY, boxHeight - size[1]);
+  if (
+    offsetX === null ||
+    offsetY === null ||
+    offsetX < 0 ||
+    offsetY < 0 ||
+    offsetX + size[0] > boxWidth ||
+    offsetY + size[1] > boxHeight
+  ) {
+    return rect;
+  }
+
+  return rectAt(
+    rect.left + element.clientLeft + offsetX,
+    rect.top + element.clientTop + offsetY,
+    size[0],
+    size[1]
+  );
+}
+
+function firstLayer(value) {
+  return (value || "").split(",")[0].trim();
+}
+
+function pixelPair(value) {
+  const match = value.match(/^(\d+(?:\.\d+)?)px\s+(\d+(?:\.\d+)?)px$/);
+  return match ? [parseFloat(match[1]), parseFloat(match[2])] : null;
+}
+
+function backgroundOffset(position, freeSpace) {
+  const match = (position || "").match(/^(-?\d+(?:\.\d+)?)(px|%)$/);
+  if (!match) {
+    return null;
+  }
+  const value = parseFloat(match[1]);
+  return match[2] === "%" ? (freeSpace * value) / 100 : value;
+}
+
+/**
  * Resolves how a decoration on a single OCR overlay must be placed.
  */
 export function ocrOverlayPlacementForOverlay(textOverlayElement, ocrRect) {

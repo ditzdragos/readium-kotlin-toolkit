@@ -4,17 +4,17 @@ import { describe, it } from "node:test";
 import { decorationPlacements } from "../src/decorationPlacements.mjs";
 
 const OVERLAY_BOX = { rect: { left: 1 }, rotationAngle: 7 };
-const SVG_LINE_BOX = { rect: { left: 2 }, rotationAngle: 15 };
+const LETTERING_LINE_BOX = { rect: { left: 2 }, rotationAngle: 15 };
 const CLIENT_RECT = { left: 3 };
 
-function sources({ overlayBoxes = [], svgLineBoxes = [] } = {}) {
+function sources({ overlayBoxes = [], letteringLineBoxes = [] } = {}) {
   const asked = [];
   return {
     asked,
     overlayBoxes,
-    svgLineBoxes: () => {
-      asked.push("svgLineBoxes");
-      return svgLineBoxes;
+    letteringLineBoxes: () => {
+      asked.push("letteringLineBoxes");
+      return letteringLineBoxes;
     },
     clientRects: () => {
       asked.push("clientRects");
@@ -29,7 +29,7 @@ describe("decorationPlacements", () => {
   it("places a wrap decoration on an OCR overlay's boxes before anything else", () => {
     const from = sources({
       overlayBoxes: [OVERLAY_BOX],
-      svgLineBoxes: [SVG_LINE_BOX],
+      letteringLineBoxes: [LETTERING_LINE_BOX],
     });
 
     assert.deepEqual(decorationPlacements(UNDERLINE, from), [
@@ -38,13 +38,13 @@ describe("decorationPlacements", () => {
     assert.deepEqual(from.asked, []);
   });
 
-  it("places an underline on SVG lettering on its turned line boxes", () => {
-    const from = sources({ svgLineBoxes: [SVG_LINE_BOX] });
+  it("places an underline on lettering on its turned line boxes", () => {
+    const from = sources({ letteringLineBoxes: [LETTERING_LINE_BOX] });
 
     assert.deepEqual(decorationPlacements(UNDERLINE, from), [
-      { rect: SVG_LINE_BOX.rect, turnedBox: SVG_LINE_BOX },
+      { rect: LETTERING_LINE_BOX.rect, turnedBox: LETTERING_LINE_BOX },
     ]);
-    assert.deepEqual(from.asked, ["svgLineBoxes"]);
+    assert.deepEqual(from.asked, ["letteringLineBoxes"]);
   });
 
   it("falls back to client rects when the lettering gives no boxes", () => {
@@ -55,18 +55,20 @@ describe("decorationPlacements", () => {
     ]);
   });
 
-  it("keeps box decorations on client rects, even on SVG lettering", () => {
-    const from = sources({ svgLineBoxes: [SVG_LINE_BOX] });
+  it("places a read highlight on lettering on its turned line boxes", () => {
+    const from = sources({ letteringLineBoxes: [LETTERING_LINE_BOX] });
 
-    decorationPlacements({ width: "wrap", layout: "boxes" }, from);
-
-    assert.deepEqual(from.asked, ["clientRects"]);
+    assert.deepEqual(
+      decorationPlacements({ width: "wrap", layout: "boxes" }, from),
+      [{ rect: LETTERING_LINE_BOX.rect, turnedBox: LETTERING_LINE_BOX }]
+    );
+    assert.deepEqual(from.asked, ["letteringLineBoxes"]);
   });
 
   it("keeps decorations that span the viewport on client rects, turned like their overlay", () => {
     const from = sources({
       overlayBoxes: [OVERLAY_BOX],
-      svgLineBoxes: [SVG_LINE_BOX],
+      letteringLineBoxes: [LETTERING_LINE_BOX],
     });
 
     assert.deepEqual(

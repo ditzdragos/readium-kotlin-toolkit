@@ -17,7 +17,7 @@ import {
   continuesJoinedWord,
   continuesWord,
   joinLetteringRuns,
-  svgLineBoxes,
+  letteringLineBoxes,
   turnedBoxesByLine,
 } from "../src/letteringRuns.mjs";
 
@@ -327,6 +327,25 @@ describe("joinLetteringRuns", () => {
 
     assert.equal(textOf(root), "Title\nAuthor");
   });
+
+  it("keeps OCR overlay words apart when their invisible text touches", () => {
+    const root = node("div", XHTML);
+    const overlays = [
+      ["“It", box(0.00022, 0.00022, 0, 18)],
+      ["ain’t", box(0.00165, 0.00165, 0, 18)],
+      ["easy", box(0.0019, 0.0019, 0, 18)],
+    ].map(([value, rect]) => {
+      const overlay = block(root, value, rect);
+      overlay.classList = { contains: (name) => name === "text-overlay" };
+      whitespace(root);
+      return overlay;
+    });
+
+    joinLetteringRuns(documentWith(root));
+
+    assert.equal(textOf(root), "“It\nain’t\neasy\n");
+    assert.ok(!overlays.some(continuesJoinedWord));
+  });
 });
 
 describe("turnedBoxesByLine", () => {
@@ -439,12 +458,12 @@ function tumbleGlyphs(word = "tumble,") {
 const RUMBLE = { text: "Rumble", matrix: [1, 0, 0, 1, 20, 30], advance: 60 };
 const SPACE = { text: " ", matrix: [1, 0, 0, 1, 90, 30], advance: 0 };
 
-describe("svgLineBoxes", () => {
+describe("letteringLineBoxes", () => {
   it("gives a word set one glyph per <text> along a curve one turned box", () => {
     const svg = letteringSvg(tumbleGlyphs());
     const [first, last] = [svg.texts[0], svg.texts[svg.texts.length - 1]];
 
-    const boxes = svgLineBoxes(rangeOver(svg, first, last));
+    const boxes = letteringLineBoxes(rangeOver(svg, first, last));
 
     assert.equal(boxes.length, 1);
     assertReachesEveryCorner(assert, boxes[0], curvedWord(TUMBLE));
@@ -462,15 +481,15 @@ describe("svgLineBoxes", () => {
     const tumble = amongOthers.texts.slice(2);
 
     assert.deepEqual(
-      svgLineBoxes(rangeOver(amongOthers, tumble[0], tumble[6])),
-      svgLineBoxes(rangeOver(alone, alone.texts[0], alone.texts[6]))
+      letteringLineBoxes(rangeOver(amongOthers, tumble[0], tumble[6])),
+      letteringLineBoxes(rangeOver(alone, alone.texts[0], alone.texts[6]))
     );
   });
 
   it("passes over the space glyphs between words", () => {
     const svg = letteringSvg([RUMBLE, SPACE, ...tumbleGlyphs()]);
 
-    const boxes = svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[8]));
+    const boxes = letteringLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[8]));
 
     assert.ok(boxes.length > 0);
   });
@@ -479,7 +498,7 @@ describe("svgLineBoxes", () => {
     const svg = letteringSvg([RUMBLE]);
 
     assert.deepEqual(
-      svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0], 0, 3)),
+      letteringLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0], 0, 3)),
       []
     );
   });
@@ -496,7 +515,7 @@ describe("svgLineBoxes", () => {
     ]);
 
     assert.deepEqual(
-      svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0])),
+      letteringLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0])),
       []
     );
   });
@@ -505,18 +524,245 @@ describe("svgLineBoxes", () => {
     const svg = letteringSvg([{ ...RUMBLE, advance: 0 }]);
 
     assert.deepEqual(
-      svgLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0])),
+      letteringLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[0])),
       []
     );
   });
 
-  it("keeps the client rects outside SVG", () => {
-    const paragraph = { nodeType: 1, closest: () => null };
+});
+
+function turn(degrees) {
+  const angle = (degrees * Math.PI) / 180;
+  return [Math.cos(angle), Math.sin(angle), -Math.sin(angle), Math.cos(angle)];
+}
+
+function cssMatrix([a, b, c, d]) {
+  return `matrix(${a}, ${b}, ${c}, ${d}, 0, 0)`;
+}
+
+/** A glyph's text box, `width` × `height` about (x, y), turned by [degrees] on screen. */
+function turnedGlyph(x, y, width, height, degrees) {
+  const [cos, sin] = turn(degrees);
+  const at = (along, across) => ({
+    x: x + cos * along - sin * across,
+    y: y + sin * along + cos * across,
+  });
+  return {
+    corners: [
+      at(-width / 2, -height / 2),
+      at(width / 2, -height / 2),
+      at(width / 2, height / 2),
+      at(-width / 2, height / 2),
+    ],
+  };
+}
+
+/**
+ * A container holding one HTML block per part, in document order. A string part is text between
+ * them; an object part is `{ text, rect, transform }`, `rect` being the upright box around its
+ * text and `transform` its computed CSS transform.
+ */
+function letteringBlocks(parts) {
+  let source = "";
+  const page = {
+    createRange: () => {
+      const range = boundaries(0, 0, source);
+      range.getBoundingClientRect = () => range.contents.rect;
+      return range;
+    },
+    defaultView: {
+      getComputedStyle: (element) => ({ transform: element.transform }),
+    },
+  };
+  const container = {
+    nodeType: 1,
+    namespaceURI: XHTML,
+    localName: "div",
+    childNodes: [],
+    transform: "none",
+    parentElement: null,
+    blocks: [],
+    closest: () => null,
+    querySelectorAll: () => container.blocks,
+  };
+  for (const part of parts) {
+    if (typeof part === "string") {
+      source += part;
+      container.childNodes.push({ nodeType: 3, nodeValue: part });
+      continue;
+    }
+    const rect = {
+      ...part.rect,
+      width: part.rect.right - part.rect.left,
+      height: part.rect.bottom - part.rect.top,
+    };
+    const block = {
+      nodeType: 1,
+      namespaceURI: XHTML,
+      localName: "p",
+      childNodes: [{ nodeType: 3, nodeValue: part.text }],
+      textContent: part.text,
+      transform: part.transform ?? "none",
+      parentElement: container,
+      ownerDocument: page,
+      start: source.length,
+      end: source.length + part.text.length,
+      rect,
+      clientRects: [rect],
+      closest: () => null,
+    };
+    source += part.text;
+    container.childNodes.push(block);
+    container.blocks.push(block);
+  }
+  container.source = source;
+  return container;
+}
+
+/** A range over [container]'s text from [start] to [end]. */
+function rangeOverText(container, start, end) {
+  const range = boundaries(start, end, container.source);
+  range.startContainer = { position: 0 };
+  range.startOffset = start;
+  range.endContainer = { position: 0 };
+  range.endOffset = end;
+  range.commonAncestorContainer = container;
+  return range;
+}
+
+function rangeOverBlocks(container, first, last) {
+  return rangeOverText(container, first.start, last.end);
+}
+
+/** A block per glyph, the upright box around [glyphs]' text, each turned by its [degrees]. */
+function blocksFor(glyphs, degrees, texts) {
+  return glyphs.flatMap((glyph, index) => [
+    "\n",
+    {
+      text: texts[index],
+      rect: uprightBox(glyph),
+      transform: cssMatrix(turn(degrees[index])),
+    },
+  ]);
+}
+
+// "run" on page003 of "I Play" (9781626725126): one <p> per glyph, each turned by CSS, with the
+// upright boxes and transforms read from the page.
+const I_PLAY_RUN = [
+  "\n",
+  {
+    text: "r",
+    rect: box(208.8, 250.4, 495.8, 577.4),
+    transform: "matrix(0.992546, -0.121869, 0.121869, 0.992546, 0, 0)",
+  },
+  {
+    text: "u",
+    rect: box(244.6, 302.1, 498.7, 582.3),
+    transform: "matrix(0.992546, -0.121869, 0.121869, 0.992546, 0, 0)",
+  },
+  {
+    text: "n",
+    rect: box(290.6, 351.7, 498.0, 583.5),
+    transform: "matrix(0.984808, -0.173648, 0.173648, 0.984808, 0, 0)",
+  },
+  "\n",
+];
+
+describe("letteringLineBoxes on HTML blocks", () => {
+  it("gives a word set one turned block per glyph one box, turned to follow it", () => {
+    const blocks = letteringBlocks(I_PLAY_RUN);
+    const [r, , n] = blocks.blocks;
+
+    const boxes = letteringLineBoxes(rangeOverBlocks(blocks, r, n));
+
+    assert.equal(boxes.length, 1);
+    assert.ok(boxes[0].rotationAngle < -7 && boxes[0].rotationAngle > -10);
+  });
+
+  it("reaches every corner of the turned glyphs, and stands about one glyph high", () => {
+    const degrees = [-12, -8, -4, 0, 4];
+    const glyphs = degrees.map((angle, index) =>
+      turnedGlyph(100 + 40 * index, 200 + Math.abs(angle), 36, 78, angle)
+    );
+    const blocks = letteringBlocks(blocksFor(glyphs, degrees, [..."dance"]));
+    const [first, last] = [blocks.blocks[0], blocks.blocks[4]];
+
+    const boxes = letteringLineBoxes(rangeOverBlocks(blocks, first, last));
+
+    assert.equal(boxes.length, 1);
+    assertReachesEveryCorner(assert, boxes[0], glyphs);
+    assert.ok(boxes[0].rect.height < 78 * 1.25);
+  });
+
+  it("turns the glyphs by their ancestors' transforms too", () => {
+    const glyphs = [0, 1, 2].map((index) =>
+      turnedGlyph(100 + 40 * index, 200 - 6 * index, 36, 78, -9)
+    );
+    const blocks = letteringBlocks(blocksFor(glyphs, [-6, -6, -6], [..."run"]));
+    blocks.transform = cssMatrix(turn(-3).map((value) => value * 2));
+
+    const boxes = letteringLineBoxes(
+      rangeOverBlocks(blocks, blocks.blocks[0], blocks.blocks[2])
+    );
+
+    assert.equal(boxes.length, 1);
+    assert.ok(Math.abs(boxes[0].rotationAngle + 9) < 0.01);
+    assertReachesEveryCorner(assert, boxes[0], glyphs);
+  });
+
+  it("keeps the client rects for upright text", () => {
+    const blocks = letteringBlocks([
+      { text: "walk", rect: box(280, 490, 760, 850) },
+    ]);
+    const [walk] = blocks.blocks;
 
     assert.deepEqual(
-      svgLineBoxes({ commonAncestorContainer: textNodeIn(paragraph) }),
+      letteringLineBoxes(rangeOverBlocks(blocks, walk, walk)),
       []
     );
+  });
+
+  it("keeps the client rects for a range covering part of a block", () => {
+    const blocks = letteringBlocks([
+      {
+        text: "ju",
+        rect: box(406.0, 495.5, 577.9, 656.1),
+        transform: "matrix(0.992546, -0.121869, 0.121869, 0.992546, 0, 0)",
+      },
+    ]);
+
+    assert.deepEqual(letteringLineBoxes(rangeOverText(blocks, 0, 1)), []);
+  });
+
+  it("keeps the client rects for a range reaching text outside the glyphs", () => {
+    const blocks = letteringBlocks([...I_PLAY_RUN, "and"]);
+    const [r] = blocks.blocks;
+
+    assert.deepEqual(
+      letteringLineBoxes(rangeOverText(blocks, r.start, blocks.source.length)),
+      []
+    );
+  });
+
+  it("keeps the client rects for a glyph skewed rather than turned", () => {
+    const blocks = letteringBlocks([
+      {
+        text: "r",
+        rect: box(208.8, 250.4, 495.8, 577.4),
+        transform: "matrix(1, 0, 0.3, 1, 0, 0)",
+      },
+    ]);
+    const [r] = blocks.blocks;
+
+    assert.deepEqual(letteringLineBoxes(rangeOverBlocks(blocks, r, r)), []);
+  });
+
+  it("keeps the client rects for a glyph turned near 45°, whose upright box fits any proportion", () => {
+    const glyph = turnedGlyph(200, 200, 36, 78, 44);
+    const blocks = letteringBlocks(blocksFor([glyph], [44], ["r"]));
+    const [r] = blocks.blocks;
+
+    assert.deepEqual(letteringLineBoxes(rangeOverBlocks(blocks, r, r)), []);
   });
 });
 

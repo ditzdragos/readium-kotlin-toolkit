@@ -5,6 +5,7 @@ import {
   gapBridgesRange,
   mergeIntoLines,
   mergeRectRuns,
+  mergeSteppedRuns,
 } from "../src/rangeRects.mjs";
 
 function round(value) {
@@ -165,6 +166,30 @@ describe("mergeIntoLines", () => {
     assert.deepEqual(mergeIntoLines(floated), floated);
   });
 
+  /**
+   * "“Help!" opening chapter 1 of Dinosaurs Before Dark (9780375894183): a
+   * stick-up cap "“H" set inline at 3em with `line-height: 0`, standing on the
+   * baseline of the line it starts and rising above it.
+   */
+  const stickUpCap = rect(20, 59.7, 89.3, 56.6);
+  const help = rect(81.7, 28.7, 119, 18.9);
+
+  it("gives a stick-up cap and the rest of its word one box", () => {
+    const lines = mergeIntoLines([stickUpCap, help]);
+
+    assert.equal(lines.length, 1);
+    assert.equal(round(lines[0].left), 20);
+    assert.equal(round(lines[0].right), 110.4);
+    assert.equal(round(lines[0].top), 89.3);
+    assert.equal(round(lines[0].bottom), 145.9);
+  });
+
+  it("keeps the line after a stick-up cap apart from it", () => {
+    const nextLine = rect(20, 200, 138.2, 18.9);
+
+    assert.equal(mergeIntoLines([stickUpCap, help, nextLine]).length, 2);
+  });
+
   it("keeps one box per line for a word that wraps", () => {
     const wrapped = [rect(300, 40, 100, 32), rect(10, 30, 140, 32)];
 
@@ -193,6 +218,45 @@ describe("mergeIntoLines", () => {
   it("passes a single box straight through", () => {
     assert.deepEqual(mergeIntoLines([wheres[0]]), [wheres[0]]);
     assert.deepEqual(mergeIntoLines([]), []);
+  });
+});
+
+describe("mergeSteppedRuns", () => {
+  /**
+   * "hop" on page 10 of I Play (9781626725126): `h<span class="top">o</span>
+   * <span class="down">p</span>`, the spans set 11px up and 8px down with
+   * `vertical-align`.
+   */
+  const hop = [
+    rect(555.4, 50.3, 385.2, 78.2),
+    rect(603.3, 50.3, 374.2, 78.2),
+    rect(654.1, 48.2, 393.2, 78.2),
+  ];
+
+  it("gives a word whose letters step up and down one box", () => {
+    const runs = mergeSteppedRuns(hop, always);
+
+    assert.equal(runs.length, 1);
+    assert.equal(round(runs[0].left), 555.4);
+    assert.equal(round(runs[0].right), 702.3);
+    assert.equal(round(runs[0].top), 374.2);
+    assert.equal(round(runs[0].bottom), 471.4);
+  });
+
+  it("keeps stepped letters apart when the range does not cover the gaps", () => {
+    assert.equal(mergeSteppedRuns(hop, never).length, 3);
+  });
+
+  it("keeps a drop cap floated over three lines apart from the rest of its word", () => {
+    const floated = [rect(71, 53, 114, 64), rect(124, 58, 120, 20)];
+
+    assert.equal(mergeSteppedRuns(floated, always).length, 2);
+  });
+
+  it("keeps the lines of a wrapped range apart", () => {
+    const lines = [rect(10, 40, 100), rect(52, 40, 140)];
+
+    assert.equal(mergeSteppedRuns(lines, always).length, 2);
   });
 });
 
