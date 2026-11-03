@@ -86,7 +86,7 @@ class WebViewServerHtmlHandoffTest {
             override fun getMethod(): String = "GET"
             override fun getRequestHeaders(): Map<String, String> = emptyMap()
         }
-        val response = server.shouldInterceptRequest(request, css)!!
+        val response = server.shouldInterceptRequest(request, css, PixelSize(1080, 1920))!!
         return response.data.use { it.readBytes().decodeToString() }
     }
 
@@ -104,7 +104,7 @@ class WebViewServerHtmlHandoffTest {
 
     @Test
     fun `a prewarmed page is served without reading it again`() = runTest {
-        server.prewarm(pageHref, css)
+        server.prewarm(pageHref, css, PixelSize(1080, 1920))
 
         val served = serve()
 
