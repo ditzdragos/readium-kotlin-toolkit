@@ -682,7 +682,7 @@ function putFamilyBeforeGenericSerif(family) {
     }
     walk(rules);
   }
-  for (const element of document.querySelectorAll('[style*="font-family"]')) {
+  for (const element of document.querySelectorAll("[style]")) {
     rewrite(element.style);
   }
 }
