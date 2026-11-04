@@ -6,12 +6,18 @@ import { decorationPlacements } from "../src/decorationPlacements.mjs";
 const OVERLAY_BOX = { rect: { left: 1 }, rotationAngle: 7 };
 const LETTERING_LINE_BOX = { rect: { left: 2 }, rotationAngle: 15 };
 const CLIENT_RECT = { left: 3 };
+const DISPLAY_RECT = { left: 4 };
 
-function sources({ overlayBoxes = [], letteringLineBoxes = [] } = {}) {
+function sources({
+  overlayBoxes = [],
+  displayRect = null,
+  letteringLineBoxes = [],
+} = {}) {
   const asked = [];
   return {
     asked,
     overlayBoxes,
+    displayRect,
     letteringLineBoxes: () => {
       asked.push("letteringLineBoxes");
       return letteringLineBoxes;
@@ -76,5 +82,32 @@ describe("decorationPlacements", () => {
       [{ rect: CLIENT_RECT, turnedBox: OVERLAY_BOX }]
     );
     assert.deepEqual(from.asked, ["clientRects"]);
+  });
+
+  it("places a decoration on display type on its ink, not its lettering or client rects", () => {
+    const from = sources({
+      displayRect: DISPLAY_RECT,
+      letteringLineBoxes: [LETTERING_LINE_BOX],
+    });
+
+    assert.deepEqual(decorationPlacements(UNDERLINE, from), [
+      { rect: DISPLAY_RECT, turnedBox: undefined },
+    ]);
+    assert.deepEqual(
+      decorationPlacements({ width: "bounds", layout: "boxes" }, from),
+      [{ rect: DISPLAY_RECT, turnedBox: undefined }]
+    );
+    assert.deepEqual(from.asked, []);
+  });
+
+  it("keeps an OCR overlay's boxes over a display rect", () => {
+    const from = sources({
+      overlayBoxes: [OVERLAY_BOX],
+      displayRect: DISPLAY_RECT,
+    });
+
+    assert.deepEqual(decorationPlacements(UNDERLINE, from), [
+      { rect: OVERLAY_BOX.rect, turnedBox: OVERLAY_BOX },
+    ]);
   });
 });
