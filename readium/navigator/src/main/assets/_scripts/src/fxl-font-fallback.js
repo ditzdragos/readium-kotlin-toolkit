@@ -69,10 +69,11 @@ import { putFamilyBeforeGenericSerif } from "./fxlGenericSerif.mjs";
 
 /* Named by no publication, so measuring under it cannot collide with the page. */
 const MEASUREMENT_FAMILY = "Readium FXL Metric Clone";
-const GENERIC_SERIF_FAMILY = "Readium FXL Serif";
 
 /* Identifies what `HtmlInjector` injected, among the publication's own sheets. */
 const INJECTED_DEFAULT_PATH = "fxl-default-serif/";
+
+const FONT_FACE_RULE = 5;
 
 const PROBE_SIZE = "72px";
 
@@ -667,11 +668,27 @@ function correctOverlayMetrics() {
     return Promise.resolve();
   }
 
-  return fontsSettled(textElements())
-    .then(() => pageIsMeasurable(context, Date.now() + MEASURABLE_WAIT_MS))
+  const textLines = textElements();
+  return fontsSettled(textLines)
+    .then(() => {
+      requestGenericSerifFaces(textLines);
+      return pageIsMeasurable(context, Date.now() + MEASURABLE_WAIT_MS);
+    })
     .then((measurable) =>
       measurable ? correctMeasuredOverlays(context, directory) : undefined
     );
+}
+
+/* RR-9372: asked for once `fonts.ready` has settled, so the decode overlaps the waits before the decision instead of lengthening them. */
+function requestGenericSerifFaces(textLines) {
+  const decidable = textLines.some(
+    (line) =>
+      startsWithGenericSerif(line.style.fontFamily) && sampleFor(line) !== null
+  );
+  const family = decidable ? injectedDefaultFamily() : null;
+  if (family !== null) {
+    genericSerifFacesLoaded(textLines, family);
+  }
 }
 
 /*
@@ -752,17 +769,68 @@ function correctMeasuredOverlays(context, directory) {
   ).then(() => restoreKerningIfItHelps(textElements()));
 }
 
-/* RR-9372: the stylesheet walk is spent only on a page with a bare-serif line the fit can decide. */
-function nameGenericSerifWhereDecidable(textLines) {
-  const decidable = textLines.some(
-    ({ style, element, measurable }) =>
-      measurable &&
-      startsWithGenericSerif(style.fontFamily) &&
-      boxElementFor(element) !== null
-  );
-  if (decidable) {
-    putFamilyBeforeGenericSerif(document, GENERIC_SERIF_FAMILY);
+/* RR-9372: the clone's faces as `fxl-default-serif.css` declares them, which the page default has often already loaded. */
+function injectedDefaultFamily() {
+  const sheet = injectedDefaultStyleSheet();
+  if (!sheet) {
+    return null;
   }
+  let rules;
+  try {
+    rules = sheet.cssRules;
+  } catch (error) {
+    return null;
+  }
+  for (const rule of rules) {
+    if (rule.type === FONT_FACE_RULE) {
+      const family = parseFamilyList(
+        rule.style.getPropertyValue("font-family")
+      )[0];
+      if (family) {
+        return family;
+      }
+    }
+  }
+  return null;
+}
+
+function genericSerifFacesLoaded(textLines, family) {
+  const fonts = new Set();
+  for (const { style } of textLines) {
+    if (startsWithGenericSerif(style.fontFamily)) {
+      const face = faceFor(style);
+      fonts.add(
+        face.style + " " + face.weight + " 16px " + quoteFamily(family)
+      );
+    }
+  }
+  return Promise.all(
+    Array.from(fonts, (font) => document.fonts.load(font).catch(() => {}))
+  );
+}
+
+/* RR-9372: bare-`serif` lines with an authored box, to measure in the injected faces before any rule names them. */
+function genericSerifLines(textLines) {
+  const family = injectedDefaultFamily();
+  if (family === null) {
+    return null;
+  }
+  const samples = [];
+  for (const line of textLines) {
+    if (!startsWithGenericSerif(line.style.fontFamily)) {
+      continue;
+    }
+    const sample = sampleFor(line);
+    if (sample) {
+      samples.push(sample);
+    }
+    if (samples.length === MAX_SAMPLES_PER_FAMILY) {
+      break;
+    }
+  }
+  return samples.length > 0
+    ? { family, samples, loaded: genericSerifFacesLoaded(textLines, family) }
+    : null;
 }
 
 /*
@@ -828,10 +896,10 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
   }
 
   revertPageDefaultIfItHurts(textLines);
-  nameGenericSerifWhereDecidable(textLines);
 
+  const genericSerif = genericSerifLines(textLines);
   const groups = unrenderableOverlays(context, textLines);
-  if (groups.size === 0) {
+  if (groups.size === 0 && genericSerif === null) {
     return Promise.resolve();
   }
 
@@ -849,10 +917,23 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
    * registered its faces stay resident in each of the preloaded spread's
    * WebViews, for pages the code decided not to touch.
    */
-  return pool.loaded.then(() => {
+  return Promise.all([
+    pool.loaded,
+    genericSerif ? genericSerif.loaded : undefined,
+  ]).then(() => {
     const substituted = [];
     const verdicts = [];
+    let genericSerifWins = false;
     try {
+      if (genericSerif) {
+        const verdict = evaluateSubstitution(
+          fitAgainst(genericSerif.samples, {
+            "font-family": quoteFamily(genericSerif.family) + ", serif",
+          })
+        );
+        verdicts.push(verdict);
+        genericSerifWins = verdict !== null && verdict.improves;
+      }
       const winners = [];
       for (const [family, { samples, faces }] of groups) {
         const verdict = evaluateSubstitution(
@@ -875,11 +956,17 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
     if (evidenceIsMissing(verdicts)) {
       return askAgain();
     }
-    if (substituted.length === 0) {
+    if (substituted.length === 0 && !genericSerifWins) {
       return undefined;
     }
-    /* RR-9372: claimed faces resolve at once; the yield keeps the kerning pass's relayout under the clone out of this task. */
-    return loadAll(substituted)
+    /* RR-9372: measuring, the rule rewrite and the kerning pass each restyle the page, so each gets a task of its own. */
+    return after(0)
+      .then(() => {
+        if (genericSerifWins) {
+          putFamilyBeforeGenericSerif(document, genericSerif.family);
+        }
+        return loadAll(substituted);
+      })
       .then(() => document.fonts.ready)
       .then(() => after(0));
   });
