@@ -58,19 +58,14 @@ import {
   evidenceIsMissing,
   faceFor,
   faceKey,
+  genericSerifWithFamily,
   isNamedFamily,
   parseFamilyList,
   probeTextFrom,
   quoteFamily,
 } from "./fxlFontFit.mjs";
+import { claimFaces, cloneFaces, loadAll } from "./fxlCloneFaces.mjs";
 import { putFamilyBeforeGenericSerif } from "./fxlGenericSerif.mjs";
-
-const CLONE_FACES = [
-  { file: "NimbusRoman.woff2", weight: "400", style: "normal" },
-  { file: "NimbusRoman-Italic.woff2", weight: "400", style: "italic" },
-  { file: "NimbusRoman-Bold.woff2", weight: "700", style: "normal" },
-  { file: "NimbusRoman-BoldItalic.woff2", weight: "700", style: "italic" },
-];
 
 /* Named by no publication, so measuring under it cannot collide with the page. */
 const MEASUREMENT_FAMILY = "Readium FXL Metric Clone";
@@ -640,40 +635,6 @@ function restoreKerningIfItHelps(textLines) {
   (document.head || document.documentElement).appendChild(override);
 }
 
-/*
- * `needed` holds the weight/slope combinations the page actually draws in this
- * family, so the faces it never uses are neither fetched nor decoded. It is
- * gathered from every line wearing the family rather than from the sampled
- * ones: registering a family without the bold face a line elsewhere on the page
- * asks for would hand that line a synthetically emboldened regular, whose
- * metrics are not the clone's and not the artwork's.
- */
-function cloneFaces(family, directory, needed) {
-  const faces = [];
-  for (const face of CLONE_FACES) {
-    if (needed && !needed.has(faceKey(face))) {
-      continue;
-    }
-    let fontFace;
-    try {
-      fontFace = new FontFace(family, 'url("' + directory + face.file + '")', {
-        weight: face.weight,
-        style: face.style,
-        display: "swap",
-      });
-    } catch (error) {
-      continue;
-    }
-    document.fonts.add(fontFace);
-    faces.push(fontFace);
-  }
-  return faces;
-}
-
-function loadAll(faces) {
-  return Promise.all(faces.map((face) => face.load().catch(() => {})));
-}
-
 function documentParsed() {
   if (document.readyState !== "loading") {
     return Promise.resolve();
@@ -855,7 +816,15 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
 
   revertPageDefaultIfItHurts(textLines);
   /* RR-9372: unregistered, the name falls through to `serif`; the named-family path below decides whether to register the clone under it. */
-  putFamilyBeforeGenericSerif(document, GENERIC_SERIF_FAMILY);
+  if (
+    textLines.some(
+      (line) =>
+        genericSerifWithFamily(line.style.fontFamily, GENERIC_SERIF_FAMILY) &&
+        sampleFor(line)
+    )
+  ) {
+    putFamilyBeforeGenericSerif(document, GENERIC_SERIF_FAMILY);
+  }
 
   const groups = unrenderableOverlays(context, textLines);
   if (groups.size === 0) {
@@ -868,7 +837,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
       measuring.add(key);
     }
   }
-  const measurementFaces = cloneFaces(MEASUREMENT_FAMILY, directory, measuring);
+  const unclaimed = cloneFaces(MEASUREMENT_FAMILY, directory, measuring);
 
   /*
    * The measurement family has done its job once every group has a verdict, and
@@ -877,12 +846,12 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
    * WebViews, for pages the code decided not to touch.
    */
   const release = () => {
-    for (const face of measurementFaces) {
+    for (const face of unclaimed.values()) {
       document.fonts.delete(face);
     }
   };
 
-  return loadAll(measurementFaces).then(() => {
+  return loadAll([...unclaimed.values()]).then(() => {
     const substituted = [];
     const verdicts = [];
     try {
@@ -896,7 +865,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
         if (verdict !== null && verdict.improves) {
           substituted.push.apply(
             substituted,
-            cloneFaces(family, directory, faces)
+            claimFaces(family, directory, faces, unclaimed)
           );
         }
       }
@@ -909,7 +878,10 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
     if (substituted.length === 0) {
       return undefined;
     }
-    return loadAll(substituted).then(() => document.fonts.ready);
+    /* RR-9372: claimed faces resolve at once, so yield to keep the kerning pass's layouts out of this task. */
+    return loadAll(substituted)
+      .then(() => document.fonts.ready)
+      .then(() => after(0));
   });
 }
 
