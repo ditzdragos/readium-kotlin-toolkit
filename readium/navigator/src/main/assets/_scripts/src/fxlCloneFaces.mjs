@@ -21,7 +21,7 @@ const CLONE_FACES = [
  * asks for would hand that line a synthetically emboldened regular, whose
  * metrics are not the clone's and not the artwork's.
  */
-export function cloneFaces(family, directory, needed) {
+function cloneFaces(family, directory, needed) {
   const faces = new Map();
   for (const face of CLONE_FACES) {
     const key = faceKey(face);
@@ -44,27 +44,50 @@ export function cloneFaces(family, directory, needed) {
   return faces;
 }
 
-/* RR-9372: a measurement face is already decoded, so it is renamed rather than fetched and decoded again under the page's name. */
-export function claimFaces(family, directory, needed, unclaimed) {
-  const claimed = [];
-  const missing = new Set(needed);
-  for (const key of needed) {
-    const face = unclaimed.get(key);
-    if (!face) {
-      continue;
-    }
-    unclaimed.delete(key);
-    missing.delete(key);
-    document.fonts.delete(face);
+/*
+ * RR-9372: faces decoded for measuring are renamed to a family that wins rather
+ * than fetched and decoded again, and re-added so the set indexes them under it.
+ */
+export function measurementFaces(family, directory, needed) {
+  const unclaimed = cloneFaces(family, directory, needed);
+  return {
+    loaded: loadAll(unclaimed.values()),
+    claim(owner, keys) {
+      const claimed = [];
+      const missing = new Set();
+      for (const key of keys) {
+        const face = unclaimed.get(key);
+        if (face && rename(face, owner)) {
+          unclaimed.delete(key);
+          claimed.push(face);
+        } else {
+          missing.add(key);
+        }
+      }
+      return claimed.concat(
+        Array.from(cloneFaces(owner, directory, missing).values())
+      );
+    },
+    release() {
+      for (const face of unclaimed.values()) {
+        document.fonts.delete(face);
+      }
+      unclaimed.clear();
+    },
+  };
+}
+
+function rename(face, family) {
+  try {
     face.family = family;
-    document.fonts.add(face);
-    claimed.push(face);
+  } catch (error) {
+    return false;
   }
-  return missing.size === 0
-    ? claimed
-    : claimed.concat([...cloneFaces(family, directory, missing).values()]);
+  document.fonts.delete(face);
+  document.fonts.add(face);
+  return true;
 }
 
 export function loadAll(faces) {
-  return Promise.all(faces.map((face) => face.load().catch(() => {})));
+  return Promise.all(Array.from(faces, (face) => face.load().catch(() => {})));
 }

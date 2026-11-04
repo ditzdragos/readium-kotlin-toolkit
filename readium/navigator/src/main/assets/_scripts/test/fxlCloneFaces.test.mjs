@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 
-import { claimFaces, cloneFaces } from "../src/fxlCloneFaces.mjs";
+import { measurementFaces } from "../src/fxlCloneFaces.mjs";
 
 const DIRECTORY = "https://readium/assets/fonts/";
 const REGULAR = "400 normal";
@@ -9,87 +9,141 @@ const BOLD = "700 normal";
 
 let registered;
 let constructed;
+let failConstruction;
+
+class FakeFontFace {
+  constructor(family, source, descriptors) {
+    if (failConstruction) {
+      throw new SyntaxError("bad source");
+    }
+    this.name = family;
+    this.source = source;
+    Object.assign(this, descriptors);
+    this.loads = 0;
+    constructed.push(this);
+  }
+  get family() {
+    return this.name;
+  }
+  set family(value) {
+    if (this.refuseRename) {
+      throw new SyntaxError("bad family");
+    }
+    this.name = value;
+  }
+  load() {
+    this.loads++;
+    return Promise.resolve(this);
+  }
+}
 
 beforeEach(() => {
   registered = new Set();
   constructed = [];
+  failConstruction = false;
   globalThis.document = {
     fonts: {
       add: (face) => registered.add(face),
       delete: (face) => registered.delete(face),
     },
   };
-  globalThis.FontFace = class {
-    constructor(family, source, descriptors) {
-      this.family = family;
-      this.source = source;
-      Object.assign(this, descriptors);
-      constructed.push(this);
-    }
-  };
+  globalThis.FontFace = FakeFontFace;
 });
 
-describe("cloneFaces", () => {
-  it("registers only the faces the page draws, keyed by face", () => {
-    const faces = cloneFaces("Measure", DIRECTORY, new Set([BOLD]));
+afterEach(() => {
+  delete globalThis.document;
+  delete globalThis.FontFace;
+});
 
-    assert.deepEqual([...faces.keys()], [BOLD]);
+describe("measurementFaces (RR-9372)", () => {
+  it("registers and loads only the faces the page draws", async () => {
+    const pool = measurementFaces("Measure", DIRECTORY, new Set([BOLD]));
+    await pool.loaded;
+
+    assert.equal(constructed.length, 1);
     assert.equal(
-      faces.get(BOLD).source,
+      constructed[0].source,
       `url("${DIRECTORY}NimbusRoman-Bold.woff2")`
     );
-    assert.deepEqual([...registered], [faces.get(BOLD)]);
+    assert.equal(constructed[0].loads, 1);
+    assert.ok(registered.has(constructed[0]));
   });
-});
 
-describe("claimFaces (RR-9372)", () => {
-  it("renames the measured face instead of fetching it again", () => {
-    const unclaimed = cloneFaces("Measure", DIRECTORY, new Set([REGULAR]));
-    const measured = unclaimed.get(REGULAR);
-    constructed = [];
+  it("hands a measured face to the winning family without fetching it again", () => {
+    const pool = measurementFaces("Measure", DIRECTORY, new Set([REGULAR]));
+    const [measured] = constructed;
 
-    const claimed = claimFaces(
-      "Page Serif",
-      DIRECTORY,
-      new Set([REGULAR]),
-      unclaimed
-    );
+    const claimed = pool.claim("Page Serif", [REGULAR]);
+    pool.release();
 
     assert.deepEqual(claimed, [measured]);
     assert.equal(measured.family, "Page Serif");
-    assert.deepEqual(constructed, []);
+    assert.equal(constructed.length, 1);
     assert.ok(registered.has(measured));
-    assert.equal(unclaimed.size, 0);
   });
 
-  it("clones a face another family already claimed", () => {
-    const unclaimed = cloneFaces("Measure", DIRECTORY, new Set([REGULAR]));
-    const first = claimFaces("First", DIRECTORY, new Set([REGULAR]), unclaimed);
+  it("gives a second family its own copy of a face already claimed", () => {
+    const pool = measurementFaces("Measure", DIRECTORY, new Set([REGULAR]));
+    const [first] = pool.claim("First", [REGULAR]);
 
-    const second = claimFaces(
-      "Second",
-      DIRECTORY,
-      new Set([REGULAR]),
-      unclaimed
-    );
+    const [second] = pool.claim("Second", [REGULAR]);
 
-    assert.equal(first[0].family, "First");
-    assert.equal(second.length, 1);
-    assert.notEqual(second[0], first[0]);
-    assert.equal(second[0].family, "Second");
-    assert.ok(registered.has(first[0]) && registered.has(second[0]));
+    assert.notEqual(second, first);
+    assert.equal(first.family, "First");
+    assert.equal(second.family, "Second");
+    assert.ok(registered.has(first) && registered.has(second));
   });
 
-  it("leaves faces the family does not draw for the caller to release", () => {
-    const unclaimed = cloneFaces(
+  it("reuses what it has and copies the rest in one claim", () => {
+    const pool = measurementFaces(
       "Measure",
       DIRECTORY,
       new Set([REGULAR, BOLD])
     );
+    pool.claim("First", [BOLD]);
+    const [, measuredBold] = constructed;
 
-    claimFaces("Page Serif", DIRECTORY, new Set([REGULAR]), unclaimed);
+    const claimed = pool.claim("Second", [REGULAR, BOLD]);
 
-    assert.deepEqual([...unclaimed.keys()], [BOLD]);
-    assert.equal(unclaimed.get(BOLD).family, "Measure");
+    assert.equal(claimed.length, 2);
+    assert.equal(claimed[0], constructed[0]);
+    assert.notEqual(claimed[1], measuredBold);
+    assert.equal(claimed[1].weight, "700");
+  });
+
+  it("releases only the faces no family claimed", () => {
+    const pool = measurementFaces(
+      "Measure",
+      DIRECTORY,
+      new Set([REGULAR, BOLD])
+    );
+    const [regular, bold] = constructed;
+    pool.claim("Page Serif", [REGULAR]);
+
+    pool.release();
+
+    assert.ok(registered.has(regular));
+    assert.ok(!registered.has(bold));
+  });
+
+  it("falls back to a fresh copy when a face refuses its new name", () => {
+    const pool = measurementFaces("Measure", DIRECTORY, new Set([REGULAR]));
+    const [measured] = constructed;
+    measured.refuseRename = true;
+
+    const [claimed] = pool.claim("Page Serif", [REGULAR]);
+
+    assert.notEqual(claimed, measured);
+    assert.equal(claimed.family, "Page Serif");
+    assert.equal(measured.family, "Measure");
+  });
+
+  it("skips a face the WebView cannot construct", async () => {
+    failConstruction = true;
+    const pool = measurementFaces("Measure", DIRECTORY, new Set([REGULAR]));
+    await pool.loaded;
+
+    assert.equal(registered.size, 0);
+    assert.deepEqual(pool.claim("Page Serif", [REGULAR]), []);
   });
 });

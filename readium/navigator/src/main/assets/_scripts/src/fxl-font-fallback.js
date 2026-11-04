@@ -58,13 +58,13 @@ import {
   evidenceIsMissing,
   faceFor,
   faceKey,
-  genericSerifWithFamily,
   isNamedFamily,
   parseFamilyList,
   probeTextFrom,
   quoteFamily,
+  startsWithGenericSerif,
 } from "./fxlFontFit.mjs";
-import { claimFaces, cloneFaces, loadAll } from "./fxlCloneFaces.mjs";
+import { loadAll, measurementFaces } from "./fxlCloneFaces.mjs";
 import { putFamilyBeforeGenericSerif } from "./fxlGenericSerif.mjs";
 
 /* Named by no publication, so measuring under it cannot collide with the page. */
@@ -752,6 +752,19 @@ function correctMeasuredOverlays(context, directory) {
   ).then(() => restoreKerningIfItHelps(textElements()));
 }
 
+/* RR-9372: the stylesheet walk is spent only on a page with a bare-serif line the fit can decide. */
+function nameGenericSerifWhereDecidable(textLines) {
+  const decidable = textLines.some(
+    ({ style, element, measurable }) =>
+      measurable &&
+      startsWithGenericSerif(style.fontFamily) &&
+      boxElementFor(element) !== null
+  );
+  if (decidable) {
+    putFamilyBeforeGenericSerif(document, GENERIC_SERIF_FAMILY);
+  }
+}
+
 /*
  * Backing off rather than polling every tick, because a decision is not a
  * cheap question: it lays the page out twice over, once as it stands and once
@@ -815,16 +828,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
   }
 
   revertPageDefaultIfItHurts(textLines);
-  /* RR-9372: unregistered, the name falls through to `serif`; the named-family path below decides whether to register the clone under it. */
-  if (
-    textLines.some(
-      (line) =>
-        genericSerifWithFamily(line.style.fontFamily, GENERIC_SERIF_FAMILY) &&
-        sampleFor(line)
-    )
-  ) {
-    putFamilyBeforeGenericSerif(document, GENERIC_SERIF_FAMILY);
-  }
+  nameGenericSerifWhereDecidable(textLines);
 
   const groups = unrenderableOverlays(context, textLines);
   if (groups.size === 0) {
@@ -837,7 +841,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
       measuring.add(key);
     }
   }
-  const unclaimed = cloneFaces(MEASUREMENT_FAMILY, directory, measuring);
+  const pool = measurementFaces(MEASUREMENT_FAMILY, directory, measuring);
 
   /*
    * The measurement family has done its job once every group has a verdict, and
@@ -845,16 +849,11 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
    * registered its faces stay resident in each of the preloaded spread's
    * WebViews, for pages the code decided not to touch.
    */
-  const release = () => {
-    for (const face of unclaimed.values()) {
-      document.fonts.delete(face);
-    }
-  };
-
-  return loadAll([...unclaimed.values()]).then(() => {
+  return pool.loaded.then(() => {
     const substituted = [];
     const verdicts = [];
     try {
+      const winners = [];
       for (const [family, { samples, faces }] of groups) {
         const verdict = evaluateSubstitution(
           fitAgainst(samples, {
@@ -863,14 +862,15 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
         );
         verdicts.push(verdict);
         if (verdict !== null && verdict.improves) {
-          substituted.push.apply(
-            substituted,
-            claimFaces(family, directory, faces, unclaimed)
-          );
+          winners.push({ family, faces });
         }
       }
+      /* RR-9372: claimed only once every group is measured, since a claimed face leaves the measurement family. */
+      for (const { family, faces } of winners) {
+        substituted.push(...pool.claim(family, faces));
+      }
     } finally {
-      release();
+      pool.release();
     }
     if (evidenceIsMissing(verdicts)) {
       return askAgain();
@@ -878,7 +878,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
     if (substituted.length === 0) {
       return undefined;
     }
-    /* RR-9372: claimed faces resolve at once, so yield to keep the kerning pass's layouts out of this task. */
+    /* RR-9372: claimed faces resolve at once; the yield keeps the kerning pass's relayout under the clone out of this task. */
     return loadAll(substituted)
       .then(() => document.fonts.ready)
       .then(() => after(0));

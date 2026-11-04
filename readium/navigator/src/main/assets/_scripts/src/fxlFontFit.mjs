@@ -109,9 +109,13 @@ export function quoteFamily(family) {
 }
 
 /** RR-9372: Android draws a bare `serif` in Noto Serif, ~15% wider than the Times the artwork was set in. */
-export function genericSerifWithFamily(value, family) {
+export function startsWithGenericSerif(value) {
   const first = parseFamilyTokens(value)[0];
-  return first && !first.quoted && first.name.toLowerCase() === "serif"
+  return !!first && !first.quoted && first.name.toLowerCase() === "serif";
+}
+
+export function genericSerifWithFamily(value, family) {
+  return startsWithGenericSerif(value)
     ? quoteFamily(family) + ", " + value.trim()
     : null;
 }
