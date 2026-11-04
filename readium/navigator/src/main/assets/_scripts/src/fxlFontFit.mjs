@@ -64,10 +64,19 @@ const BOX_WIDTH_TOLERANCE = 0.5;
 const MIN_USABLE_FILL = 0.6;
 const MAX_USABLE_FILL = 1.25;
 
-export function parseFamilyList(value) {
-  const families = [];
+function parseFamilyTokens(value) {
+  const tokens = [];
   let current = "";
+  let quoted = false;
   let quote = null;
+  const push = () => {
+    const name = current.trim().replace(/\s+/g, " ");
+    if (name.length > 0) {
+      tokens.push({ name, quoted });
+    }
+    current = "";
+    quoted = false;
+  };
   for (let i = 0; i < value.length; i++) {
     const character = value[i];
     if (quote) {
@@ -80,40 +89,31 @@ export function parseFamilyList(value) {
       }
     } else if (character === '"' || character === "'") {
       quote = character;
+      quoted = true;
     } else if (character === ",") {
-      families.push(current);
-      current = "";
+      push();
     } else {
       current += character;
     }
   }
-  families.push(current);
-  return families
-    .map((family) => family.trim().replace(/\s+/g, " "))
-    .filter((family) => family.length > 0);
+  push();
+  return tokens;
+}
+
+export function parseFamilyList(value) {
+  return parseFamilyTokens(value).map((token) => token.name);
 }
 
 export function quoteFamily(family) {
   return '"' + family.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
-/**
- * RR-9372: whether a declared or computed `font-family` resolves straight to
- * the generic `serif`, naming no family before it. Android draws that in Noto
- * Serif, about 15% wider than the Times the artwork was set in, and neither
- * the named-family fallback nor the injected `html` default reaches it.
- */
-export function fallsToGenericSerif(value) {
-  const first = String(value || "").trim();
-  if (first.charAt(0) === '"' || first.charAt(0) === "'") {
-    return false;
-  }
-  const families = parseFamilyList(first);
-  return families.length > 0 && families[0].toLowerCase() === "serif";
-}
-
-export function withFamilyFirst(value, family) {
-  return quoteFamily(family) + ", " + value.trim();
+/** RR-9372: Android draws a bare `serif` in Noto Serif, ~15% wider than the Times the artwork was set in. */
+export function genericSerifWithFamily(value, family) {
+  const first = parseFamilyTokens(value)[0];
+  return first && !first.quoted && first.name.toLowerCase() === "serif"
+    ? quoteFamily(family) + ", " + value.trim()
+    : null;
 }
 
 export function isGenericFamily(family) {

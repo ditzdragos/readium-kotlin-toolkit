@@ -6,10 +6,10 @@ import {
   SYNTHETIC_PROBE_TEXT,
   evaluateSubstitution,
   evidenceIsMissing,
-  fallsToGenericSerif,
   faceFor,
   faceKey,
   fitError,
+  genericSerifWithFamily,
   isGenericFamily,
   isNamedFamily,
   median,
@@ -17,7 +17,6 @@ import {
   probeTextFrom,
   quoteFamily,
   usableSamples,
-  withFamilyFirst,
 } from "../src/fxlFontFit.mjs";
 
 function sample({
@@ -492,66 +491,66 @@ describe("faceFor", () => {
   });
 });
 
-describe("fallsToGenericSerif", () => {
-  it("catches a line set in nothing but the generic serif", () => {
-    assert.equal(fallsToGenericSerif("serif"), true);
-    assert.equal(fallsToGenericSerif("  SERIF "), true);
-  });
-
-  it("leaves a stack that names a family to the named-family fallback", () => {
-    assert.equal(fallsToGenericSerif('"Times New Roman", serif'), false);
-    assert.equal(fallsToGenericSerif("TimesNewRomanMTStd, serif"), false);
-  });
-
-  it("leaves a stack that reaches another generic first", () => {
-    assert.equal(fallsToGenericSerif("sans-serif, serif"), false);
-    assert.equal(fallsToGenericSerif("ui-serif"), false);
-  });
-
-  it("does not mistake a family quoted as serif for the generic", () => {
-    assert.equal(fallsToGenericSerif('"serif"'), false);
-    assert.equal(fallsToGenericSerif("'serif'"), false);
-  });
-
-  it("has nothing to say about an empty or keyword value", () => {
-    assert.equal(fallsToGenericSerif(""), false);
-    assert.equal(fallsToGenericSerif("inherit"), false);
+describe("quoteFamily", () => {
+  it("quotes a family so the stack parses back to it", () => {
+    for (const family of ['A "B" C', "Back\\slash", "Plain"]) {
+      assert.deepEqual(parseFamilyList(quoteFamily(family) + ", serif"), [
+        family,
+        "serif",
+      ]);
+    }
   });
 });
 
-describe("withFamilyFirst", () => {
-  it("puts the family in front of the generic it stands in for", () => {
+describe("genericSerifWithFamily", () => {
+  const FAMILY = "Readium FXL Serif";
+
+  it("puts the family in front of a bare generic serif", () => {
     assert.equal(
-      withFamilyFirst("serif", "Readium FXL Serif"),
+      genericSerifWithFamily("serif", FAMILY),
       '"Readium FXL Serif", serif'
+    );
+    assert.equal(
+      genericSerifWithFamily(" SERIF ", FAMILY),
+      '"Readium FXL Serif", SERIF'
     );
   });
 
-  it("quotes a family carrying quotes or backslashes safely", () => {
-    assert.equal(quoteFamily('A "B" \\ C'), '"A \\"B\\" \\\\ C"');
+  it("catches serif ahead of a named family, which never draws", () => {
+    assert.equal(
+      genericSerifWithFamily('serif, "Times New Roman"', FAMILY),
+      '"Readium FXL Serif", serif, "Times New Roman"'
+    );
   });
-});
 
-describe("evaluateSubstitution on a generic-serif overlay (RR-9372)", () => {
-  it("swaps Noto Serif for the clone when Noto wraps both lines of the page", () => {
-    const verdict = evaluateSubstitution([
-      sample({
-        boxWidth: 689.1,
-        textWidth: 713.6,
-        substituteTextWidth: 615.1,
-        rows: 2,
-        substituteRows: 1,
-      }),
-      sample({
-        boxWidth: 388.22,
-        textWidth: 411.1,
-        substituteTextWidth: 362.3,
-        rows: 2,
-        substituteRows: 1,
-      }),
-    ]);
-    assert.equal(verdict.wrapped, 2);
-    assert.equal(verdict.wrappedAfter, 0);
-    assert.equal(verdict.improves, true);
+  it("leaves a stack whose first entry is a named family", () => {
+    assert.equal(
+      genericSerifWithFamily('"Times New Roman", serif', FAMILY),
+      null
+    );
+    assert.equal(
+      genericSerifWithFamily("TimesNewRomanMTStd, serif", FAMILY),
+      null
+    );
+  });
+
+  it("leaves a stack that reaches another generic first", () => {
+    assert.equal(genericSerifWithFamily("sans-serif, serif", FAMILY), null);
+    assert.equal(genericSerifWithFamily("ui-serif", FAMILY), null);
+  });
+
+  it("does not mistake a family quoted as serif for the generic", () => {
+    assert.equal(genericSerifWithFamily('"serif"', FAMILY), null);
+    assert.equal(genericSerifWithFamily("'serif'", FAMILY), null);
+  });
+
+  it("has nothing to rewrite in an empty or keyword value", () => {
+    assert.equal(genericSerifWithFamily("", FAMILY), null);
+    assert.equal(genericSerifWithFamily("inherit", FAMILY), null);
+  });
+
+  it("leaves its own result alone, so a retried pass changes nothing", () => {
+    const once = genericSerifWithFamily("serif", FAMILY);
+    assert.equal(genericSerifWithFamily(once, FAMILY), null);
   });
 });

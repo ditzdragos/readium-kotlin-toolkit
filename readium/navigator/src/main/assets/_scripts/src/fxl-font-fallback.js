@@ -58,13 +58,12 @@ import {
   evidenceIsMissing,
   faceFor,
   faceKey,
-  fallsToGenericSerif,
   isNamedFamily,
   parseFamilyList,
   probeTextFrom,
   quoteFamily,
-  withFamilyFirst,
 } from "./fxlFontFit.mjs";
+import { putFamilyBeforeGenericSerif } from "./fxlGenericSerif.mjs";
 
 const CLONE_FACES = [
   { file: "NimbusRoman.woff2", weight: "400", style: "normal" },
@@ -75,9 +74,7 @@ const CLONE_FACES = [
 
 /* Named by no publication, so measuring under it cannot collide with the page. */
 const MEASUREMENT_FAMILY = "Readium FXL Metric Clone";
-
-/* RR-9372: the clone's name in front of a page's generic `serif`; no publication uses it. */
-const GENERIC_SERIF_CLONE_FAMILY = "Readium FXL Serif";
+const GENERIC_SERIF_FAMILY = "Readium FXL Serif";
 
 /* Identifies what `HtmlInjector` injected, among the publication's own sheets. */
 const INJECTED_DEFAULT_PATH = "fxl-default-serif/";
@@ -300,31 +297,11 @@ function sampleFor({ element, style, measurable }) {
  * to register the clone under — the first, so the registration wins the stack.
  */
 function unrenderableOverlays(context, textLines) {
-  const groups = new Map();
-  const addToGroup = (name, line, rewritesGenericSerif) => {
-    let group = groups.get(name);
-    if (!group) {
-      group = { samples: [], faces: new Set(), rewritesGenericSerif };
-      groups.set(name, group);
-    }
-    /* Every line wearing the family, so no face it draws goes unregistered. */
-    group.faces.add(faceKey(faceFor(line.style)));
-
-    if (group.samples.length < MAX_SAMPLES_PER_FAMILY) {
-      const sample = sampleFor(line);
-      if (sample) {
-        group.samples.push(sample);
-      }
-    }
-  };
-
   const candidates = [];
   for (const line of textLines) {
     const families = familiesOf(line.style);
     if (families.length > 0) {
       candidates.push({ line, families });
-    } else if (fallsToGenericSerif(line.style.fontFamily)) {
-      addToGroup(GENERIC_SERIF_CLONE_FAMILY, line, true);
     }
   }
 
@@ -341,6 +318,7 @@ function unrenderableOverlays(context, textLines) {
     );
   }
 
+  const groups = new Map();
   const rendered = new Map();
   for (const { line, families } of candidates) {
     let probe = probeTextFrom(line.text);
@@ -354,8 +332,23 @@ function unrenderableOverlays(context, textLines) {
       }
       return rendered.get(key);
     };
-    if (!families.some(renders)) {
-      addToGroup(families[0], line, false);
+    if (families.some(renders)) {
+      continue;
+    }
+    const name = families[0];
+    let group = groups.get(name);
+    if (!group) {
+      group = { samples: [], faces: new Set() };
+      groups.set(name, group);
+    }
+    /* Every line wearing the family, so no face it draws goes unregistered. */
+    group.faces.add(faceKey(faceFor(line.style)));
+
+    if (group.samples.length < MAX_SAMPLES_PER_FAMILY) {
+      const sample = sampleFor(line);
+      if (sample) {
+        group.samples.push(sample);
+      }
     }
   }
 
@@ -648,46 +641,6 @@ function restoreKerningIfItHelps(textLines) {
 }
 
 /*
- * RR-9372: a generic cannot be registered over, so the clone goes in front of
- * `serif` in the page's own declarations. Rewriting the rules rather than the
- * lines keeps it on markup Readium replaces after this runs.
- */
-function putFamilyBeforeGenericSerif(family) {
-  const rewrite = (style) => {
-    const value = style.getPropertyValue("font-family");
-    if (fallsToGenericSerif(value)) {
-      style.setProperty(
-        "font-family",
-        withFamilyFirst(value, family),
-        style.getPropertyPriority("font-family")
-      );
-    }
-  };
-  const walk = (rules) => {
-    for (const rule of rules) {
-      if (rule instanceof CSSStyleRule) {
-        rewrite(rule.style);
-      }
-      if (rule.cssRules) {
-        walk(rule.cssRules);
-      }
-    }
-  };
-  for (const sheet of document.styleSheets) {
-    let rules;
-    try {
-      rules = sheet.cssRules;
-    } catch (error) {
-      continue;
-    }
-    walk(rules);
-  }
-  for (const element of document.querySelectorAll("[style]")) {
-    rewrite(element.style);
-  }
-}
-
-/*
  * `needed` holds the weight/slope combinations the page actually draws in this
  * family, so the faces it never uses are neither fetched nor decoded. It is
  * gathered from every line wearing the family rather than from the sampled
@@ -901,6 +854,8 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
   }
 
   revertPageDefaultIfItHurts(textLines);
+  /* RR-9372: unregistered, the name falls through to `serif`; the named-family path below decides whether to register the clone under it. */
+  putFamilyBeforeGenericSerif(document, GENERIC_SERIF_FAMILY);
 
   const groups = unrenderableOverlays(context, textLines);
   if (groups.size === 0) {
@@ -931,7 +886,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
     const substituted = [];
     const verdicts = [];
     try {
-      for (const [family, { samples, faces, rewritesGenericSerif }] of groups) {
+      for (const [family, { samples, faces }] of groups) {
         const verdict = evaluateSubstitution(
           fitAgainst(samples, {
             "font-family": quoteFamily(MEASUREMENT_FAMILY),
@@ -943,9 +898,6 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
             substituted,
             cloneFaces(family, directory, faces)
           );
-          if (rewritesGenericSerif) {
-            putFamilyBeforeGenericSerif(family);
-          }
         }
       }
     } finally {
