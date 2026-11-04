@@ -5,6 +5,7 @@
 //
 
 import { resetViewportRatioCache, toNativeRect } from "./rect";
+import { displayTypeRect } from "./displayTypeRect.js";
 import { ocrReferenceRect, overlayElement } from "./ocrOverlay.mjs";
 import { continuesJoinedWord } from "./letteringRuns.mjs";
 import {
@@ -927,7 +928,8 @@ export function getRectFromLocator(locator) {
     if (ocrRect) {
       return toNativeRect(ocrRect);
     }
-    return toNativeRect(range.getBoundingClientRect());
+    const bounds = range.getBoundingClientRect();
+    return toNativeRect(displayTypeRect(range, bounds) ?? bounds);
   }
   return null;
 }
