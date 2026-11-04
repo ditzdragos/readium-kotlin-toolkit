@@ -50,6 +50,12 @@
  * would have used is put back — as is the pair-kerning the same stylesheet
  * turns off, which is the one correction that reaches a publication rendering
  * in a font it embeds itself.
+ *
+ * One change is made without measuring (RR-9372). A line that asks for bare
+ * `serif` is drawn in the clone, because Android's serif is Noto Serif, which is
+ * wider than the Times these books were laid out in, and a generic can't be
+ * registered over. It's done before the page is measured or painted, so the
+ * first paint is already the final layout.
  */
 
 import {
@@ -63,12 +69,8 @@ import {
   parseFamilyList,
   probeTextFrom,
   quoteFamily,
-  startsWithGenericSerif,
 } from "./fxlFontFit.mjs";
-import {
-  declaredFontFaceFamily,
-  putFamilyBeforeGenericSerif,
-} from "./fxlGenericSerif.mjs";
+import { drawGenericSerifInClone } from "./fxlGenericSerif.mjs";
 
 const CLONE_FACES = [
   { file: "NimbusRoman.woff2", weight: "400", style: "normal" },
@@ -77,6 +79,9 @@ const CLONE_FACES = [
   { file: "NimbusRoman-BoldItalic.woff2", weight: "700", style: "italic" },
 ];
 
+/* The family `fxl-default-serif.css` declares the clone's faces under. */
+const CLONE_FAMILY = "Times New Roman";
+
 /* Named by no publication, so measuring under it cannot collide with the page. */
 const MEASUREMENT_FAMILY = "Readium FXL Metric Clone";
 
@@ -84,6 +89,9 @@ const MEASUREMENT_FAMILY = "Readium FXL Metric Clone";
 const INJECTED_DEFAULT_PATH = "fxl-default-serif/";
 
 const PROBE_SIZE = "72px";
+
+/* The face a probe uses when no line asks for one. */
+const DEFAULT_FACE = { style: "normal", weight: "400" };
 
 /* Enough lines for a stable median without walking a whole comic spread. */
 const MAX_SAMPLES_PER_FAMILY = 40;
@@ -112,10 +120,11 @@ function cloneFontDirectory() {
  * us whether the family itself rendered it: identical widths mean the family
  * won, differing widths mean each generic won its own turn.
  */
-function familyRenders(context, family, text) {
+function familyRenders(context, family, text, face = DEFAULT_FACE) {
   const quoted = quoteFamily(family);
   const measure = (stack) => {
-    context.font = PROBE_SIZE + " " + stack;
+    context.font =
+      face.style + " " + face.weight + " " + PROBE_SIZE + " " + stack;
     return context.measureText(text).width;
   };
   const withMonospace = measure(quoted + ", monospace");
@@ -329,10 +338,16 @@ function unrenderableOverlays(context, textLines) {
     if (probe === SYNTHETIC_PROBE_TEXT) {
       probe = probeTextFrom(familyText.get(families[0]));
     }
+    /* Probed in the face the line draws: font settling loads only that one. */
+    const face = { style: line.style.fontStyle, weight: line.style.fontWeight };
     const renders = (family) => {
-      const key = family + " " + probe;
+      /* The injected sheet's own faces, so it renders wherever this runs at all. */
+      if (family === CLONE_FAMILY) {
+        return true;
+      }
+      const key = [family, face.style, face.weight, probe].join(" ");
       if (!rendered.has(key)) {
-        rendered.set(key, familyRenders(context, family, probe));
+        rendered.set(key, familyRenders(context, family, probe, face));
       }
       return rendered.get(key);
     };
@@ -711,29 +726,23 @@ function correctOverlayMetrics() {
   }
 
   const textLines = textElements();
-  drawGenericSerifInTimes(textLines);
+  const redrawn = drawBoxedGenericSerifInClone(textLines);
   return fontsSettled(textLines)
+    .then(() => (redrawn ? renderedOnce() : undefined))
     .then(() => pageIsMeasurable(context, Date.now() + MEASURABLE_WAIT_MS))
     .then((measurable) =>
       measurable ? correctMeasuredOverlays(context, directory) : undefined
     );
 }
 
-/*
- * RR-9372: iOS draws a bare `serif` in Times, the face the artwork and line
- * boxes were laid out against; Android draws it in the wider Noto Serif. Done
- * before the page is measured or painted, so it costs no decision and no
- * reflow. Lines without an authored box (single SVG glyphs) gain nothing.
- */
-function drawGenericSerifInTimes(textLines) {
-  const family = declaredFontFaceFamily(injectedDefaultStyleSheet());
-  const boxed = textLines.some(
-    (line) =>
-      startsWithGenericSerif(line.style.fontFamily) && sampleFor(line) !== null
+/* RR-9372: asked up front, and again on each retried decision for a page whose boxes had no width yet. */
+function drawBoxedGenericSerifInClone(textLines) {
+  return drawGenericSerifInClone(
+    document,
+    CLONE_FAMILY,
+    textLines,
+    (line) => sampleFor(line) !== null
   );
-  if (family !== null && boxed) {
-    putFamilyBeforeGenericSerif(document, family);
-  }
 }
 
 /*
@@ -759,6 +768,11 @@ function nextTick() {
     }
     setTimeout(finish, TICK_MS);
   });
+}
+
+/* RR-9372: lets a page whose face just swapped lay out in its own frame, not inside the first measurement. */
+function renderedOnce() {
+  return nextTick().then(() => after(0));
 }
 
 const TICK_MS = 32;
@@ -876,6 +890,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
     return askAgain();
   }
 
+  drawBoxedGenericSerifInClone(textLines);
   revertPageDefaultIfItHurts(textLines);
 
   const groups = unrenderableOverlays(context, textLines);
@@ -953,8 +968,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
  * So the faces are asked for rather than waited on: each line's own, as CSS
  * matches them for its style and its characters. A face no line wears is one
  * the page would never have fetched, and fetching it here would put back the
- * download this module goes out of its way not to make (RR-9372: asking for
- * whole families loaded all four Times faces where a page drew one).
+ * download this module goes out of its way not to make.
  */
 function drawnFacesRequested(textLines) {
   const textByFont = new Map();

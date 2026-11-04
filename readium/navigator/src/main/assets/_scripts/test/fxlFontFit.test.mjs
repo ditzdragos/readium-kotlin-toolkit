@@ -10,7 +10,6 @@ import {
   faceFor,
   faceKey,
   fitError,
-  genericSerifWithFamily,
   isGenericFamily,
   isNamedFamily,
   median,
@@ -500,59 +499,6 @@ describe("quoteFamily", () => {
         "serif",
       ]);
     }
-  });
-});
-
-describe("genericSerifWithFamily", () => {
-  const FAMILY = "Times New Roman";
-
-  it("puts the family in front of a bare generic serif", () => {
-    assert.equal(
-      genericSerifWithFamily("serif", FAMILY),
-      '"Times New Roman", serif'
-    );
-    assert.equal(
-      genericSerifWithFamily(" SERIF ", FAMILY),
-      '"Times New Roman", SERIF'
-    );
-  });
-
-  it("catches serif ahead of a named family, which never draws", () => {
-    assert.equal(
-      genericSerifWithFamily("serif, Georgia", FAMILY),
-      '"Times New Roman", serif, Georgia'
-    );
-  });
-
-  it("leaves a stack whose first entry is a named family", () => {
-    assert.equal(
-      genericSerifWithFamily('"Times New Roman", serif', FAMILY),
-      null
-    );
-    assert.equal(
-      genericSerifWithFamily("TimesNewRomanMTStd, serif", FAMILY),
-      null
-    );
-  });
-
-  it("leaves a stack that reaches another generic first", () => {
-    assert.equal(genericSerifWithFamily("sans-serif, serif", FAMILY), null);
-    assert.equal(genericSerifWithFamily("ui-serif", FAMILY), null);
-  });
-
-  it("does not mistake a family quoted as serif for the generic", () => {
-    assert.equal(genericSerifWithFamily('"serif"', FAMILY), null);
-    assert.equal(genericSerifWithFamily("'serif'", FAMILY), null);
-  });
-
-  it("has nothing to rewrite in an empty or keyword value", () => {
-    assert.equal(genericSerifWithFamily("", FAMILY), null);
-    assert.equal(genericSerifWithFamily("inherit", FAMILY), null);
-  });
-
-  it("leaves its own result alone, so a retried pass changes nothing", () => {
-    const once = genericSerifWithFamily("serif", FAMILY);
-    assert.equal(genericSerifWithFamily(once, FAMILY), null);
   });
 });
 
