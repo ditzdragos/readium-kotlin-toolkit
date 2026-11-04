@@ -34,7 +34,7 @@ import {
 } from "./rangeRects.mjs";
 import { containingElement } from "./rangeCoverage.mjs";
 import { decorationPlacements } from "./decorationPlacements.mjs";
-import { adjacentTextRect, displayTypeRect } from "./displayTypeRect.js";
+import { displayTypeRect, wordRect } from "./displayTypeRect.js";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
   ChangeQueue,
@@ -184,6 +184,32 @@ function viewportSignature() {
 /**
  * Rotates a positioned decoration element, returning the element to append.
  */
+const ADJACENT_TEXT_LOOKUP_LIMIT = 8;
+
+function adjacentTextRect(range, forward) {
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) =>
+        node.textContent.trim()
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP,
+    }
+  );
+  walker.currentNode = forward ? range.endContainer : range.startContainer;
+  for (let i = 0; i < ADJACENT_TEXT_LOOKUP_LIMIT; i++) {
+    const node = forward ? walker.nextNode() : walker.previousNode();
+    if (!node) return null;
+    if (range.intersectsNode(node)) continue;
+    const nodeRange = document.createRange();
+    nodeRange.selectNodeContents(node);
+    const rects = nodeRange.getClientRects();
+    if (rects.length > 0) return forward ? rects[0] : rects[rects.length - 1];
+  }
+  return null;
+}
+
 function rotateElement(element, rotationAngle) {
   const supportsIndependentRotate =
     typeof CSS !== "undefined" &&
@@ -408,19 +434,13 @@ export function handleDecorationClickEvent(event, clickEvent) {
     JSON.stringify({
       id: target.item.decoration.id,
       group: target.group,
-      rect: toNativeRect(target.item.range.getBoundingClientRect()),
+      rect: toNativeRect(wordRect(target.item.range)),
       click: clickEvent,
     })
   );
 }
 
-function lineOrBoxRects(
-  range,
-  layout,
-  doNotMergeHorizontallyAlignedRects,
-  displayRect
-) {
-  if (displayRect) return [displayRect];
+function lineOrBoxRects(range, layout, doNotMergeHorizontallyAlignedRects) {
   const boxes = getClientRectsNoOverlap(
     range,
     doNotMergeHorizontallyAlignedRects
@@ -737,14 +757,8 @@ export function DecorationGroup(groupId, groupName) {
       return element;
     }
 
-    const overlayBoxes = ocrOverlayBoxes(
-      item.range,
-      getOCRCorrectedRectForOverlay
-    );
-    const rangeRect = item.range.getBoundingClientRect();
-    const displayRect =
-      overlayBoxes.length > 0 ? null : displayTypeRect(item.range, rangeRect);
-    const boundingRect = displayRect ?? rangeRect;
+    const displayRect = displayTypeRect(item.range);
+    const fittedRect = displayRect ?? item.range.getBoundingClientRect();
 
     let elementTemplate;
     try {
@@ -769,14 +783,17 @@ export function DecorationGroup(groupId, groupName) {
       const decoratorWritingMode = getComputedStyle(startElement).writingMode;
 
       const placements = decorationPlacements(style, {
-        overlayBoxes,
+        overlayBoxes: ocrOverlayBoxes(
+          item.range,
+          getOCRCorrectedRectForOverlay
+        ),
+        displayRect,
         letteringLineBoxes: () => letteringLineBoxes(item.range),
         clientRects: () =>
           lineOrBoxRects(
             item.range,
             style.layout,
-            doNotMergeHorizontallyAlignedRects,
-            displayRect
+            doNotMergeHorizontallyAlignedRects
           ).sort((r1, r2) => {
             if (r1.top !== r2.top) return r1.top - r2.top;
             if (decoratorWritingMode === "vertical-rl") {
@@ -797,7 +814,7 @@ export function DecorationGroup(groupId, groupName) {
           positionElement(
             line,
             placement.rect,
-            boundingRect,
+            fittedRect,
             documentWritingMode,
             placement.turnedBox
           )
@@ -809,7 +826,7 @@ export function DecorationGroup(groupId, groupName) {
       bounds.dataset.writingMode = documentWritingMode;
 
       itemContainer.append(
-        positionElement(bounds, boundingRect, boundingRect, documentWritingMode)
+        positionElement(bounds, fittedRect, fittedRect, documentWritingMode)
       );
     } else {
       if (DEBUG_MODE) log("style layout: ", groupName, style.layout);
@@ -828,7 +845,7 @@ export function DecorationGroup(groupId, groupName) {
     }
 
     if (postMessage) {
-      emitHighlightRect(item, () => toNativeRect(boundingRect), false);
+      emitHighlightRect(item, () => toNativeRect(fittedRect), false);
     }
   }
 
@@ -969,10 +986,8 @@ export function DecorationGroup(groupId, groupName) {
       getOCRCorrectedRectForOverlay
     );
     const ocrLayout = overlayBoxes.length > 0;
-    const displayRect = ocrLayout
-      ? null
-      : displayTypeRect(item.range, boundingRect);
-    const wordRect = displayRect ?? boundingRect;
+    const displayRect = displayTypeRect(item.range);
+    const fittedRect = displayRect ?? boundingRect;
 
     let elementTemplate;
     try {
@@ -1041,9 +1056,10 @@ export function DecorationGroup(groupId, groupName) {
       if (style.layout === "boxes" || style.layout === "lines") {
         const placements = decorationPlacements(style, {
           overlayBoxes,
+          displayRect,
           letteringLineBoxes: () => letteringLineBoxes(item.range),
           clientRects: () =>
-            lineOrBoxRects(item.range, style.layout, true, displayRect).sort(
+            lineOrBoxRects(item.range, style.layout, true).sort(
               (rectA, rectB) => rectA.top - rectB.top
             ),
         });
@@ -1054,7 +1070,7 @@ export function DecorationGroup(groupId, groupName) {
           const positionedLine = positionElement(
             line,
             placement.rect,
-            wordRect,
+            fittedRect,
             placement.turnedBox
           );
           itemContainer.append(positionedLine);
@@ -1064,8 +1080,8 @@ export function DecorationGroup(groupId, groupName) {
         bounds.style.pointerEvents = "none";
         const positionedBounds = positionElement(
           bounds,
-          wordRect,
-          wordRect,
+          fittedRect,
+          fittedRect,
           overlayBoxes[0]
         );
         itemContainer.append(positionedBounds);
@@ -1080,7 +1096,7 @@ export function DecorationGroup(groupId, groupName) {
     item.container = itemContainer;
 
     if (postMessage) {
-      emitHighlightRect(item, () => toNativeRect(wordRect), ocrLayout);
+      emitHighlightRect(item, () => toNativeRect(fittedRect), ocrLayout);
     }
   }
 

@@ -4,27 +4,77 @@
 //  available in the top-level LICENSE file of the project.
 //
 
-// A word at least this many times taller than the text on both sides of it is display type: a
-// giant alphabet-book letter, a heading over a caption.
-const DISPLAY_TYPE_SCALE = 2;
+// A word this many times taller than the text beside it is display type: a giant alphabet-book
+// letter, not a default `h1`, which is set at twice its body's size.
+const DISPLAY_TYPE_SCALE = 2.5;
 
 /**
- * Whether a word whose line box is [height] tall is display type next to text whose line boxes
- * are [neighbourHeights] tall. A word with no measured neighbour has nothing to be large against.
+ * The height of the text beside a word whose first line is [height] tall, when the word is display
+ * type next to it, else null. [neighbourHeights] are asked in turn, and the first neighbour that is
+ * not small enough ends the check, so an ordinary word pays for one. A missing neighbour (null,
+ * zero) is skipped: a letter that opens its page has text on one side only.
  *
  * @param {number} height
- * @param {(number | undefined)[]} neighbourHeights
+ * @param {(() => number | null)[]} neighbourHeights
+ * @returns {number | null}
  */
-export function isDisplayType(height, neighbourHeights) {
-  const known = neighbourHeights.filter((h) => h > 0);
-  return (
-    known.length > 0 && known.every((h) => height >= DISPLAY_TYPE_SCALE * h)
-  );
+export function displayTypeBodyHeight(height, neighbourHeights) {
+  let bodyHeight = 0;
+  for (const measure of neighbourHeights) {
+    const neighbourHeight = measure();
+    if (!(neighbourHeight > 0)) continue;
+    if (height < DISPLAY_TYPE_SCALE * neighbourHeight) return null;
+    bodyHeight = Math.max(bodyHeight, neighbourHeight);
+  }
+  return bodyHeight > 0 ? bodyHeight : null;
 }
 
 /**
- * [rect] narrowed to the word's ink, with as much room above and below it as text [bodyHeight]
- * tall has below its baseline.
+ * The index in [text] of the nearest non-space character after [offset] when [forward], else
+ * before it, or -1 when there is none.
+ *
+ * @param {string} text
+ * @param {number} offset
+ * @param {boolean} forward
+ */
+export function neighbourCharacterIndex(text, offset, forward) {
+  const step = forward ? 1 : -1;
+  for (
+    let i = forward ? offset : offset - 1;
+    i >= 0 && i < text.length;
+    i += step
+  ) {
+    if (/\S/.test(text[i])) return i;
+  }
+  return -1;
+}
+
+/**
+ * [text] as CSS `text-transform` [transform] draws it, so its ink is measured on the glyphs shown:
+ * a lowercase "e" set in capitals is an "E".
+ *
+ * @param {string} text
+ * @param {string} transform
+ */
+export function renderedText(text, transform) {
+  switch (transform) {
+    case "uppercase":
+      return text.toUpperCase();
+    case "lowercase":
+      return text.toLowerCase();
+    case "capitalize":
+      return text.replace(
+        /(^|\s)(\S)/g,
+        (_, space, letter) => space + letter.toUpperCase()
+      );
+    default:
+      return text;
+  }
+}
+
+/**
+ * [rect] narrowed to the word's ink, with a body-text descent of room above and below it: the
+ * descent of this font at [bodyHeight], the height of the text beside the word.
  *
  * A text rect spans the font's whole ascent and descent. At body size that is a few pixels of
  * slack; at display size it is a band as tall as a line of body text, so an underline at its

@@ -9,24 +9,33 @@
  *
  * Only `wrap` takes its geometry from the box it decorates; the other widths span the viewport or
  * the bounding box, so they stay on one element per client rect. An OCR overlay's boxes win over
- * everything; a box or line on lettering follows its glyphs, one turned box per line. Both box
- * sources and the client rects are asked for lazily, so a range never pays for geometry it does
- * not use.
+ * everything; a word in display type is one element on its ink (RR-9367); a box or line on
+ * lettering follows its glyphs, one turned box per line. The lettering boxes and the client rects
+ * are asked for lazily, so a range never pays for geometry it does not use.
  *
  * @param {{ width: string, layout: string }} style
  * @param {{
  *   overlayBoxes: import("./turnedBox.mjs").TurnedBox[],
+ *   displayRect: DOMRect | null,
  *   letteringLineBoxes: () => import("./turnedBox.mjs").TurnedBox[],
  *   clientRects: () => DOMRect[],
  * }} sources
  */
 export function decorationPlacements(
   style,
-  { overlayBoxes, letteringLineBoxes, clientRects }
+  { overlayBoxes, displayRect, letteringLineBoxes, clientRects }
 ) {
+  if (style.width === "wrap" && overlayBoxes.length > 0) {
+    return overlayBoxes.map((turnedBox) => ({
+      rect: turnedBox.rect,
+      turnedBox,
+    }));
+  }
+  if (displayRect) {
+    return [{ rect: displayRect, turnedBox: overlayBoxes[0] }];
+  }
   if (style.width === "wrap") {
-    const boxes =
-      overlayBoxes.length > 0 ? overlayBoxes : letteringLineBoxes();
+    const boxes = letteringLineBoxes();
     if (boxes.length > 0) {
       return boxes.map((turnedBox) => ({ rect: turnedBox.rect, turnedBox }));
     }
