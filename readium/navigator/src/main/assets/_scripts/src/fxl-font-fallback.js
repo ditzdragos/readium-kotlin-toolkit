@@ -54,6 +54,7 @@
 
 import {
   SYNTHETIC_PROBE_TEXT,
+  drawnFont,
   evaluateSubstitution,
   evidenceIsMissing,
   faceFor,
@@ -64,16 +65,23 @@ import {
   quoteFamily,
   startsWithGenericSerif,
 } from "./fxlFontFit.mjs";
-import { loadAll, measurementFaces } from "./fxlCloneFaces.mjs";
-import { putFamilyBeforeGenericSerif } from "./fxlGenericSerif.mjs";
+import {
+  declaredFontFaceFamily,
+  putFamilyBeforeGenericSerif,
+} from "./fxlGenericSerif.mjs";
+
+const CLONE_FACES = [
+  { file: "NimbusRoman.woff2", weight: "400", style: "normal" },
+  { file: "NimbusRoman-Italic.woff2", weight: "400", style: "italic" },
+  { file: "NimbusRoman-Bold.woff2", weight: "700", style: "normal" },
+  { file: "NimbusRoman-BoldItalic.woff2", weight: "700", style: "italic" },
+];
 
 /* Named by no publication, so measuring under it cannot collide with the page. */
 const MEASUREMENT_FAMILY = "Readium FXL Metric Clone";
 
 /* Identifies what `HtmlInjector` injected, among the publication's own sheets. */
 const INJECTED_DEFAULT_PATH = "fxl-default-serif/";
-
-const FONT_FACE_RULE = 5;
 
 const PROBE_SIZE = "72px";
 
@@ -636,6 +644,40 @@ function restoreKerningIfItHelps(textLines) {
   (document.head || document.documentElement).appendChild(override);
 }
 
+/*
+ * `needed` holds the weight/slope combinations the page actually draws in this
+ * family, so the faces it never uses are neither fetched nor decoded. It is
+ * gathered from every line wearing the family rather than from the sampled
+ * ones: registering a family without the bold face a line elsewhere on the page
+ * asks for would hand that line a synthetically emboldened regular, whose
+ * metrics are not the clone's and not the artwork's.
+ */
+function cloneFaces(family, directory, needed) {
+  const faces = [];
+  for (const face of CLONE_FACES) {
+    if (needed && !needed.has(faceKey(face))) {
+      continue;
+    }
+    let fontFace;
+    try {
+      fontFace = new FontFace(family, 'url("' + directory + face.file + '")', {
+        weight: face.weight,
+        style: face.style,
+        display: "swap",
+      });
+    } catch (error) {
+      continue;
+    }
+    document.fonts.add(fontFace);
+    faces.push(fontFace);
+  }
+  return faces;
+}
+
+function loadAll(faces) {
+  return Promise.all(faces.map((face) => face.load().catch(() => {})));
+}
+
 function documentParsed() {
   if (document.readyState !== "loading") {
     return Promise.resolve();
@@ -669,25 +711,28 @@ function correctOverlayMetrics() {
   }
 
   const textLines = textElements();
+  drawGenericSerifInTimes(textLines);
   return fontsSettled(textLines)
-    .then(() => {
-      requestGenericSerifFaces(textLines);
-      return pageIsMeasurable(context, Date.now() + MEASURABLE_WAIT_MS);
-    })
+    .then(() => pageIsMeasurable(context, Date.now() + MEASURABLE_WAIT_MS))
     .then((measurable) =>
       measurable ? correctMeasuredOverlays(context, directory) : undefined
     );
 }
 
-/* RR-9372: asked for once `fonts.ready` has settled, so the decode overlaps the waits before the decision instead of lengthening them. */
-function requestGenericSerifFaces(textLines) {
-  const decidable = textLines.some(
+/*
+ * RR-9372: iOS draws a bare `serif` in Times, the face the artwork and line
+ * boxes were laid out against; Android draws it in the wider Noto Serif. Done
+ * before the page is measured or painted, so it costs no decision and no
+ * reflow. Lines without an authored box (single SVG glyphs) gain nothing.
+ */
+function drawGenericSerifInTimes(textLines) {
+  const family = declaredFontFaceFamily(injectedDefaultStyleSheet());
+  const boxed = textLines.some(
     (line) =>
       startsWithGenericSerif(line.style.fontFamily) && sampleFor(line) !== null
   );
-  const family = decidable ? injectedDefaultFamily() : null;
-  if (family !== null) {
-    genericSerifFacesLoaded(textLines, family);
+  if (family !== null && boxed) {
+    putFamilyBeforeGenericSerif(document, family);
   }
 }
 
@@ -769,70 +814,6 @@ function correctMeasuredOverlays(context, directory) {
   ).then(() => restoreKerningIfItHelps(textElements()));
 }
 
-/* RR-9372: the clone's faces as `fxl-default-serif.css` declares them, which the page default has often already loaded. */
-function injectedDefaultFamily() {
-  const sheet = injectedDefaultStyleSheet();
-  if (!sheet) {
-    return null;
-  }
-  let rules;
-  try {
-    rules = sheet.cssRules;
-  } catch (error) {
-    return null;
-  }
-  for (const rule of rules) {
-    if (rule.type === FONT_FACE_RULE) {
-      const family = parseFamilyList(
-        rule.style.getPropertyValue("font-family")
-      )[0];
-      if (family) {
-        return family;
-      }
-    }
-  }
-  return null;
-}
-
-function genericSerifFacesLoaded(textLines, family) {
-  const fonts = new Set();
-  for (const { style } of textLines) {
-    if (startsWithGenericSerif(style.fontFamily)) {
-      const face = faceFor(style);
-      fonts.add(
-        face.style + " " + face.weight + " 16px " + quoteFamily(family)
-      );
-    }
-  }
-  return Promise.all(
-    Array.from(fonts, (font) => document.fonts.load(font).catch(() => {}))
-  );
-}
-
-/* RR-9372: bare-`serif` lines with an authored box, to measure in the injected faces before any rule names them. */
-function genericSerifLines(textLines) {
-  const family = injectedDefaultFamily();
-  if (family === null) {
-    return null;
-  }
-  const samples = [];
-  for (const line of textLines) {
-    if (!startsWithGenericSerif(line.style.fontFamily)) {
-      continue;
-    }
-    const sample = sampleFor(line);
-    if (sample) {
-      samples.push(sample);
-    }
-    if (samples.length === MAX_SAMPLES_PER_FAMILY) {
-      break;
-    }
-  }
-  return samples.length > 0
-    ? { family, samples, loaded: genericSerifFacesLoaded(textLines, family) }
-    : null;
-}
-
 /*
  * Backing off rather than polling every tick, because a decision is not a
  * cheap question: it lays the page out twice over, once as it stands and once
@@ -897,9 +878,8 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
 
   revertPageDefaultIfItHurts(textLines);
 
-  const genericSerif = genericSerifLines(textLines);
   const groups = unrenderableOverlays(context, textLines);
-  if (groups.size === 0 && genericSerif === null) {
+  if (groups.size === 0) {
     return Promise.resolve();
   }
 
@@ -909,7 +889,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
       measuring.add(key);
     }
   }
-  const pool = measurementFaces(MEASUREMENT_FAMILY, directory, measuring);
+  const measurementFaces = cloneFaces(MEASUREMENT_FAMILY, directory, measuring);
 
   /*
    * The measurement family has done its job once every group has a verdict, and
@@ -917,24 +897,16 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
    * registered its faces stay resident in each of the preloaded spread's
    * WebViews, for pages the code decided not to touch.
    */
-  return Promise.all([
-    pool.loaded,
-    genericSerif ? genericSerif.loaded : undefined,
-  ]).then(() => {
+  const release = () => {
+    for (const face of measurementFaces) {
+      document.fonts.delete(face);
+    }
+  };
+
+  return loadAll(measurementFaces).then(() => {
     const substituted = [];
     const verdicts = [];
-    let genericSerifWins = false;
     try {
-      if (genericSerif) {
-        const verdict = evaluateSubstitution(
-          fitAgainst(genericSerif.samples, {
-            "font-family": quoteFamily(genericSerif.family) + ", serif",
-          })
-        );
-        verdicts.push(verdict);
-        genericSerifWins = verdict !== null && verdict.improves;
-      }
-      const winners = [];
       for (const [family, { samples, faces }] of groups) {
         const verdict = evaluateSubstitution(
           fitAgainst(samples, {
@@ -943,32 +915,22 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
         );
         verdicts.push(verdict);
         if (verdict !== null && verdict.improves) {
-          winners.push({ family, faces });
+          substituted.push.apply(
+            substituted,
+            cloneFaces(family, directory, faces)
+          );
         }
       }
-      /* RR-9372: claimed only once every group is measured, since a claimed face leaves the measurement family. */
-      for (const { family, faces } of winners) {
-        substituted.push(...pool.claim(family, faces));
-      }
     } finally {
-      pool.release();
+      release();
     }
     if (evidenceIsMissing(verdicts)) {
       return askAgain();
     }
-    if (substituted.length === 0 && !genericSerifWins) {
+    if (substituted.length === 0) {
       return undefined;
     }
-    /* RR-9372: measuring, the rule rewrite and the kerning pass each restyle the page, so each gets a task of its own. */
-    return after(0)
-      .then(() => {
-        if (genericSerifWins) {
-          putFamilyBeforeGenericSerif(document, genericSerif.family);
-        }
-        return loadAll(substituted);
-      })
-      .then(() => document.fonts.ready)
-      .then(() => after(0));
+    return loadAll(substituted).then(() => document.fonts.ready);
   });
 }
 
@@ -988,25 +950,23 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
  * doubly wrong, because the stand-in it measures is a real rendering that the
  * comparison then judges the substitution against.
  *
- * So the faces are asked for rather than waited on. Only the families the text
- * actually draws are requested — a face no line wears is one the page would
- * never have fetched, and fetching it here would put back the download this
- * module goes out of its way not to make.
+ * So the faces are asked for rather than waited on: each line's own, as CSS
+ * matches them for its style and its characters. A face no line wears is one
+ * the page would never have fetched, and fetching it here would put back the
+ * download this module goes out of its way not to make (RR-9372: asking for
+ * whole families loaded all four Times faces where a page drew one).
  */
 function drawnFacesRequested(textLines) {
-  const drawn = new Set();
-  for (const { style } of textLines) {
-    for (const family of parseFamilyList(style.fontFamily)) {
-      drawn.add(family.toLowerCase());
-    }
+  const textByFont = new Map();
+  for (const { style, text } of textLines) {
+    const font = drawnFont(style);
+    textByFont.set(font, (textByFont.get(font) || "") + text);
   }
-  const pending = [];
-  document.fonts.forEach((face) => {
-    if (face.status === "unloaded" && drawn.has(face.family.toLowerCase())) {
-      pending.push(face.load().catch(() => {}));
-    }
-  });
-  return Promise.all(pending);
+  return Promise.all(
+    Array.from(textByFont, ([font, text]) =>
+      document.fonts.load(font, text).catch(() => {})
+    )
+  );
 }
 
 function fontsSettled(textLines) {

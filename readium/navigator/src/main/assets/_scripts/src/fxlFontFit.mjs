@@ -163,6 +163,22 @@ export function faceKey(face) {
   return face.weight + " " + face.style;
 }
 
+/* RR-9372: `FontFaceSet.load` needs a size to parse, and matches faces regardless of it. */
+const LOAD_SIZE = "16px";
+
+/* The `FontFaceSet.load` shorthand for the faces a computed style draws in. */
+export function drawnFont(style) {
+  return (
+    style.fontStyle +
+    " " +
+    style.fontWeight +
+    " " +
+    LOAD_SIZE +
+    " " +
+    style.fontFamily
+  );
+}
+
 /**
  * Probe text built from the characters the page actually shows.
  *

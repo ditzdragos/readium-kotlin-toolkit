@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { putFamilyBeforeGenericSerif } from "../src/fxlGenericSerif.mjs";
+import {
+  declaredFontFaceFamily,
+  putFamilyBeforeGenericSerif,
+} from "../src/fxlGenericSerif.mjs";
 
-const FAMILY = "Readium FXL Serif";
-const CLONE_FIRST = '"Readium FXL Serif", serif';
+const FAMILY = "Times New Roman";
+const CLONE_FIRST = '"Times New Roman", serif';
 
 function style(fontFamily, priority = "") {
   const declared = { value: fontFamily, priority };
@@ -122,5 +125,36 @@ describe("putFamilyBeforeGenericSerif (RR-9372)", () => {
     putFamilyBeforeGenericSerif(document, FAMILY);
     putFamilyBeforeGenericSerif(document, FAMILY);
     assert.equal(rule.style.declared.value, CLONE_FIRST);
+  });
+});
+
+const fontFaceRule = (fontFamily) => ({ type: 5, style: style(fontFamily) });
+
+describe("declaredFontFaceFamily (RR-9372)", () => {
+  it("names the family of the first @font-face, unquoted", () => {
+    const sheet = {
+      cssRules: [
+        styleRule("serif"),
+        fontFaceRule('"Times New Roman"'),
+        fontFaceRule("Other"),
+      ],
+    };
+    assert.equal(declaredFontFaceFamily(sheet), "Times New Roman");
+  });
+
+  it("is null without a sheet, a face, or readable rules", () => {
+    assert.equal(declaredFontFaceFamily(null), null);
+    assert.equal(
+      declaredFontFaceFamily({ cssRules: [styleRule("serif")] }),
+      null
+    );
+    assert.equal(
+      declaredFontFaceFamily({
+        get cssRules() {
+          throw new Error("SecurityError");
+        },
+      }),
+      null
+    );
   });
 });

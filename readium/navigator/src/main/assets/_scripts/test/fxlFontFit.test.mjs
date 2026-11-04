@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   MIN_FIT_IMPROVEMENT,
   SYNTHETIC_PROBE_TEXT,
+  drawnFont,
   evaluateSubstitution,
   evidenceIsMissing,
   faceFor,
@@ -503,23 +504,23 @@ describe("quoteFamily", () => {
 });
 
 describe("genericSerifWithFamily", () => {
-  const FAMILY = "Readium FXL Serif";
+  const FAMILY = "Times New Roman";
 
   it("puts the family in front of a bare generic serif", () => {
     assert.equal(
       genericSerifWithFamily("serif", FAMILY),
-      '"Readium FXL Serif", serif'
+      '"Times New Roman", serif'
     );
     assert.equal(
       genericSerifWithFamily(" SERIF ", FAMILY),
-      '"Readium FXL Serif", SERIF'
+      '"Times New Roman", SERIF'
     );
   });
 
   it("catches serif ahead of a named family, which never draws", () => {
     assert.equal(
-      genericSerifWithFamily('serif, "Times New Roman"', FAMILY),
-      '"Readium FXL Serif", serif, "Times New Roman"'
+      genericSerifWithFamily("serif, Georgia", FAMILY),
+      '"Times New Roman", serif, Georgia'
     );
   });
 
@@ -552,5 +553,18 @@ describe("genericSerifWithFamily", () => {
   it("leaves its own result alone, so a retried pass changes nothing", () => {
     const once = genericSerifWithFamily("serif", FAMILY);
     assert.equal(genericSerifWithFamily(once, FAMILY), null);
+  });
+});
+
+describe("drawnFont", () => {
+  it("names a computed style's faces in a shorthand `FontFaceSet.load` parses", () => {
+    assert.equal(
+      drawnFont({
+        fontStyle: "italic",
+        fontWeight: "700",
+        fontFamily: '"Times New Roman", serif',
+      }),
+      'italic 700 16px "Times New Roman", serif'
+    );
   });
 });

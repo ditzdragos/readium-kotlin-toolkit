@@ -4,9 +4,33 @@
 //  available in the top-level LICENSE file of the project.
 //
 
-import { genericSerifWithFamily } from "./fxlFontFit.mjs";
+import { genericSerifWithFamily, parseFamilyList } from "./fxlFontFit.mjs";
 
 const STYLE_RULE = 1;
+const FONT_FACE_RULE = 5;
+
+function rulesOf(sheet) {
+  try {
+    return sheet.cssRules;
+  } catch (error) {
+    return null;
+  }
+}
+
+/* RR-9372: the family the injected `fxl-default-serif.css` declares the Times clone under. */
+export function declaredFontFaceFamily(sheet) {
+  for (const rule of (sheet && rulesOf(sheet)) || []) {
+    if (rule.type === FONT_FACE_RULE) {
+      const family = parseFamilyList(
+        rule.style.getPropertyValue("font-family")
+      )[0];
+      if (family) {
+        return family;
+      }
+    }
+  }
+  return null;
+}
 
 /* RR-9372: a generic can't be registered over, so the family goes in front of `serif` in the page's own declarations. */
 export function putFamilyBeforeGenericSerif(document, family) {
@@ -37,13 +61,10 @@ export function putFamilyBeforeGenericSerif(document, family) {
     }
   };
   const walkSheet = (sheet) => {
-    let rules;
-    try {
-      rules = sheet.cssRules;
-    } catch (error) {
-      return;
+    const rules = rulesOf(sheet);
+    if (rules) {
+      walkRules(rules);
     }
-    walkRules(rules);
   };
 
   for (const sheet of document.styleSheets) {
