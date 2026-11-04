@@ -93,6 +93,29 @@ export function parseFamilyList(value) {
     .filter((family) => family.length > 0);
 }
 
+export function quoteFamily(family) {
+  return '"' + family.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+}
+
+/**
+ * RR-9372: whether a declared or computed `font-family` resolves straight to
+ * the generic `serif`, naming no family before it. Android draws that in Noto
+ * Serif, about 15% wider than the Times the artwork was set in, and neither
+ * the named-family fallback nor the injected `html` default reaches it.
+ */
+export function fallsToGenericSerif(value) {
+  const first = String(value || "").trim();
+  if (first.charAt(0) === '"' || first.charAt(0) === "'") {
+    return false;
+  }
+  const families = parseFamilyList(first);
+  return families.length > 0 && families[0].toLowerCase() === "serif";
+}
+
+export function withFamilyFirst(value, family) {
+  return quoteFamily(family) + ", " + value.trim();
+}
+
 export function isGenericFamily(family) {
   return GENERIC_FAMILIES.has(family.toLowerCase());
 }
