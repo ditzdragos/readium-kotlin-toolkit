@@ -34,6 +34,7 @@ import {
 } from "./rangeRects.mjs";
 import { containingElement } from "./rangeCoverage.mjs";
 import { decorationPlacements } from "./decorationPlacements.mjs";
+import { inkFittedRect, isDisplayType } from "./displayType.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
   ChangeQueue,
@@ -439,7 +440,79 @@ export function handleDecorationClickEvent(event, clickEvent) {
   );
 }
 
-function lineOrBoxRects(range, layout, doNotMergeHorizontallyAlignedRects) {
+function neighbourTextHeight(range, forward) {
+  const node = forward ? range.endContainer : range.startContainer;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.nodeValue;
+    let index = -1;
+    if (forward) {
+      const after = text.slice(range.endOffset).search(/\S/);
+      if (after !== -1) index = range.endOffset + after;
+    } else {
+      const before = text.slice(0, range.startOffset).search(/\S\s*$/);
+      if (before !== -1) index = before;
+    }
+    if (index !== -1) {
+      const character = document.createRange();
+      character.setStart(node, index);
+      character.setEnd(node, index + 1);
+      return character.getBoundingClientRect().height;
+    }
+  }
+  return adjacentTextRect(range, forward)?.height;
+}
+
+let textMeasureContext = null;
+
+function measureInk(element, text) {
+  const style = getComputedStyle(element);
+  const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  if (!document.fonts.check(font)) return null;
+  textMeasureContext ??= document.createElement("canvas").getContext("2d");
+  textMeasureContext.font = font;
+  const metrics = textMeasureContext.measureText(text);
+  return {
+    fontAscent: metrics.fontBoundingBoxAscent,
+    fontDescent: metrics.fontBoundingBoxDescent,
+    inkAscent: metrics.actualBoundingBoxAscent,
+    inkDescent: metrics.actualBoundingBoxDescent,
+  };
+}
+
+/**
+ * The rect of a one-line [range] set in display type, fitted to its ink, or null for any other
+ * range. See [inkFittedRect].
+ */
+function displayTypeRect(range, boundingRect) {
+  const neighbourHeights = [
+    neighbourTextHeight(range, false),
+    neighbourTextHeight(range, true),
+  ];
+  if (!isDisplayType(boundingRect.height, neighbourHeights)) return null;
+
+  const lines = mergeIntoLines(getClientRectsNoOverlap(range, true));
+  const element = containingElement(range.startContainer);
+  const text = range.toString().trim();
+  if (lines.length !== 1 || !element || !text) return null;
+
+  const metrics = measureInk(element, text);
+  return (
+    metrics &&
+    inkFittedRect(
+      lines[0],
+      metrics,
+      Math.max(...neighbourHeights.filter((h) => h > 0))
+    )
+  );
+}
+
+function lineOrBoxRects(
+  range,
+  layout,
+  doNotMergeHorizontallyAlignedRects,
+  displayRect
+) {
+  if (displayRect) return [displayRect];
   const boxes = getClientRectsNoOverlap(
     range,
     doNotMergeHorizontallyAlignedRects
@@ -756,7 +829,16 @@ export function DecorationGroup(groupId, groupName) {
       return element;
     }
 
-    let boundingRect = item.range.getBoundingClientRect();
+    const overlayBoxes = ocrOverlayBoxes(
+      item.range,
+      getOCRCorrectedRectForOverlay
+    );
+    const rangeRect = item.range.getBoundingClientRect();
+    const displayRect =
+      isVertical || overlayBoxes.length > 0
+        ? null
+        : displayTypeRect(item.range, rangeRect);
+    const boundingRect = displayRect ?? rangeRect;
 
     let elementTemplate;
     try {
@@ -781,16 +863,14 @@ export function DecorationGroup(groupId, groupName) {
       const decoratorWritingMode = getComputedStyle(startElement).writingMode;
 
       const placements = decorationPlacements(style, {
-        overlayBoxes: ocrOverlayBoxes(
-          item.range,
-          getOCRCorrectedRectForOverlay
-        ),
+        overlayBoxes,
         letteringLineBoxes: () => letteringLineBoxes(item.range),
         clientRects: () =>
           lineOrBoxRects(
             item.range,
             style.layout,
-            doNotMergeHorizontallyAlignedRects
+            doNotMergeHorizontallyAlignedRects,
+            displayRect
           ).sort((r1, r2) => {
             if (r1.top !== r2.top) return r1.top - r2.top;
             if (decoratorWritingMode === "vertical-rl") {
@@ -983,6 +1063,11 @@ export function DecorationGroup(groupId, groupName) {
       getOCRCorrectedRectForOverlay
     );
     const ocrLayout = overlayBoxes.length > 0;
+    const displayRect =
+      ocrLayout || getDocumentWritingMode().startsWith("vertical")
+        ? null
+        : displayTypeRect(item.range, boundingRect);
+    const wordRect = displayRect ?? boundingRect;
 
     let elementTemplate;
     try {
@@ -1053,7 +1138,7 @@ export function DecorationGroup(groupId, groupName) {
           overlayBoxes,
           letteringLineBoxes: () => letteringLineBoxes(item.range),
           clientRects: () =>
-            lineOrBoxRects(item.range, style.layout, true).sort(
+            lineOrBoxRects(item.range, style.layout, true, displayRect).sort(
               (rectA, rectB) => rectA.top - rectB.top
             ),
         });
@@ -1064,7 +1149,7 @@ export function DecorationGroup(groupId, groupName) {
           const positionedLine = positionElement(
             line,
             placement.rect,
-            boundingRect,
+            wordRect,
             placement.turnedBox
           );
           itemContainer.append(positionedLine);
@@ -1074,8 +1159,8 @@ export function DecorationGroup(groupId, groupName) {
         bounds.style.pointerEvents = "none";
         const positionedBounds = positionElement(
           bounds,
-          boundingRect,
-          boundingRect,
+          wordRect,
+          wordRect,
           overlayBoxes[0]
         );
         itemContainer.append(positionedBounds);
@@ -1090,7 +1175,7 @@ export function DecorationGroup(groupId, groupName) {
     item.container = itemContainer;
 
     if (postMessage) {
-      emitHighlightRect(item, () => toNativeRect(boundingRect), ocrLayout);
+      emitHighlightRect(item, () => toNativeRect(wordRect), ocrLayout);
     }
   }
 
