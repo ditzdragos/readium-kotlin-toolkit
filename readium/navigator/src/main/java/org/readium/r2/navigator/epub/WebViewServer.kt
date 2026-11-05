@@ -342,7 +342,10 @@ internal class WebViewServer(
             }
             path.startsWith("/assets/") && isServedAsset(path.removePrefix("/assets/")) -> {
                 assetsLoader.shouldInterceptRequest(request.url)
-                    ?.apply { allowCors() }
+                    ?.apply {
+                        allowCors()
+                        if (path.endsWith(".woff2")) cacheImmutable()
+                    }
             }
             else -> null
         }
@@ -472,6 +475,11 @@ internal class WebViewServer(
     private fun WebResourceResponse.allowCors() {
         responseHeaders = responseHeaders?.toMutableMap() ?: mutableMapOf()
         responseHeaders["Access-Control-Allow-Origin"] = "*"
+    }
+
+    private fun WebResourceResponse.cacheImmutable() {
+        responseHeaders = responseHeaders?.toMutableMap() ?: mutableMapOf()
+        responseHeaders["Cache-Control"] = "max-age=86400, immutable"
     }
 
     private val Link.isJpeg: Boolean
