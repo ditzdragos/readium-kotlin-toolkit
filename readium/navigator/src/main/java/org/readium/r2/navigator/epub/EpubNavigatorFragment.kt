@@ -897,6 +897,16 @@ public class EpubNavigatorFragment public constructor(
 
         override fun onTap(point: PointF): Boolean = inputListener.onTap(TapEvent(point))
 
+        override fun onTap(event: R2BasicWebView.TapEvent, resourceUrl: AbsoluteUrl?): Boolean {
+            if (event.selectsText && resourceUrl != null) {
+                currentReflowablePageFragment?.clearSelectionOutside(resourceUrl)
+            }
+            val href = resourceUrl?.let { viewModel.internalLinkFromUrl(it)?.url() }
+            return inputListener.onTap(
+                TapEvent(event.point, event.clickCount, event.isMouse, href, event.selectsText)
+            )
+        }
+
         override fun onLongTap(point: PointF): Boolean = inputListener.onLongTap(TapEvent(point))
 
         override fun onDragStart(event: R2BasicWebView.DragEvent): Boolean = onDrag(DragEvent.Type.Start, event)
