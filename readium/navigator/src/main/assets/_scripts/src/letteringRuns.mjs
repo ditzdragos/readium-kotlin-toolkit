@@ -319,6 +319,15 @@ function screenTurn(element) {
 }
 
 /**
+ * Whether CSS shows [element] upright on screen: turned less than [UPRIGHT_SINE] allows, not upside
+ * down, and scaled evenly.
+ */
+export function isUpright(element) {
+  const turn = screenTurn(element);
+  return turn !== null && turn.cos > 0 && Math.abs(turn.sin) <= UPRIGHT_SINE;
+}
+
+/**
  * The corners of a text box turned by [turn], from [rect], the upright box around it, clockwise
  * from its top left. The upright box of a box w × h turned by θ is w|cos θ| + h|sin θ| wide and
  * w|sin θ| + h|cos θ| high, centred where the turned box is, so both sides follow from it.
