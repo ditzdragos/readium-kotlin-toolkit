@@ -34,6 +34,7 @@ import {
 } from "./rangeRects.mjs";
 import { containingElement } from "./rangeCoverage.mjs";
 import { decorationPlacements } from "./decorationPlacements.mjs";
+import { displayTypeRect, wordRect } from "./displayTypeRect.js";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
   ChangeQueue,
@@ -433,7 +434,7 @@ export function handleDecorationClickEvent(event, clickEvent) {
     JSON.stringify({
       id: target.item.decoration.id,
       group: target.group,
-      rect: toNativeRect(target.item.range.getBoundingClientRect()),
+      rect: toNativeRect(wordRect(target.item.range)),
       click: clickEvent,
     })
   );
@@ -756,7 +757,8 @@ export function DecorationGroup(groupId, groupName) {
       return element;
     }
 
-    let boundingRect = item.range.getBoundingClientRect();
+    const displayRect = displayTypeRect(item.range);
+    const fittedRect = displayRect ?? item.range.getBoundingClientRect();
 
     let elementTemplate;
     try {
@@ -785,6 +787,7 @@ export function DecorationGroup(groupId, groupName) {
           item.range,
           getOCRCorrectedRectForOverlay
         ),
+        displayRect,
         letteringLineBoxes: () => letteringLineBoxes(item.range),
         clientRects: () =>
           lineOrBoxRects(
@@ -811,7 +814,7 @@ export function DecorationGroup(groupId, groupName) {
           positionElement(
             line,
             placement.rect,
-            boundingRect,
+            fittedRect,
             documentWritingMode,
             placement.turnedBox
           )
@@ -823,7 +826,7 @@ export function DecorationGroup(groupId, groupName) {
       bounds.dataset.writingMode = documentWritingMode;
 
       itemContainer.append(
-        positionElement(bounds, boundingRect, boundingRect, documentWritingMode)
+        positionElement(bounds, fittedRect, fittedRect, documentWritingMode)
       );
     } else {
       if (DEBUG_MODE) log("style layout: ", groupName, style.layout);
@@ -842,7 +845,7 @@ export function DecorationGroup(groupId, groupName) {
     }
 
     if (postMessage) {
-      emitHighlightRect(item, () => toNativeRect(boundingRect), false);
+      emitHighlightRect(item, () => toNativeRect(fittedRect), false);
     }
   }
 
@@ -983,6 +986,8 @@ export function DecorationGroup(groupId, groupName) {
       getOCRCorrectedRectForOverlay
     );
     const ocrLayout = overlayBoxes.length > 0;
+    const displayRect = displayTypeRect(item.range);
+    const fittedRect = displayRect ?? boundingRect;
 
     let elementTemplate;
     try {
@@ -1051,6 +1056,7 @@ export function DecorationGroup(groupId, groupName) {
       if (style.layout === "boxes" || style.layout === "lines") {
         const placements = decorationPlacements(style, {
           overlayBoxes,
+          displayRect,
           letteringLineBoxes: () => letteringLineBoxes(item.range),
           clientRects: () =>
             lineOrBoxRects(item.range, style.layout, true).sort(
@@ -1064,7 +1070,7 @@ export function DecorationGroup(groupId, groupName) {
           const positionedLine = positionElement(
             line,
             placement.rect,
-            boundingRect,
+            fittedRect,
             placement.turnedBox
           );
           itemContainer.append(positionedLine);
@@ -1074,8 +1080,8 @@ export function DecorationGroup(groupId, groupName) {
         bounds.style.pointerEvents = "none";
         const positionedBounds = positionElement(
           bounds,
-          boundingRect,
-          boundingRect,
+          fittedRect,
+          fittedRect,
           overlayBoxes[0]
         );
         itemContainer.append(positionedBounds);
@@ -1090,7 +1096,7 @@ export function DecorationGroup(groupId, groupName) {
     item.container = itemContainer;
 
     if (postMessage) {
-      emitHighlightRect(item, () => toNativeRect(boundingRect), ocrLayout);
+      emitHighlightRect(item, () => toNativeRect(fittedRect), ocrLayout);
     }
   }
 
