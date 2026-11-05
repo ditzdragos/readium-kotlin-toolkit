@@ -10,11 +10,17 @@
 package org.readium.r2.lcp.service
 
 import android.net.Uri
+import java.io.EOFException
 import java.io.File
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketException
 import java.net.UnknownHostException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 import kotlin.math.round
 import kotlin.time.Duration
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +33,7 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.internal.http2.StreamResetException
 import okio.buffer
 import okio.sink
 import org.readium.r2.lcp.LcpError
@@ -199,18 +206,17 @@ internal class NetworkService {
 }
 
 /**
- * RallyReader fork patch: every caller classifies a failed call itself, so name resolution (the
- * device is offline) is a warning with no throwable, since the reading app's Timber tree forwards
- * any throwable at warning or above to crash reporting. Any other failure stays an error.
+ * RallyReader fork patch: every caller classifies a failed call itself, so a dropped connection
+ * (offline, cut mid-transfer, timed out) is a warning with no throwable, since the reading app's
+ * Timber tree forwards any throwable at warning or above to crash reporting. Any other failure,
+ * a certificate one included, stays an error.
  *
  * [call] names the method, kind and host only: LCP URLs carry licence and device ids and the
- * device name.
+ * device name. The exception message is left out too: a connect timeout's message names the device's IP.
  */
 internal fun Throwable.reportNetworkFailure(call: String) {
-    if (isOfflineLike()) {
-        Timber.w(
-            "LCP $call failed, the device could not resolve the host (${javaClass.name}: $message)"
-        )
+    if (isNetworkDrop()) {
+        Timber.w("LCP $call failed, the connection dropped (${javaClass.name})")
     } else {
         Timber.e(this, "LCP $call failed")
     }
@@ -229,26 +235,32 @@ private fun HttpUrl.lcpCallKind(): String {
 
 private val LSD_INTERACTIONS = setOf("status", "register", "renew", "return")
 
-internal fun Throwable.isOfflineLike(): Boolean = when {
-    this is UnknownHostException -> true
-    message.isOfflineLikeMessage() -> true
-    else -> cause?.isOfflineLike() == true
+/**
+ * RR-9433: the app's `isNetworkDrop()` rules, copied because this module cannot depend on the app.
+ * The first exception in the cause chain with a verdict decides.
+ */
+internal fun Throwable.isNetworkDrop(): Boolean =
+    generateSequence(this) { current -> current.cause?.takeIf { it !== current } }
+        .take(NETWORK_DROP_MAX_CAUSE_DEPTH)
+        .firstNotNullOfOrNull { it.networkDropVerdict() } ?: false
+
+private fun Throwable.networkDropVerdict(): Boolean? = when (this) {
+    is SSLPeerUnverifiedException -> false
+    is SSLHandshakeException -> message.orEmpty().contains(TLS_SOCKET_IO_ERROR) || cause is SocketException
+    is UnknownHostException,
+    is InterruptedIOException,
+    is SocketException,
+    is EOFException,
+    is StreamResetException,
+    is SSLException,
+    -> true
+    else -> null
 }
 
-// The wording differs by API level, and the underlying failure often arrives as an
-// android.system.GaiException this module cannot reference directly, so match the message too.
-private fun String?.isOfflineLikeMessage(): Boolean {
-    if (isNullOrBlank()) return false
-    val normalizedMessage = lowercase(Locale.ROOT)
-    return OFFLINE_MESSAGE_PATTERNS.any { pattern -> normalizedMessage.contains(pattern) }
-}
+private const val NETWORK_DROP_MAX_CAUSE_DEPTH = 10
 
-private val OFFLINE_MESSAGE_PATTERNS = listOf(
-    "unable to resolve host",
-    "no address associated with hostname",
-    "eai_nodata",
-    "eai_noname"
-)
+// Conscrypt's text when the socket failed under TLS, on a read or mid-handshake.
+private const val TLS_SOCKET_IO_ERROR = "I/O error during system call"
 
 /**
  * Fails the download before a single byte is written when the volume cannot hold the publication.

@@ -7,13 +7,21 @@
 package org.readium.r2.lcp.service
 
 import android.util.Log
+import java.io.EOFException
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import okhttp3.internal.http2.ErrorCode
+import okhttp3.internal.http2.StreamResetException
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -41,49 +49,83 @@ class NetworkServiceTest {
     }
 
     @Test
-    fun `a name lookup failure is classified as offline-like`() {
-        assertTrue(UnknownHostException("api-prod.rallyreader.com").isOfflineLike())
+    fun `a transport failure is a network drop`() {
+        listOf(
+            UnknownHostException("api-prod.rallyreader.com"),
+            SocketTimeoutException("timeout"),
+            InterruptedIOException("timeout"),
+            SocketException("Software caused connection abort"),
+            EOFException("\n not found: limit=0"),
+            StreamResetException(ErrorCode.CANCEL),
+            SSLException(SSL_READ_ABORT),
+        ).forEach { failure ->
+            assertTrue(failure.isNetworkDrop(), "${failure.javaClass.name} should be a drop")
+        }
     }
 
     @Test
-    fun `a getaddrinfo failure is classified from its message alone`() {
-        val gaiExceptionShape = IOException(
-            "android_getaddrinfo failed: EAI_NODATA (No address associated with hostname)"
-        )
-
+    fun `a handshake cut off by the network is a drop`() {
+        assertTrue(SSLHandshakeException(SSL_HANDSHAKE_CUT_OFF).isNetworkDrop())
         assertTrue(
-            gaiExceptionShape.isOfflineLike(),
-            "The real failure arrives as an android.system.GaiException this module cannot " +
-                "reference, so the message has to be enough."
+            SSLHandshakeException("Handshake failed")
+                .apply { initCause(SocketException("Connection reset")) }
+                .isNetworkDrop()
         )
     }
 
     @Test
-    fun `a wrapped name lookup failure is classified as offline-like`() {
-        val wrapped = IOException("request failed", UnknownHostException("api-prod.rallyreader.com"))
-
-        assertTrue(wrapped.isOfflineLike())
+    fun `a certificate failure is not a drop`() {
+        assertFalse(SSLHandshakeException("Trust anchor for certification path not found.").isNetworkDrop())
+        assertFalse(SSLPeerUnverifiedException("Hostname lsd.example.com not verified").isNetworkDrop())
     }
 
     @Test
-    fun `a timeout is not classified as offline-like`() {
+    fun `the first verdict in the cause chain decides`() {
+        assertTrue(IOException("request failed", UnknownHostException("lcp.example.com")).isNetworkDrop())
         assertFalse(
-            SocketTimeoutException("timeout").isOfflineLike(),
-            "A timeout can equally mean the license server is in trouble, which is worth an error."
+            IOException(
+                "request failed",
+                SSLPeerUnverifiedException("Hostname lcp.example.com not verified")
+                    .apply { initCause(SocketException("Connection reset")) }
+            ).isNetworkDrop(),
+            "A certificate failure stays an error even when a socket error sits under it."
         )
     }
 
     @Test
-    fun `an offline call is a warning carrying no throwable`() {
-        UnknownHostException(
-            "Unable to resolve host \"api-prod.rallyreader.com\": No address associated with " +
-                "hostname"
-        ).reportNetworkFailure("GET status call to api-prod.rallyreader.com")
+    fun `a drop buried under a deep wrapper chain is not found`() {
+        val deep = (1..10).fold<Int, Throwable>(SocketException("Connection reset")) { cause, depth ->
+            IOException("wrapper $depth", cause)
+        }
+
+        assertFalse(deep.isNetworkDrop())
+    }
+
+    @Test
+    fun `a failure with no transport cause is not a drop`() {
+        assertFalse(IllegalStateException("closed").isNetworkDrop())
+    }
+
+    @Test
+    fun `a getaddrinfo message without an UnknownHostException is not a drop`() {
+        assertFalse(
+            IOException("android_getaddrinfo failed: EAI_NODATA (No address associated with hostname)")
+                .isNetworkDrop(),
+            "RR-9433 dropped message matching: Android wraps GaiException in UnknownHostException."
+        )
+    }
+
+    @Test
+    fun `an aborted download read is a warning carrying no throwable`() {
+        SSLException(SSL_READ_ABORT).reportNetworkFailure("publication download from cdn.example.com")
 
         val (priority, message, throwable) = logged.single()
         assertEquals(Log.WARN, priority)
-        assertTrue(message.contains("GET status call to api-prod.rallyreader.com"), message)
-        assertTrue(message.contains("java.net.UnknownHostException: Unable to resolve host"), message)
+        assertEquals(
+            "LCP publication download from cdn.example.com failed, the connection dropped " +
+                "(javax.net.ssl.SSLException)",
+            message
+        )
         assertNull(
             throwable,
             "The reading app's tree forwards any throwable it is handed at warning or above, so " +
@@ -92,15 +134,14 @@ class NetworkServiceTest {
     }
 
     @Test
-    fun `any other failure is still an error carrying the throwable`() {
-        val refused = SocketTimeoutException("timeout")
+    fun `a certificate failure is still an error carrying the throwable`() {
+        val untrusted = SSLHandshakeException("Trust anchor for certification path not found.")
 
-        refused.reportNetworkFailure("GET license call to lcp.example.com")
+        untrusted.reportNetworkFailure("GET license call to lcp.example.com")
 
-        val (priority, message, throwable) = logged.single()
+        val (priority, _, throwable) = logged.single()
         assertEquals(Log.ERROR, priority)
-        assertTrue(message.contains("GET license call to lcp.example.com"), message)
-        assertEquals(refused, throwable)
+        assertEquals(untrusted, throwable)
     }
 
     @Test
@@ -149,5 +190,12 @@ class NetworkServiceTest {
             "PUT call to an unparsable URL",
             describeLcpCall(NetworkService.Method.PUT, "not a url")
         )
+    }
+
+    private companion object {
+        const val SSL_HANDSHAKE_CUT_OFF =
+            "Read error: ssl=0x7b2c: I/O error during system call, Connection reset by peer"
+        const val SSL_READ_ABORT =
+            "Read error: ssl=0x7b2c: I/O error during system call, Software caused connection abort"
     }
 }
