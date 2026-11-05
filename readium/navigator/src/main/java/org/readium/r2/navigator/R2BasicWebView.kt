@@ -99,14 +99,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         fun onPageChanged(pageIndex: Int, totalPages: Int, url: String) {}
         fun onPageEnded(end: Boolean) {}
         fun onTap(point: PointF): Boolean = false
-        fun onTap(point: PointF, clickCount: Int, isMouse: Boolean): Boolean = onTap(point)
-        fun onTap(
-            point: PointF,
-            clickCount: Int,
-            isMouse: Boolean,
-            selectsText: Boolean,
-            resourceUrl: AbsoluteUrl?,
-        ): Boolean = onTap(point, clickCount, isMouse)
+        fun onTap(event: TapEvent, resourceUrl: AbsoluteUrl?): Boolean = onTap(event.point)
         fun onLongTap(point: PointF): Boolean = false
         fun onDragStart(event: DragEvent): Boolean = false
         fun onDragMove(event: DragEvent): Boolean = false
@@ -361,13 +354,13 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
 
         // We ignore taps on interactive element, unless it's an element we handle ourselves such as
         // pop-up footnotes.
-        // A double click selects a word, even inside an interactive element: the app opens its menu.
-        if (event.interactiveElement != null && event.clickCount < 2) {
+        // Mouse multi-clicks are forwarded even on interactive elements.
+        if (event.interactiveElement != null && !(event.isMouse && event.clickCount >= 2)) {
             return handleFootnote(event.interactiveElement)
         }
 
         return runBlocking(uiScope.coroutineContext) {
-            listener?.onTap(event.point, event.clickCount, event.isMouse, event.selectsText, resourceUrl) == true
+            listener?.onTap(event, resourceUrl) == true
         }
     }
 
@@ -404,7 +397,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
     }
 
     /** Produced by gestures.js */
-    private data class TapEvent(
+    internal data class TapEvent(
         val defaultPrevented: Boolean,
         val point: PointF,
         val targetElement: String,

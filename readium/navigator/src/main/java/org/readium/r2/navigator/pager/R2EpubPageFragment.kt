@@ -745,6 +745,13 @@ internal class R2EpubPageFragment : Fragment() {
         }
     }
 
+    /** Each page of a spread keeps its own selection, and [currentSelection] reads the left one first. */
+    internal fun clearSelectionOutside(url: AbsoluteUrl) {
+        listOfNotNull(webView, webViewRight)
+            .filter { it.resourceUrl != url }
+            .forEach { it.runJavaScript("window.getSelection().removeAllRanges();") }
+    }
+
     /**
      * Gets the current text selection.
      */
