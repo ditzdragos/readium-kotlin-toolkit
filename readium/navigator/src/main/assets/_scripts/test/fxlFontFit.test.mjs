@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   MIN_FIT_IMPROVEMENT,
   SYNTHETIC_PROBE_TEXT,
+  drawnFont,
   evaluateSubstitution,
   evidenceIsMissing,
   faceFor,
@@ -14,6 +15,7 @@ import {
   median,
   parseFamilyList,
   probeTextFrom,
+  quoteFamily,
   usableSamples,
 } from "../src/fxlFontFit.mjs";
 
@@ -485,6 +487,30 @@ describe("faceFor", () => {
     assert.notEqual(
       faceKey(faceFor({ fontWeight: "700", fontStyle: "normal" })),
       faceKey(faceFor({ fontWeight: "400", fontStyle: "normal" }))
+    );
+  });
+});
+
+describe("quoteFamily", () => {
+  it("quotes a family so the stack parses back to it", () => {
+    for (const family of ['A "B" C', "Back\\slash", "Plain"]) {
+      assert.deepEqual(parseFamilyList(quoteFamily(family) + ", serif"), [
+        family,
+        "serif",
+      ]);
+    }
+  });
+});
+
+describe("drawnFont", () => {
+  it("names a computed style's faces in a shorthand `FontFaceSet.load` parses", () => {
+    assert.equal(
+      drawnFont({
+        fontStyle: "italic",
+        fontWeight: "700",
+        fontFamily: '"Times New Roman", serif',
+      }),
+      'italic 700 16px "Times New Roman", serif'
     );
   });
 });

@@ -64,10 +64,19 @@ const BOX_WIDTH_TOLERANCE = 0.5;
 const MIN_USABLE_FILL = 0.6;
 const MAX_USABLE_FILL = 1.25;
 
-export function parseFamilyList(value) {
-  const families = [];
+function parseFamilyTokens(value) {
+  const tokens = [];
   let current = "";
+  let quoted = false;
   let quote = null;
+  const push = () => {
+    const name = current.trim().replace(/\s+/g, " ");
+    if (name.length > 0) {
+      tokens.push({ name, quoted });
+    }
+    current = "";
+    quoted = false;
+  };
   for (let i = 0; i < value.length; i++) {
     const character = value[i];
     if (quote) {
@@ -80,17 +89,28 @@ export function parseFamilyList(value) {
       }
     } else if (character === '"' || character === "'") {
       quote = character;
+      quoted = true;
     } else if (character === ",") {
-      families.push(current);
-      current = "";
+      push();
     } else {
       current += character;
     }
   }
-  families.push(current);
-  return families
-    .map((family) => family.trim().replace(/\s+/g, " "))
-    .filter((family) => family.length > 0);
+  push();
+  return tokens;
+}
+
+export function parseFamilyList(value) {
+  return parseFamilyTokens(value).map((token) => token.name);
+}
+
+export function quoteFamily(family) {
+  return '"' + family.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+}
+
+export function startsWithGenericSerif(value) {
+  const first = parseFamilyTokens(value)[0];
+  return !!first && !first.quoted && first.name.toLowerCase() === "serif";
 }
 
 export function isGenericFamily(family) {
@@ -134,6 +154,22 @@ export function faceFor(style) {
 /** Identity of a face, for comparing what a page needs against what is bundled. */
 export function faceKey(face) {
   return face.weight + " " + face.style;
+}
+
+/* RR-9372: `FontFaceSet.load` needs a size to parse, and matches faces regardless of it. */
+const LOAD_SIZE = "16px";
+
+/* The `FontFaceSet.load` shorthand for the faces a computed style draws in. */
+export function drawnFont(style) {
+  return (
+    style.fontStyle +
+    " " +
+    style.fontWeight +
+    " " +
+    LOAD_SIZE +
+    " " +
+    style.fontFamily
+  );
 }
 
 /**
