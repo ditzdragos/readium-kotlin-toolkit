@@ -63,4 +63,14 @@ class DropCapsStyleTest {
             )
         }
     }
+
+    @Test
+    fun `RR-9345 a stick-up cap keeps a line tall enough to hold it at the top of a page`() {
+        val bodies = rulesFor("""span[class*="stickup"]""").joinToString { it.body }
+
+        assertTrue(
+            bodies.contains("line-height: normal !important"),
+            "a stick-up cap with line-height 0 rises above the page top and is cut off"
+        )
+    }
 }
