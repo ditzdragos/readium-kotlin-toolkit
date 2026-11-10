@@ -7,7 +7,6 @@ internal const val DROP_CAPS_STYLE =  """
                     p.first, p.opening, p.firstpara, p.firstPara, p.first-para,
                     p[class*="first"], p[class*="caps"], p[class*="stuck"],
                     div[class*="initial"], div[class*="dropcap"], div[class*="drop-cap"],
-                    span[class*="initial"], span[class*="dropcap"], span[class*="drop-cap"],
                     .stickupcaps, .char-dropcap-DC, .cso_30-DC, .goudy-handtooled-std-dc,
                     p[style*="text-indent: 0"], p[style*="text-indent:0"] {
                         text-indent: 1em !important;
@@ -28,6 +27,11 @@ internal const val DROP_CAPS_STYLE =  """
                         margin: 0 !important;
                         font-weight: inherit !important;
                         text-transform: none !important;
+                    }
+
+                    span[class*="dropcap"], span[class*="drop-cap"], span.initial {
+                        margin-top: 0 !important;
+                        margin-bottom: 0 !important;
                     }
                 </style>
                 """
