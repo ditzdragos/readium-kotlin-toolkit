@@ -33,5 +33,10 @@ internal const val DROP_CAPS_STYLE =  """
                         margin-top: 0 !important;
                         margin-bottom: 0 !important;
                     }
+
+                    /* A stick-up cap set to line-height 0 rises out of its line, so at the top of a page it is cut off */
+                    span[class*="stickup"] {
+                        line-height: normal !important;
+                    }
                 </style>
                 """
