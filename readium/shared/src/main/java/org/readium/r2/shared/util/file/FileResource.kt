@@ -29,7 +29,6 @@ import org.readium.r2.shared.util.DebugError
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.getOrThrow
-import org.readium.r2.shared.util.isLazyInitialized
 import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.resource.filename
 import org.readium.r2.shared.util.toUrl
@@ -43,13 +42,15 @@ public class FileResource(
     private val file: File,
 ) : Resource {
 
-    private val randomAccessFile by lazy {
+    private val randomAccessFileLazy = lazy {
         try {
             Try.success(RandomAccessFile(file, "r"))
         } catch (e: FileNotFoundException) {
             Try.failure(e)
         }
     }
+
+    private val randomAccessFile by randomAccessFileLazy
 
     private val properties =
         Resource.Properties(
@@ -67,7 +68,7 @@ public class FileResource(
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun close() {
-        if (::randomAccessFile.isLazyInitialized) {
+        if (randomAccessFileLazy.isInitialized()) {
             GlobalScope.launch {
                 withContext(Dispatchers.IO) {
                     randomAccessFile.onSuccess {

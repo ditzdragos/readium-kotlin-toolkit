@@ -16,7 +16,6 @@ android {
 dependencies {
     implementation(libs.androidx.annotation)
     implementation(libs.timber)
-    implementation(libs.kotlin.reflect)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
