@@ -194,9 +194,12 @@ describe("spansNeedingSpacing between placed lines", () => {
   // The shape "Casper and Daisy's Big Day at the Park" (9780744057850) ships on page012 (RR-6413).
   it("separates a line high on a page that starts at another left", () => {
     const root = parent();
-    rendered(span({ left: "4224.28px", bottom: "39058.3px" }, root, "the place"), {
-      fontSize: "1344px",
-    });
+    rendered(
+      span({ left: "4224.28px", bottom: "39058.3px" }, root, "the place"),
+      {
+        fontSize: "1344px",
+      }
+    );
     const next = rendered(
       span({ left: "4455.44px", bottom: "36946.9px" }, root, "until Casper"),
       { fontSize: "1344px" }
@@ -257,6 +260,39 @@ describe("spansNeedingSpacing between placed lines", () => {
 
     assert.deepEqual(spansNeedingSpacing(root.childNodes), [next]);
   });
+
+  it("keeps a placed drop cap joined to the rest of its word", () => {
+    const root = parent();
+    rendered(span({ left: "4224px", bottom: "33586px" }, root, "O"), {
+      fontSize: "4800px",
+    });
+    rendered(span({ left: "7300px", bottom: "36946px" }, root, "nce upon"), {
+      fontSize: "1344px",
+    });
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), []);
+  });
+
+  it("falls back to the baseline ratio for lines placed in points", () => {
+    const root = parent();
+    rendered(span({ left: "40pt", bottom: "100pt" }, root, "the place"), {
+      fontSize: "16px",
+    });
+    const next = rendered(
+      span({ left: "52pt", bottom: "85.6pt" }, root, "until Casper"),
+      { fontSize: "16px" }
+    );
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), [next]);
+  });
+
+  it("falls back to the baseline ratio when the font size is unknown", () => {
+    const root = parent();
+    span({ left: "24633px", bottom: "36883.9px" }, root, "face");
+    span({ left: "28349.9px", bottom: "36946.3px" }, root, "!");
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), []);
+  });
 });
 
 describe("spansNeedingSpacing between unplaced spans", () => {
@@ -313,8 +349,18 @@ describe("processSpansForTextSpacing", () => {
     const root = parent();
     const line = (left, bottom, fontSize, text) =>
       rendered(span({ left, bottom }, root, text), { fontSize });
-    line("4224.28px", "39058.3px", "1344px", "In the park they ran all over the place");
-    line("4455.44px", "36946.9px", "1344px", "until Casper landed flat on his ");
+    line(
+      "4224.28px",
+      "39058.3px",
+      "1344px",
+      "In the park they ran all over the place"
+    );
+    line(
+      "4455.44px",
+      "36946.9px",
+      "1344px",
+      "until Casper landed flat on his "
+    );
     line("24633px", "36883.9px", "1728px", "face");
     line("28349.9px", "36946.3px", "1344px", "!");
 

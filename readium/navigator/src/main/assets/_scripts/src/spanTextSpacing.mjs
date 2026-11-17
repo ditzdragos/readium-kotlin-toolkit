@@ -112,12 +112,26 @@ function needsSpacing(previousSpan, currentSpan, styleOf) {
   if (baselineShift === 0 && stepBack <= 0) {
     return false;
   }
-  // RR-6413: a new line moves the baseline or steps back by more than a glyph, wherever on the page it sits.
-  const glyphSize = Math.min(
-    fontSizeOf(styleOf(previousSpan)),
-    fontSizeOf(styleOf(currentSpan))
-  );
-  return baselineShift > glyphSize || stepBack > glyphSize;
+  const previousSize = fontSizeOf(styleOf(previousSpan));
+  const glyphSize = Math.min(previousSize, fontSizeOf(styleOf(currentSpan)));
+  if (
+    glyphSize === 0 ||
+    !placedInPx(previousSpan) ||
+    !placedInPx(currentSpan)
+  ) {
+    return safeRatio(previousBottom, currentBottom) < 0.87;
+  }
+  // RR-6413: a new line drops the baseline or steps back by more than a glyph, wherever on the page it sits.
+  const rise = currentBottom - previousBottom;
+  const newLine = rise < 0 ? -rise > glyphSize : rise > previousSize;
+  return newLine || stepBack > glyphSize;
+}
+
+function placedInPx(span) {
+  return ["left", "bottom"].every((property) => {
+    const value = inlineStyleValue(span, property);
+    return value === "" || value.endsWith("px");
+  });
 }
 
 /**
