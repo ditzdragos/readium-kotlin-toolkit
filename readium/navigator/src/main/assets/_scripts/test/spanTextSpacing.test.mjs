@@ -190,6 +190,75 @@ describe("spansNeedingSpacing", () => {
   });
 });
 
+describe("spansNeedingSpacing between placed lines", () => {
+  // The shape "Casper and Daisy's Big Day at the Park" (9780744057850) ships on page012 (RR-6413).
+  it("separates a line high on a page that starts at another left", () => {
+    const root = parent();
+    rendered(span({ left: "4224.28px", bottom: "39058.3px" }, root, "the place"), {
+      fontSize: "1344px",
+    });
+    const next = rendered(
+      span({ left: "4455.44px", bottom: "36946.9px" }, root, "until Casper"),
+      { fontSize: "1344px" }
+    );
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), [next]);
+  });
+
+  it("keeps a larger word joined to the punctuation on its baseline", () => {
+    const root = parent();
+    rendered(span({ left: "24633px", bottom: "36883.9px" }, root, "face"), {
+      fontSize: "1728px",
+    });
+    rendered(span({ left: "28349.9px", bottom: "36946.3px" }, root, "!"), {
+      fontSize: "1344px",
+    });
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), []);
+  });
+
+  it("keeps a larger word joined to its punctuation low on a page", () => {
+    const root = parent();
+    rendered(span({ left: "26795.8px", bottom: "448.8px" }, root, "speed"), {
+      fontSize: "1728px",
+    });
+    rendered(span({ left: "36152.8px", bottom: "537.12px" }, root, "."), {
+      fontSize: "1344px",
+    });
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), []);
+  });
+
+  // The shapes below ship on page007, where each letter of a curved line is its own span.
+  it("keeps the letters of a steeply curved word joined", () => {
+    const root = parent();
+    rendered(span({ left: "37136.5px", bottom: "32155.5px" }, root, "e"), {
+      fontSize: "1728px",
+    });
+    rendered(span({ left: "37834.3px", bottom: "31519.7px" }, root, "p"), {
+      fontSize: "1728px",
+    });
+    rendered(span({ left: "38588.9px", bottom: "30704.6px" }, root, "."), {
+      fontSize: "1344px",
+    });
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), []);
+  });
+
+  it("separates a curved line that wraps back to the left", () => {
+    const root = parent();
+    rendered(span({ left: "37233.9px", bottom: "35163.4px" }, root, "s"), {
+      fontSize: "1728px",
+    });
+    const next = rendered(
+      span({ left: "26480.8px", bottom: "34871.1px" }, root, "a"),
+      { fontSize: "1344px" }
+    );
+
+    assert.deepEqual(spansNeedingSpacing(root.childNodes), [next]);
+  });
+});
+
 describe("spansNeedingSpacing between unplaced spans", () => {
   it("keeps a floated drop cap joined to the rest of its word", () => {
     // The shape "Escargot" (9781466896970) ships on its first story page.
@@ -237,6 +306,24 @@ describe("processSpansForTextSpacing", () => {
     processSpansForTextSpacing(documentOf(root));
 
     assert.equal(textContentOf(root), "Bonjour! I see you are staring at me!");
+  });
+
+  it("extracts the last word of a line high on a page apart from the next line", () => {
+    // The shape "Casper and Daisy's Big Day at the Park" (9780744057850) ships on page012 (RR-6413).
+    const root = parent();
+    const line = (left, bottom, fontSize, text) =>
+      rendered(span({ left, bottom }, root, text), { fontSize });
+    line("4224.28px", "39058.3px", "1344px", "In the park they ran all over the place");
+    line("4455.44px", "36946.9px", "1344px", "until Casper landed flat on his ");
+    line("24633px", "36883.9px", "1728px", "face");
+    line("28349.9px", "36946.3px", "1344px", "!");
+
+    processSpansForTextSpacing(documentOf(root));
+
+    assert.equal(
+      textContentOf(root),
+      "In the park they ran all over the place until Casper landed flat on his face!"
+    );
   });
 
   it("keeps a word the publisher split around a kerning span whole", () => {

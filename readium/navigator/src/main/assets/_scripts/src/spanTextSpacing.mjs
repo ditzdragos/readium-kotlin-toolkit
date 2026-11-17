@@ -59,16 +59,23 @@ export function isSpacingCandidate(span) {
   return (span.textContent || "") !== "" && !isInsidePlacedRun(span);
 }
 
-function startsOwnSegment(span) {
+function computedStyleOf(span) {
   const view = span.ownerDocument && span.ownerDocument.defaultView;
-  if (!view) {
+  return view ? view.getComputedStyle(span) : null;
+}
+
+function startsOwnSegment(style) {
+  if (!style) {
     return true;
   }
-  const style = view.getComputedStyle(span);
   if (style.position === "absolute" || style.position === "fixed") {
     return true;
   }
   return style.display !== "inline" && style.cssFloat === "none";
+}
+
+function fontSizeOf(style) {
+  return (style && parseFloat(style.fontSize)) || 0;
 }
 
 /**
@@ -78,9 +85,12 @@ function startsOwnSegment(span) {
  * (`<span class="big">B</span><span>onjour!</span>`, RR-9252), are written
  * as one word and keep the page's own whitespace.
  */
-function needsSpacing(previousSpan, currentSpan, ownsSegment) {
+function needsSpacing(previousSpan, currentSpan, styleOf) {
   if (!isPlaced(previousSpan) && !isPlaced(currentSpan)) {
-    return ownsSegment(previousSpan) || ownsSegment(currentSpan);
+    return (
+      startsOwnSegment(styleOf(previousSpan)) ||
+      startsOwnSegment(styleOf(currentSpan))
+    );
   }
   const currentBottom = parseFloat(
     inlineStyleValue(currentSpan, "bottom") || "0"
@@ -93,12 +103,21 @@ function needsSpacing(previousSpan, currentSpan, ownsSegment) {
     inlineStyleValue(previousSpan, "left") || "0"
   );
 
-  const bottomDifference = safeRatio(previousBottom, currentBottom);
   const leftDifference = safeRatio(previousLeft, currentLeft);
-
-  return (
-    bottomDifference < 0.87 || leftDifference > 0.99 || leftDifference < 0.1
+  if (leftDifference > 0.99 || leftDifference < 0.1) {
+    return true;
+  }
+  const baselineShift = Math.abs(previousBottom - currentBottom);
+  const stepBack = previousLeft - currentLeft;
+  if (baselineShift === 0 && stepBack <= 0) {
+    return false;
+  }
+  // RR-6413: a new line moves the baseline or steps back by more than a glyph, wherever on the page it sits.
+  const glyphSize = Math.min(
+    fontSizeOf(styleOf(previousSpan)),
+    fontSizeOf(styleOf(currentSpan))
   );
+  return baselineShift > glyphSize || stepBack > glyphSize;
 }
 
 /**
@@ -120,18 +139,18 @@ export function spansNeedingSpacing(spans) {
     spansByParent.get(parentKey).push(span);
   }
 
-  const segmentStarts = new Map();
-  const ownsSegment = (span) => {
-    if (!segmentStarts.has(span)) {
-      segmentStarts.set(span, startsOwnSegment(span));
+  const styles = new Map();
+  const styleOf = (span) => {
+    if (!styles.has(span)) {
+      styles.set(span, computedStyleOf(span));
     }
-    return segmentStarts.get(span);
+    return styles.get(span);
   };
 
   const needing = [];
   for (const siblingSpans of spansByParent.values()) {
     for (let i = 1; i < siblingSpans.length; i++) {
-      if (needsSpacing(siblingSpans[i - 1], siblingSpans[i], ownsSegment)) {
+      if (needsSpacing(siblingSpans[i - 1], siblingSpans[i], styleOf)) {
         needing.push(siblingSpans[i]);
       }
     }
