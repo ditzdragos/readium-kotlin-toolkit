@@ -259,6 +259,30 @@ describe("ocrReferenceRect", () => {
     });
   });
 
+  it("keeps a container that fills a page the publisher scaled", () => {
+    const container = element({
+      rect: { left: 0, top: 0, width: 768, height: 1024 },
+      layout: { width: 1536, height: 2048 },
+    });
+    const page = element({
+      rect: { left: 0, top: 0, width: 768, height: 1024 },
+      layout: { width: 1536, height: 2048 },
+      children: [container],
+    });
+    element({
+      rect: { left: 0, top: 0, width: 1536, height: 2048 },
+      layout: { width: 1536, height: 2048 },
+      children: [page],
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(container)), {
+      left: 0,
+      top: 0,
+      width: 768,
+      height: 1024,
+    });
+  });
+
   it("prefers the page image when there is one", () => {
     const img = element({ rect: { left: 5, top: 6, width: 600, height: 800 } });
     const container = element({
