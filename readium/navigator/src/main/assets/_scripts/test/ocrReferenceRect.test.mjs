@@ -13,9 +13,12 @@ function element({
   border = 0,
   children = [],
   img = null,
+  layout = null,
 }) {
   const el = {
     children,
+    offsetWidth: layout?.width,
+    offsetHeight: layout?.height,
     parentElement: null,
     clientLeft: border,
     clientTop: border,
@@ -202,6 +205,57 @@ describe("ocrReferenceRect", () => {
       top: 0,
       width: 792,
       height: 1152,
+    });
+  });
+
+  // "E is for Elephant" (9780744043068) page 10 nests its page-sized
+  // .ocr-container inside the first word of a text box scaled to 0.0835, so it
+  // is drawn 147px wide. Its percentages are of the 1762px page (RR-9368).
+  it("uses the page when the container is drawn scaled inside its text", () => {
+    const container = element({
+      rect: { left: 788.1, top: 354.6, width: 147.2, height: 147.2 },
+      layout: { width: 1762, height: 1762 },
+    });
+    const word = element({
+      rect: { left: 788.1, top: 354.6, width: 0, height: 3.7 },
+      layout: { width: 0, height: 44 },
+      children: [container],
+    });
+    const textBox = element({
+      rect: { left: 0, top: 1655.4, width: 107, height: 107 },
+      layout: { width: 1762, height: 1762 },
+      children: [word],
+    });
+    element({
+      rect: { left: 0, top: 0, width: 1762.4, height: 1762.4 },
+      layout: { width: 1762, height: 1762 },
+      children: [textBox],
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(container)), {
+      left: 0,
+      top: 0,
+      width: 1762.4,
+      height: 1762.4,
+    });
+  });
+
+  it("keeps a page-sized container drawn at its own size", () => {
+    const container = element({
+      rect: { left: 3, top: 4, width: 1762.4, height: 1762.4 },
+      layout: { width: 1762, height: 1762 },
+    });
+    element({
+      rect: { left: 0, top: 0, width: 1800, height: 1800 },
+      layout: { width: 1800, height: 1800 },
+      children: [container],
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(container)), {
+      left: 3,
+      top: 4,
+      width: 1762.4,
+      height: 1762.4,
     });
   });
 

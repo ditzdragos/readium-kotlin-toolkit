@@ -233,8 +233,9 @@ function uprightAngle(rotationAngle) {
  * and a 0x0 box; its sized child then carries both the page dimensions and the container's
  * offset. An ancestor is a last resort, as it loses that offset.
  *
- * Pages that paint their artwork as a background are measured by that artwork, not by
- * their own box: see [artworkRect].
+ * A page-sized container drawn scaled inside its text resolves against the page: see
+ * [pageOfScaledContainer]. Pages that paint their artwork as a background are measured by
+ * that artwork, not by their own box: see [artworkRect].
  *
  * @param {Element} ocrContainer
  * @returns {DOMRect | null}
@@ -245,6 +246,11 @@ export function ocrReferenceRect(ocrContainer) {
   const img = ocrContainer.querySelector("img");
   if (img && hasArea(img.getBoundingClientRect())) {
     return img.getBoundingClientRect();
+  }
+
+  const page = pageOfScaledContainer(ocrContainer);
+  if (page) {
+    return artworkRect(page);
   }
 
   const containerRect = artworkRect(ocrContainer);
@@ -269,6 +275,45 @@ export function ocrReferenceRect(ocrContainer) {
   }
 
   return null;
+}
+
+/**
+ * The page an `.ocr-container` sized like the page belongs to, when a transform on an ancestor
+ * draws the container at another size: the nearest ancestor of the same layout size that is drawn
+ * at that size. Its percentages are of the page, not of the scaled text box it sits in (RR-9368).
+ *
+ * @param {Element} ocrContainer
+ * @returns {Element | null}
+ */
+function pageOfScaledContainer(ocrContainer) {
+  const width = ocrContainer.offsetWidth;
+  const height = ocrContainer.offsetHeight;
+  if (!(width > 0 && height > 0) || drawnAtLayoutSize(ocrContainer)) {
+    return null;
+  }
+
+  for (
+    let element = ocrContainer.parentElement;
+    element;
+    element = element.parentElement
+  ) {
+    if (
+      element.offsetWidth === width &&
+      element.offsetHeight === height &&
+      drawnAtLayoutSize(element)
+    ) {
+      return element;
+    }
+  }
+  return null;
+}
+
+function drawnAtLayoutSize(element) {
+  const rect = element.getBoundingClientRect();
+  return (
+    Math.abs(rect.width - element.offsetWidth) <= 1 &&
+    Math.abs(rect.height - element.offsetHeight) <= 1
+  );
 }
 
 /**
