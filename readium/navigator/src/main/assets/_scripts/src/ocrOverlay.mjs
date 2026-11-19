@@ -281,7 +281,7 @@ export function ocrReferenceRect(ocrContainer) {
  * The page an `.ocr-container` sized like the page belongs to, when a transform on an ancestor
  * draws the container at another size: the nearest ancestor of the same layout size that is drawn
  * at that size. Its percentages are of the page, not of the scaled text box it sits in (RR-9368).
- * A container that fills its parent is scaled with the page itself, so it keeps its own box.
+ * A scaled ancestor that draws artwork is the page itself, so the container keeps its own box.
  *
  * @param {Element} ocrContainer
  * @returns {Element | null}
@@ -289,17 +289,15 @@ export function ocrReferenceRect(ocrContainer) {
 function pageOfScaledContainer(ocrContainer) {
   const width = ocrContainer.offsetWidth;
   const height = ocrContainer.offsetHeight;
-  const parent = ocrContainer.parentElement;
-  if (
-    !(width > 0 && height > 0) ||
-    !parent ||
-    (parent.offsetWidth === width && parent.offsetHeight === height) ||
-    drawnAtLayoutSize(ocrContainer)
-  ) {
+  if (!(width > 0 && height > 0) || drawnAtLayoutSize(ocrContainer)) {
     return null;
   }
 
-  for (let element = parent; element; element = element.parentElement) {
+  for (
+    let element = ocrContainer.parentElement;
+    element;
+    element = element.parentElement
+  ) {
     if (
       element.offsetWidth === width &&
       element.offsetHeight === height &&
@@ -307,8 +305,18 @@ function pageOfScaledContainer(ocrContainer) {
     ) {
       return element;
     }
+    if (drawsArtwork(element)) {
+      return null;
+    }
   }
   return null;
+}
+
+function drawsArtwork(element) {
+  return (
+    element.querySelector("img") !== null ||
+    window.getComputedStyle(element).backgroundImage !== "none"
+  );
 }
 
 function drawnAtLayoutSize(element) {

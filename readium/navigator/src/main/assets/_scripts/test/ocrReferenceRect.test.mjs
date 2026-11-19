@@ -240,6 +240,36 @@ describe("ocrReferenceRect", () => {
     });
   });
 
+  // Its next page ("toot toot!") puts the container straight in the scaled text
+  // box, which it fills; the artwork is a sibling of that box (RR-9368).
+  it("uses the page when the container fills a scaled text box", () => {
+    const container = element({
+      rect: { left: 0, top: 1655.4, width: 107, height: 107 },
+      layout: { width: 1762, height: 1762 },
+    });
+    const textBox = element({
+      rect: { left: 0, top: 1655.4, width: 107, height: 107 },
+      layout: { width: 1762, height: 1762 },
+      children: [container],
+    });
+    const artwork = element({
+      rect: { left: 0, top: 0, width: 1762.4, height: 1762.4 },
+      layout: { width: 1762, height: 1762 },
+    });
+    element({
+      rect: { left: 0, top: 0, width: 1762.4, height: 1762.4 },
+      layout: { width: 1762, height: 1762 },
+      children: [artwork, textBox],
+    });
+
+    assert.deepEqual(boxOf(ocrReferenceRect(container)), {
+      left: 0,
+      top: 0,
+      width: 1762.4,
+      height: 1762.4,
+    });
+  });
+
   it("keeps a page-sized container drawn at its own size", () => {
     const container = element({
       rect: { left: 3, top: 4, width: 1762.4, height: 1762.4 },
@@ -268,6 +298,7 @@ describe("ocrReferenceRect", () => {
       rect: { left: 0, top: 0, width: 768, height: 1024 },
       layout: { width: 1536, height: 2048 },
       children: [container],
+      img: element({ rect: { left: 0, top: 0, width: 768, height: 1024 } }),
     });
     element({
       rect: { left: 0, top: 0, width: 1536, height: 2048 },
