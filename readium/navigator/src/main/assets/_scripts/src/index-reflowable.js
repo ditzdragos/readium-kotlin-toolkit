@@ -7,6 +7,7 @@
 // Script used for reflowable resources.
 
 import "./index";
+import { markImageOnlyParagraphs } from "./imageOnlyParagraphs.mjs";
 
 window.readium.isReflowable = true;
 
@@ -19,4 +20,6 @@ document.addEventListener("DOMContentLoaded", function () {
     "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no"
   );
   document.head.appendChild(meta);
+
+  markImageOnlyParagraphs(document);
 });
