@@ -7,14 +7,31 @@ import {
   markImageOnlyParagraphs,
 } from "../src/imageOnlyParagraphs.mjs";
 
-function paragraph({ text = "", media = [] }) {
+const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
+const SOFT_HYPHEN = String.fromCharCode(0x00ad);
+
+function paragraph({ text = "", media = [], svgText = "" }) {
   const attributes = {};
   return {
     attributes,
-    textContent: text,
+    textContent: text + svgText,
     querySelector(selector) {
       const tags = selector.split(",").map((s) => s.trim());
       return media.find((tag) => tags.includes(tag)) ?? null;
+    },
+    cloneNode() {
+      const copy = { textContent: text + svgText };
+      copy.querySelectorAll = (selector) => {
+        assert.equal(selector, "svg");
+        return media
+          .filter((tag) => tag === "svg")
+          .map(() => ({
+            remove() {
+              copy.textContent = text;
+            },
+          }));
+      };
+      return copy;
     },
     setAttribute(name, value) {
       attributes[name] = value;
@@ -40,6 +57,31 @@ describe("isImageOnlyParagraph", () => {
     assert.equal(
       isImageOnlyParagraph(paragraph({ text: " \n\t", media: ["svg"] })),
       true
+    );
+  });
+
+  it("is true for an svg whose title or text is its only text", () => {
+    assert.equal(
+      isImageOnlyParagraph(paragraph({ media: ["svg"], svgText: "Map" })),
+      true
+    );
+  });
+
+  it("is true for an image padded with invisible characters", () => {
+    assert.equal(
+      isImageOnlyParagraph(
+        paragraph({ text: ZERO_WIDTH_SPACE + SOFT_HYPHEN, media: ["img"] })
+      ),
+      true
+    );
+  });
+
+  it("is false for an svg drop cap beside text", () => {
+    assert.equal(
+      isImageOnlyParagraph(
+        paragraph({ text: "nce upon", media: ["svg"], svgText: "O" })
+      ),
+      false
     );
   });
 
