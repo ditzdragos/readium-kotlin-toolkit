@@ -35,6 +35,7 @@ import {
 import { containingElement } from "./rangeCoverage.mjs";
 import { decorationPlacements } from "./decorationPlacements.mjs";
 import { displayTypeRect, wordRect } from "./displayTypeRect.js";
+import { hiddenTextStandInRect } from "./hiddenTextStandIn.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
   ChangeQueue,
@@ -757,7 +758,8 @@ export function DecorationGroup(groupId, groupName) {
       return element;
     }
 
-    const displayRect = displayTypeRect(item.range);
+    const displayRect =
+      hiddenTextStandInRect(item.range) ?? displayTypeRect(item.range);
     const fittedRect = displayRect ?? item.range.getBoundingClientRect();
 
     let elementTemplate;
@@ -986,7 +988,8 @@ export function DecorationGroup(groupId, groupName) {
       getOCRCorrectedRectForOverlay
     );
     const ocrLayout = overlayBoxes.length > 0;
-    const displayRect = displayTypeRect(item.range);
+    const displayRect =
+      hiddenTextStandInRect(item.range) ?? displayTypeRect(item.range);
     const fittedRect = displayRect ?? boundingRect;
 
     let elementTemplate;
