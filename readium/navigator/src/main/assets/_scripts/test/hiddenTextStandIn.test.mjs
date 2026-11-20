@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { hiddenTextStandIn } from "../src/hiddenTextStandIn.mjs";
+import {
+  hiddenTextStandIn,
+  nextOnStandIn,
+  standInDrawnByAnother,
+} from "../src/hiddenTextStandIn.mjs";
 
 const SHOWN = { overflow: "visible", width: "559px", height: "50px" };
 const CLIPPED = { overflow: "hidden", width: "1px", height: "1px" };
@@ -30,7 +34,10 @@ function chapter({ headingText, alt }) {
   const heading = element({ style: CLIPPED, text: headingText });
   const image = element({ alt });
   const body = element({
-    children: [heading, element({ children: [element({ children: [image] })] })],
+    children: [
+      heading,
+      element({ children: [element({ children: [image] })] }),
+    ],
   });
   const document = { body };
   for (const node of [body, heading, image]) {
@@ -89,5 +96,45 @@ describe("hiddenTextStandIn", () => {
     assert.equal(hiddenTextStandIn(word, styles.getStyle), image);
     assert.equal(hiddenTextStandIn(word, styles.getStyle), image);
     assert.deepEqual(styles.asked, [word, heading]);
+  });
+});
+
+describe("standInDrawnByAnother", () => {
+  const title = { alt: "CHAPTER TWO: SKYE BERENGER" };
+
+  it("draws the stand-in for the first of the title's words only", () => {
+    const chapter = { standIn: title, container: {} };
+    const two = { standIn: title, container: null };
+
+    assert.equal(standInDrawnByAnother([chapter, two], two), true);
+    assert.equal(standInDrawnByAnother([chapter, two], chapter), false);
+  });
+
+  it("draws words of other stand-ins and of shown text", () => {
+    const chapter = { standIn: title, container: {} };
+    const other = { standIn: { alt: "CHAPTER THREE" }, container: null };
+    const body = { standIn: null, container: null };
+    const items = [chapter, other, body];
+
+    assert.equal(standInDrawnByAnother(items, other), false);
+    assert.equal(standInDrawnByAnother(items, body), false);
+  });
+});
+
+describe("nextOnStandIn", () => {
+  const title = { alt: "CHAPTER TWO" };
+
+  it("hands the stand-in to an undrawn word when the drawing one goes", () => {
+    const removed = { standIn: title, container: null };
+    const two = { standIn: title, container: null };
+
+    assert.equal(nextOnStandIn([two], removed), two);
+  });
+
+  it("hands nothing over for shown text or a stand-in still drawn", () => {
+    const drawn = { standIn: title, container: {} };
+
+    assert.equal(nextOnStandIn([drawn], { standIn: title }), null);
+    assert.equal(nextOnStandIn([drawn], { standIn: null }), null);
   });
 });

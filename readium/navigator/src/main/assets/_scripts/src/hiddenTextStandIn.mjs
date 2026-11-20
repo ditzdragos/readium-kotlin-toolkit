@@ -42,8 +42,29 @@ export function hiddenTextStandIn(element, getStyle) {
 }
 
 // Text clipped out of sight is drawn on the image that shows it, e.g. a chapter title set as a picture (RR-9717).
-export function hiddenTextStandInRect(range) {
+export function rangeStandIn(range) {
   const element = containingElement(range.startContainer);
-  const standIn = element && hiddenTextStandIn(element, getComputedStyle);
-  return standIn ? standIn.getBoundingClientRect() : null;
+  return element ? hiddenTextStandIn(element, getComputedStyle) : null;
+}
+
+// Every word of the title covers the whole image, so one draws it: stacked translucent washes turned it white (RR-9717).
+export function standInDrawnByAnother(items, item) {
+  return (
+    Boolean(item.standIn) &&
+    items.some(
+      (other) =>
+        other !== item && other.standIn === item.standIn && other.container
+    )
+  );
+}
+
+export function nextOnStandIn(items, removed) {
+  if (!removed.standIn) {
+    return null;
+  }
+  return (
+    items.find(
+      (other) => other.standIn === removed.standIn && !other.container
+    ) ?? null
+  );
 }

@@ -35,7 +35,11 @@ import {
 import { containingElement } from "./rangeCoverage.mjs";
 import { decorationPlacements } from "./decorationPlacements.mjs";
 import { displayTypeRect, wordRect } from "./displayTypeRect.js";
-import { hiddenTextStandInRect } from "./hiddenTextStandIn.mjs";
+import {
+  nextOnStandIn,
+  rangeStandIn,
+  standInDrawnByAnother,
+} from "./hiddenTextStandIn.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
 import {
   ChangeQueue,
@@ -545,6 +549,19 @@ export function DecorationGroup(groupId, groupName) {
     items.splice(index, 1);
     item.clickableElements = null;
     detach(item);
+    redrawStandIn(item);
+  }
+
+  function redrawStandIn(removed) {
+    const next = nextOnStandIn(items, removed);
+    if (!next) {
+      return;
+    }
+    if (next.enhanced) {
+      layoutEnhanced(next, false);
+    } else {
+      layout(next, false);
+    }
   }
 
   /** Takes the item's elements out of the document, giving back its room in its bucket. */
@@ -598,7 +615,8 @@ export function DecorationGroup(groupId, groupName) {
 
     for (let index = items.length - 1; index >= 0; index--) {
       if (items[index].decoration.id === decorationId) {
-        items.splice(index, 1);
+        const [removed] = items.splice(index, 1);
+        redrawStandIn(removed);
       }
     }
   }
@@ -758,8 +776,18 @@ export function DecorationGroup(groupId, groupName) {
       return element;
     }
 
+    item.standIn = rangeStandIn(item.range);
+    if (standInDrawnByAnother(items, item)) {
+      item.clickableElements = null;
+      if (postMessage) {
+        emitHighlightRect(item, () =>
+          toNativeRect(item.standIn.getBoundingClientRect())
+        );
+      }
+      return;
+    }
     const displayRect =
-      hiddenTextStandInRect(item.range) ?? displayTypeRect(item.range);
+      item.standIn?.getBoundingClientRect() ?? displayTypeRect(item.range);
     const fittedRect = displayRect ?? item.range.getBoundingClientRect();
 
     let elementTemplate;
@@ -968,6 +996,17 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
+    item.standIn = rangeStandIn(item.range);
+    if (standInDrawnByAnother(items, item)) {
+      item.clickableElements = null;
+      if (postMessage) {
+        emitHighlightRect(item, () =>
+          toNativeRect(item.standIn.getBoundingClientRect())
+        );
+      }
+      return;
+    }
+
     const scrollingElement =
       document.scrollingElement || document.documentElement;
     const yOffset = scrollingElement.scrollTop;
@@ -989,7 +1028,7 @@ export function DecorationGroup(groupId, groupName) {
     );
     const ocrLayout = overlayBoxes.length > 0;
     const displayRect =
-      hiddenTextStandInRect(item.range) ?? displayTypeRect(item.range);
+      item.standIn?.getBoundingClientRect() ?? displayTypeRect(item.range);
     const fittedRect = displayRect ?? boundingRect;
 
     let elementTemplate;
