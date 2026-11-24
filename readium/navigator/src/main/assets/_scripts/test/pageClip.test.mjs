@@ -30,9 +30,15 @@ function element(computed = {}) {
   };
 }
 
-function page({ scrollWidth, root = {}, body = {} }) {
+function page({
+  scrollWidth,
+  viewport = "width=1224, height=1584",
+  root = {},
+  body = {},
+}) {
   const html = element(root);
   const bodyElement = element(body);
+  const meta = viewport === null ? null : { getAttribute: () => viewport };
   return {
     html,
     body: bodyElement,
@@ -40,6 +46,7 @@ function page({ scrollWidth, root = {}, body = {} }) {
       documentElement: html,
       body: bodyElement,
       scrollingElement: { scrollWidth, clientWidth: 1224 },
+      querySelector: () => meta,
     },
   };
 }
@@ -60,7 +67,22 @@ describe("clipPageOverflow", () => {
 
     assert.equal(clipPageOverflow(overflowing.document, computedStyle), true);
     assert.equal(overflowing.html.inline.contain, "layout !important");
-    assert.equal(overflowing.html.inline["min-height"], "100% !important");
+    assert.equal(overflowing.html.inline.height, "100% !important");
+  });
+
+  it("leaves a page with no declared page width to the viewport fit", () => {
+    const undeclared = page({ scrollWidth: 2022, viewport: null });
+
+    assert.equal(clipPageOverflow(undeclared.document, computedStyle), false);
+    assert.deepEqual(undeclared.html.inline, {});
+  });
+
+  it("measures overflow against the declared page width", () => {
+    const fitsItsBox = page({ scrollWidth: 1224, viewport: "width=1300" });
+    const pastItsBox = page({ scrollWidth: 1224, viewport: "height=1584,width=1000" });
+
+    assert.equal(clipPageOverflow(fitsItsBox.document, computedStyle), false);
+    assert.equal(clipPageOverflow(pastItsBox.document, computedStyle), true);
   });
 
   it("keeps a body that hides its overflow visible once the root no longer takes its overflow", () => {

@@ -17,11 +17,12 @@ function clipPage() {
 }
 document.addEventListener("DOMContentLoaded", clipPage);
 window.addEventListener("load", clipPage);
-document.fonts.ready.then(clipPage);
 
 /*
  * Nothing downstream waits on this — the overlay is corrected in place — so a
  * rejection here has nowhere to surface. Swallow it deliberately rather than
  * leaving an unhandled rejection: the page keeps whatever metrics it had.
  */
-applyFontFallback().catch(() => {});
+applyFontFallback()
+  .catch(() => {})
+  .then(clipPage);

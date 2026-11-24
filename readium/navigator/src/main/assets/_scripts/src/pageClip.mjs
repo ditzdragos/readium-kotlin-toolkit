@@ -9,6 +9,14 @@ const BACKGROUND_LONGHANDS = [
   "clip",
 ];
 
+function declaredPageWidth(document) {
+  const viewport = document.querySelector('meta[name="viewport"]');
+  const match = /(?:^|[\s,;])width\s*=\s*([0-9.]+)/i.exec(
+    (viewport && viewport.getAttribute("content")) || ""
+  );
+  return match ? parseFloat(match[1]) : NaN;
+}
+
 // RR-9338: content past a fixed-layout page box widens the document and the pager pages it as an extra page.
 export function clipPageOverflow(document, getComputedStyle) {
   const root = document.documentElement;
@@ -17,7 +25,8 @@ export function clipPageOverflow(document, getComputedStyle) {
   if (!body || root.hasAttribute("data-readium-page-clip")) {
     return false;
   }
-  if (page.scrollWidth <= page.clientWidth + 1) {
+  const pageWidth = declaredPageWidth(document);
+  if (!(pageWidth > 0) || page.scrollWidth <= pageWidth + 1) {
     return false;
   }
 
@@ -40,7 +49,7 @@ export function clipPageOverflow(document, getComputedStyle) {
     }
     body.style.setProperty("background", "none", "important");
   }
-  root.style.setProperty("min-height", "100%", "important");
+  root.style.setProperty("height", "100%", "important");
   root.style.setProperty("contain", "layout", "important");
   root.setAttribute("data-readium-page-clip", "");
   return true;
