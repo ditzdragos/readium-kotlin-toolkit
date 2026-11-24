@@ -8,8 +8,16 @@
 
 import "./index";
 import { applyFontFallback } from "./fxl-font-fallback";
+import { clipPageOverflow } from "./pageClip.mjs";
 
 window.readium.isFixedLayout = true;
+
+function clipPage() {
+  clipPageOverflow(document, (element) => window.getComputedStyle(element));
+}
+document.addEventListener("DOMContentLoaded", clipPage);
+window.addEventListener("load", clipPage);
+document.fonts.ready.then(clipPage);
 
 /*
  * Nothing downstream waits on this — the overlay is corrected in place — so a
