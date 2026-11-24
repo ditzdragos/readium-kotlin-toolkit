@@ -72,6 +72,7 @@ internal fun Resource.injectHtml(
                         )
                     )
                 )
+                injectables.add(FIXED_LAYOUT_PAGE_CLIP)
             } else {
                 content = try {
                     css.injectHtml(content)
@@ -108,6 +109,10 @@ internal fun Resource.injectHtml(
             Try.success(content.toByteArray())
         }
     }
+
+// RR-9338: content past a fixed-layout page box must not widen the document, or the pager pages it as extra columns.
+private const val FIXED_LAYOUT_PAGE_CLIP =
+    "<style>html{contain:paint !important;min-height:100% !important}</style>"
 
 // Force `font-display: swap` onto publisher @font-face rules so multi-MB embedded fonts render
 // via the fallback first instead of blocking first paint / page-range layout.
