@@ -41,6 +41,7 @@ import {
   standInDrawnByAnother,
 } from "./hiddenTextStandIn.mjs";
 import { VisibleAreas } from "./visibleAreas.mjs";
+import { decorationBox, TEMPLATE_MARGIN_RESET } from "./decorationBoxes.mjs";
 import {
   ChangeQueue,
   DecorationBuckets,
@@ -215,6 +216,14 @@ function adjacentTextRect(range, forward) {
   return null;
 }
 
+function createItemContainer(item) {
+  const itemContainer = decorationBox(document);
+  itemContainer.id = item.id;
+  itemContainer.dataset.style = item.decoration.style;
+  itemContainer.style.pointerEvents = "none";
+  return itemContainer;
+}
+
 function rotateElement(element, rotationAngle) {
   const supportsIndependentRotate =
     typeof CSS !== "undefined" &&
@@ -231,7 +240,7 @@ function rotateElement(element, rotationAngle) {
 
   // Fallback for engines without CSS rotate support:
   // wrap the element so template transforms stay on child while wrapper rotates.
-  const wrapper = document.createElement("div");
+  const wrapper = decorationBox(document);
   wrapper.style.position = element.style.position;
   wrapper.style.left = element.style.left;
   wrapper.style.top = element.style.top;
@@ -274,6 +283,7 @@ export function registerTemplates(newStyles) {
   // Append our containment style for the visible area
   let containStyle = document.createElement("style");
   containStyle.innerHTML = `
+    ${TEMPLATE_MARGIN_RESET}
     .visible-area {
       contain: layout paint style;
       position: absolute;
@@ -652,10 +662,7 @@ export function DecorationGroup(groupId, groupName) {
       return;
     }
 
-    let itemContainer = document.createElement("div");
-    itemContainer.id = item.id;
-    itemContainer.dataset.style = item.decoration.style;
-    itemContainer.style.pointerEvents = "none";
+    const itemContainer = createItemContainer(item);
 
     const documentWritingMode = getDocumentWritingMode();
     const isVertical =
@@ -1017,10 +1024,7 @@ export function DecorationGroup(groupId, groupName) {
       window.innerHeight
     );
 
-    let itemContainer = document.createElement("div");
-    itemContainer.id = item.id;
-    itemContainer.dataset.style = item.decoration.style;
-    itemContainer.style.pointerEvents = "none";
+    const itemContainer = createItemContainer(item);
 
     const overlayBoxes = ocrOverlayBoxes(
       item.range,
@@ -1147,7 +1151,7 @@ export function DecorationGroup(groupId, groupName) {
    */
   function requireContainer() {
     if (!container) {
-      container = document.createElement("div");
+      container = decorationBox(document);
       container.id = groupId;
       container.dataset.group = groupName;
       container.style.pointerEvents = "none";
@@ -1157,7 +1161,7 @@ export function DecorationGroup(groupId, groupName) {
   }
 
   function createBucket(zIndex) {
-    let bucket = document.createElement("div");
+    let bucket = decorationBox(document);
     bucket.dataset.bucket = zIndex;
     Object.assign(bucket.style, {
       position: "absolute",
