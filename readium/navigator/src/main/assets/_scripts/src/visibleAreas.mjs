@@ -51,7 +51,9 @@ export class VisibleAreas {
 
     // Reasserted on every layout because the areas outlive the viewport they were sized for.
     area.style.cssText =
-      `position:absolute;left:${pageIndex * viewportWidth}px;top:0px;margin-top:0px;` +
+      `position:absolute;left:${
+        pageIndex * viewportWidth
+      }px;top:0px;margin:0px;` +
       `width:${viewportWidth}px;height:${viewportHeight}px;` +
       `pointer-events:none;z-index:${Z_INDEX}`;
 
