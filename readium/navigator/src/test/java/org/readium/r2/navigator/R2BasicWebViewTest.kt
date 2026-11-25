@@ -1,7 +1,9 @@
 package org.readium.r2.navigator
 
 import android.view.textclassifier.TextClassifier
+import android.webkit.WebSettings
 import android.webkit.WebView
+import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -11,14 +13,15 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+import org.robolectric.fakes.RoboWebSettings
 import org.robolectric.shadows.ShadowWebView
 
 @RunWith(RobolectricTestRunner::class)
-@Config(shadows = [R2BasicWebViewTest.ClassifierRecordingWebView::class])
+@Config(shadows = [R2BasicWebViewTest.PlatformDefaultsWebView::class])
 class R2BasicWebViewTest {
 
     @Implements(WebView::class)
-    class ClassifierRecordingWebView : ShadowWebView() {
+    class PlatformDefaultsWebView : ShadowWebView() {
         private var classifier: TextClassifier? = null
 
         @Implementation
@@ -28,6 +31,11 @@ class R2BasicWebViewTest {
 
         @Implementation
         protected fun getTextClassifier(): TextClassifier? = classifier
+
+        private val settings = RoboWebSettings().apply { setNeedInitialFocus(true) }
+
+        @Implementation
+        override fun getSettings(): WebSettings = settings
     }
 
     private val attrs = Robolectric.buildAttributeSet().build()
@@ -44,5 +52,19 @@ class R2BasicWebViewTest {
         val webView = R2WebView(RuntimeEnvironment.getApplication(), attrs)
 
         assertSame(TextClassifier.NO_OP, webView.textClassifier)
+    }
+
+    @Test
+    fun `a page web view taking focus never scrolls to its first link`() {
+        val webView = R2BasicWebView(RuntimeEnvironment.getApplication(), attrs)
+
+        assertFalse((webView.settings as RoboWebSettings).needInitialFocus)
+    }
+
+    @Test
+    fun `a paginated web view taking focus never scrolls to its first link`() {
+        val webView = R2WebView(RuntimeEnvironment.getApplication(), attrs)
+
+        assertFalse((webView.settings as RoboWebSettings).needInitialFocus)
     }
 }

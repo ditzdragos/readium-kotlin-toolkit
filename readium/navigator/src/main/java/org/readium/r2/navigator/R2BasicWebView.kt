@@ -163,6 +163,8 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) :
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setTextClassifier(TextClassifier.NO_OP)
         }
+        // RR-9320: focusing the first link scrolls a page turned to its end back to its start.
+        settings.setNeedInitialFocus(false)
     }
 
     var listener: Listener? = null
