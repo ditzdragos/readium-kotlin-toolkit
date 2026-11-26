@@ -122,12 +122,12 @@ describe("putCloneBeforeGenericSerif (RR-9372)", () => {
     assert.equal(rule.style.declared.value, CLONE_FIRST);
   });
 
-  it("rewrites inline styles but leaves the root's, which the page-default revert owns", () => {
+  it("rewrites inline styles, the root's included", () => {
     const line = { style: style("serif") };
     const root = { style: style("serif") };
     putCloneBeforeGenericSerif(page({ inline: [line], root }), FAMILY);
     assert.equal(line.style.declared.value, CLONE_FIRST);
-    assert.equal(root.style.declared.value, "serif");
+    assert.equal(root.style.declared.value, CLONE_FIRST);
   });
 
   it("skips an element with no inline style object, such as one in a foreign namespace", () => {

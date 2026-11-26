@@ -61,9 +61,8 @@ export function putCloneBeforeGenericSerif(document, clone) {
   for (const sheet of document.styleSheets) {
     walkSheet(sheet);
   }
-  /* The root's inline family is the publication's own page default, left as it is. */
   for (const element of document.querySelectorAll("[style]")) {
-    if (element !== document.documentElement && element.style) {
+    if (element.style) {
       rewrite(element.style);
     }
   }

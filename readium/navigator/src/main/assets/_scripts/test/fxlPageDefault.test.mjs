@@ -8,12 +8,15 @@ const fontFallback = readFileSync(
 );
 
 describe("the fixed-layout page default (RR-9322)", () => {
-  it("is never handed back from the injected Times to the WebView's own", () => {
-    // RR-9322: unstyled overlay text is drawn in Times, as iOS draws it. A
-    // box-fill vote swapped it for the wider sans on Good Night, Escargot, whose
-    // loose boxes and hand-broken lines made sans look like the better fit.
-    const rootFamilyWrite =
-      /documentElement\.style\.(setProperty|removeProperty)\(\s*["']font-family["']|documentElement\.style\.fontFamily\s*=/;
-    assert.doesNotMatch(fontFallback, rootFamilyWrite);
+  // RR-9322: unstyled overlay text is drawn in Times, as iOS draws it. A
+  // box-fill vote swapped it for the wider sans on Good Night, Escargot, whose
+  // loose boxes and hand-broken lines made sans look like the better fit.
+  it("never writes the root's inline style", () => {
+    assert.doesNotMatch(fontFallback, /documentElement\.style\b/);
+    assert.doesNotMatch(fontFallback, /=\s*document\.documentElement\s*;/);
+  });
+
+  it("never switches the injected Times stylesheet off", () => {
+    assert.doesNotMatch(fontFallback, /\.disabled\s*=/);
   });
 });

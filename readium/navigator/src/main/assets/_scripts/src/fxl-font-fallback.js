@@ -772,9 +772,7 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
 
   /*
    * Walked here rather than passed in, so an attempt made after a wait reads the
-   * page as it is now. Both steps below need the same walk, and in this order:
-   * `unrenderableOverlays` has to see whatever the page default was just
-   * changed to.
+   * page as it is now.
    */
   const textLines = textElements();
 
