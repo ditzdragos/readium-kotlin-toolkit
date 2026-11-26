@@ -1,5 +1,6 @@
 package org.readium.r2.navigator.epub.css
 
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Test
@@ -62,6 +63,17 @@ class DropCapsStyleTest {
                 "$selector must keep the book's own cap size and placement (RR-9229 enlarges an inline cap)"
             )
         }
+    }
+
+    @Test
+    fun `RR-9318 a picture inside a span drop cap keeps the publisher's size`() {
+        val dropCapImages = File("src/main/assets/_scripts/src/dropCapImages.mjs").readText()
+
+        assertEquals(
+            emptyList(),
+            spanSelectors.filter { "'$it img'" !in dropCapImages && "\"$it img\"" !in dropCapImages },
+            "every span drop cap normalised here must also keep its picture's size in dropCapImages.mjs"
+        )
     }
 
     @Test
