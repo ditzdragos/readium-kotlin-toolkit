@@ -42,14 +42,11 @@
  * width to measure against means no evidence, and no evidence means leaving the
  * page as it is.
  *
- * The same second question is owed to `fxl-default-serif.css`, which makes the
- * clone the page-wide default for overlays that name no font at all (RR-6369).
- * That default is the same bet on Times metrics, made without measuring, so a
- * book whose artwork is set in a sans face is moved off its artwork by it. Once
- * the page has been measured, a default that fits worse than what the WebView
- * would have used is put back — as is the pair-kerning the same stylesheet
- * turns off, which is the one correction that reaches a publication rendering
- * in a font it embeds itself.
+ * `fxl-default-serif.css` makes the clone the page-wide default for overlays
+ * that name no font at all (RR-6369), as iOS draws them in Times, and that
+ * default is kept (RR-9322). The pair-kerning the same stylesheet turns off is
+ * given back once the page has been measured, where the authored boxes say it
+ * fits better.
  *
  * One change is made without measuring (RR-9372). A line that asks for bare
  * `serif` is drawn in the clone, because Android's serif is Noto Serif, which is
@@ -521,102 +518,6 @@ function fitsBetter(group, declarations) {
   return verdict !== null && verdict.improves;
 }
 
-function injectedDefaultStyleSheet() {
-  for (const sheet of document.styleSheets) {
-    if ((sheet.href || "").indexOf(INJECTED_DEFAULT_PATH) !== -1) {
-      return sheet;
-    }
-  }
-  return null;
-}
-
-/*
- * What the root would compute to had `fxl-default-serif.css` not been injected
- * — the family to hand back if the injected one turns out to fit worse.
- *
- * Asked by switching the stylesheet off and reading the page again, rather than
- * by recognising the default by its name. A publication is perfectly entitled
- * to ask for Times on `html` itself, and a name match cannot tell that apart
- * from ours; reverting it would then throw away the publication's own choice
- * for the user agent's, which is a correction nobody asked for. Switching the
- * sheet off answers with whatever the page says for itself, which is the only
- * thing there is to give back.
- *
- * `null` means there is nothing of ours in force: no injected sheet, or a page
- * that overrides it anyway.
- */
-function familyWithoutInjectedDefault() {
-  const sheet = injectedDefaultStyleSheet();
-  if (!sheet) {
-    return null;
-  }
-  const root = document.documentElement;
-  const current = window.getComputedStyle(root).fontFamily;
-  sheet.disabled = true;
-  const without = window.getComputedStyle(root).fontFamily;
-  sheet.disabled = false;
-  return without === current ? null : without;
-}
-
-function setRootFamily(value, priority) {
-  if (value) {
-    document.documentElement.style.setProperty("font-family", value, priority);
-  } else {
-    document.documentElement.style.removeProperty("font-family");
-  }
-}
-
-/*
- * The lines wearing the page default, found by moving the root's family and
- * seeing which lines move with it. Asked that way rather than by matching the
- * default's name, so a publication that asks for Times itself is left holding
- * its own choice.
- */
-function linesInheritingPageDefault(textLines, withoutInjected) {
-  const before = textLines.map(({ style }) => style.fontFamily);
-  const saved = {
-    value: document.documentElement.style.getPropertyValue("font-family"),
-    priority: document.documentElement.style.getPropertyPriority("font-family"),
-  };
-  setRootFamily(withoutInjected, "important");
-  const moved = textLines.filter(
-    (line, index) => line.style.fontFamily !== before[index]
-  );
-  setRootFamily(saved.value, saved.priority);
-
-  const samples = [];
-  for (const line of moved) {
-    const sample = sampleFor(line);
-    if (sample) {
-      samples.push(sample);
-    }
-    if (samples.length === MAX_SAMPLES_PER_FAMILY) {
-      break;
-    }
-  }
-  return samples;
-}
-
-/*
- * Hands the page default back to the WebView where the publication's unstyled
- * lines fill their authored boxes better without the injected one. Set inline
- * on the root, which supplies only what the publication left unsaid: a family
- * the page declares for itself still wins, exactly as it did before.
- */
-function revertPageDefaultIfItHurts(textLines) {
-  const withoutInjected = familyWithoutInjectedDefault();
-  if (withoutInjected === null) {
-    return;
-  }
-  const group = linesInheritingPageDefault(textLines, withoutInjected);
-  if (
-    group.length > 0 &&
-    fitsBetter(group, { "font-family": withoutInjected })
-  ) {
-    setRootFamily(withoutInjected, "");
-  }
-}
-
 /*
  * `fxl-default-serif.css` also turns pair-kerning off for every overlay, on the
  * evidence of a book whose baked artwork was laid out without it (RR-6369).
@@ -891,7 +792,6 @@ function substituteWhereItHelps(context, directory, deadline, delay) {
   }
 
   drawBoxedGenericSerifInClone(textLines);
-  revertPageDefaultIfItHurts(textLines);
 
   const groups = unrenderableOverlays(context, textLines);
   if (groups.size === 0) {
