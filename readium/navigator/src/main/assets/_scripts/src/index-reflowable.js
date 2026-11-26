@@ -8,6 +8,7 @@
 
 import "./index";
 import { markImageOnlyParagraphs } from "./imageOnlyParagraphs.mjs";
+import { keepDropCapImageSizes } from "./dropCapImages.mjs";
 
 window.readium.isReflowable = true;
 
@@ -22,4 +23,5 @@ document.addEventListener("DOMContentLoaded", function () {
   document.head.appendChild(meta);
 
   markImageOnlyParagraphs(document);
+  keepDropCapImageSizes(document);
 });
