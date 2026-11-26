@@ -4,7 +4,11 @@
 //  available in the top-level LICENSE file of the project.
 //
 
-import { containingElement, elementsCoveredByRange } from "./rangeCoverage.mjs";
+import {
+  containingElement,
+  coveredText,
+  elementsCoveredByRange,
+} from "./rangeCoverage.mjs";
 import { mergeIntoLines } from "./rangeRects.mjs";
 import { turnedBoxAround } from "./turnedBox.mjs";
 
@@ -155,19 +159,6 @@ function glyphCorners(element) {
   ];
 }
 
-/** The part of [element]'s text that [range] covers. */
-function coveredText(range, element) {
-  const part = element.ownerDocument.createRange();
-  part.selectNodeContents(element);
-  if (range.compareBoundaryPoints(Range.START_TO_START, part) > 0) {
-    part.setStart(range.startContainer, range.startOffset);
-  }
-  if (range.compareBoundaryPoints(Range.END_TO_END, part) < 0) {
-    part.setEnd(range.endContainer, range.endOffset);
-  }
-  return part.toString();
-}
-
 /** A <text> set on several lines, through <tspan> positions, has one bounding box for them all. */
 function spansSeveralLines(element) {
   const contents = element.ownerDocument.createRange();
@@ -271,9 +262,9 @@ function textRect(element) {
 // A turn under a third of a degree leaves a glyph upright to within a pixel across 150px.
 const UPRIGHT_SINE = 0.006;
 
-// Near 45° an upright box fits a turned box of almost any proportion, so it no longer tells the
-// glyph's width from its height.
-const MIN_PROPORTION_DETERMINANT = 0.25;
+// At 45° an upright box fits a turned box of any proportion; within 0.3° of it, the rounding in
+// the box grows by over 100 times into the glyph's width and height (RR-9689).
+const MIN_PROPORTION_DETERMINANT = 0.01;
 
 function parseMatrix(transform) {
   const match = /^matrix\(([^)]*)\)$/.exec(transform || "");

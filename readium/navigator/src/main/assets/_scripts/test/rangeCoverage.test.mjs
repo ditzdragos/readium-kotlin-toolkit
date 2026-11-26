@@ -38,6 +38,21 @@ describe("elementsCoveredByRange", () => {
     ]);
   });
 
+  it("leaves out an element the range reaches only at the start of its text", () => {
+    const source = "glyph  glyph  glyph";
+    const page = { createRange: () => boundaries(0, 0, source) };
+    const all = elements(3).map((element) => ({
+      ...element,
+      textContent: source.slice(element.start, element.end),
+      ownerDocument: page,
+    }));
+    const range = boundaries(all[0].start, all[1].start + 0.5, source);
+    range.endContainer = { position: 0 };
+    range.endOffset = all[1].start + 0.5;
+
+    assert.deepEqual(indexes(elementsCoveredByRange(range, all)), [0]);
+  });
+
   it("finds a range deep in a long list in a few comparisons", () => {
     const all = elements(4000);
     const range = boundaries(all[2500].start, all[2501].end);

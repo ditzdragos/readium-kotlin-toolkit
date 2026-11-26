@@ -668,6 +668,52 @@ const I_PLAY_RUN = [
   "\n",
 ];
 
+/**
+ * A range from the start of [first] to offset 0 of [next]'s text node, the way a word's range ends
+ * before punctuation set as its own glyph. The DOM orders that point after the start of [next]
+ * itself, so the range reaches into [next] without covering any of its text; half a position past
+ * its start models that.
+ */
+function rangeIntoTextOf(container, first, next) {
+  return rangeOverText(container, first.start, next.start + 0.5);
+}
+
+// "sheep." on page007 of "Casper and Daisy's Big Day at the Park" (9780744057850): one <span> per
+// glyph along a curve turning from 24° to 56°, with the upright boxes and transforms read from
+// the page.
+const SHEEP = [
+  {
+    text: "s",
+    rect: box(1401.505, 1463.217, 338.991, 417.464),
+    transform: "matrix(0.909817, 0.41501, -0.41501, 0.909817, 0, 0)",
+  },
+  {
+    text: "h",
+    rect: box(1433.036, 1506.266, 356.001, 438.625),
+    transform: "matrix(0.866555, 0.499081, -0.499081, 0.866555, 0, 0)",
+  },
+  {
+    text: "e",
+    rect: box(1469.95, 1543.642, 381.351, 461.479),
+    transform: "matrix(0.807365, 0.590053, -0.590053, 0.807365, 0, 0)",
+  },
+  {
+    text: "e",
+    rect: box(1501.02, 1578.157, 409.256, 487.711),
+    transform: "matrix(0.729016, 0.684497, -0.684497, 0.729016, 0, 0)",
+  },
+  {
+    text: "p",
+    rect: box(1529.225, 1612.376, 441.883, 521.515),
+    transform: "matrix(0.629815, 0.776745, -0.776745, 0.629815, 0, 0)",
+  },
+  {
+    text: ".",
+    rect: box(1559.725, 1612.777, 488.359, 530.737),
+    transform: "matrix(0.560689, 0.828026, -0.828026, 0.560689, 0, 0)",
+  },
+];
+
 describe("letteringLineBoxes on HTML blocks", () => {
   it("gives a word set one turned block per glyph one box, turned to follow it", () => {
     const blocks = letteringBlocks(I_PLAY_RUN);
@@ -744,6 +790,35 @@ describe("letteringLineBoxes on HTML blocks", () => {
     );
   });
 
+  it("gives a word ending before a punctuation glyph one box, leaving the punctuation out", () => {
+    const blocks = letteringBlocks([
+      ...I_PLAY_RUN.slice(0, -1),
+      {
+        text: ".",
+        rect: box(352.0, 362.0, 560.0, 572.0),
+        transform: "matrix(0.984808, -0.173648, 0.173648, 0.984808, 0, 0)",
+      },
+    ]);
+    const [r, , n, period] = blocks.blocks;
+
+    const boxes = letteringLineBoxes(rangeIntoTextOf(blocks, r, period));
+
+    assert.equal(boxes.length, 1);
+    assert.ok(boxes[0].rect.left + boxes[0].rect.width < period.rect.left + 1);
+    assert.ok(boxes[0].rect.left + boxes[0].rect.width > n.rect.right - 10);
+  });
+
+  it("gives a word curving past 45° one box about one glyph high", () => {
+    const blocks = letteringBlocks(SHEEP);
+    const [s, , , , , period] = blocks.blocks;
+
+    const boxes = letteringLineBoxes(rangeIntoTextOf(blocks, s, period));
+
+    assert.equal(boxes.length, 1);
+    assert.ok(boxes[0].rotationAngle > 24 && boxes[0].rotationAngle < 52);
+    assert.ok(boxes[0].rect.height < 69.84 * 1.25);
+  });
+
   it("keeps the client rects for a glyph skewed rather than turned", () => {
     const blocks = letteringBlocks([
       {
@@ -757,9 +832,9 @@ describe("letteringLineBoxes on HTML blocks", () => {
     assert.deepEqual(letteringLineBoxes(rangeOverBlocks(blocks, r, r)), []);
   });
 
-  it("keeps the client rects for a glyph turned near 45°, whose upright box fits any proportion", () => {
-    const glyph = turnedGlyph(200, 200, 36, 78, 44);
-    const blocks = letteringBlocks(blocksFor([glyph], [44], ["r"]));
+  it("keeps the client rects for a glyph turned within 0.3° of 45°, whose upright box fits any proportion", () => {
+    const glyph = turnedGlyph(200, 200, 36, 78, 44.9);
+    const blocks = letteringBlocks(blocksFor([glyph], [44.9], ["r"]));
     const [r] = blocks.blocks;
 
     assert.deepEqual(letteringLineBoxes(rangeOverBlocks(blocks, r, r)), []);

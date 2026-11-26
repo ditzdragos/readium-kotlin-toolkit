@@ -11,10 +11,37 @@ export function containingElement(node) {
   return node.nodeType === ELEMENT_NODE ? node : node.parentElement;
 }
 
+/** The part of [element]'s text that [range] covers. */
+export function coveredText(range, element) {
+  const part = element.ownerDocument.createRange();
+  part.selectNodeContents(element);
+  if (range.compareBoundaryPoints(Range.START_TO_START, part) > 0) {
+    part.setStart(range.startContainer, range.startOffset);
+  }
+  if (range.compareBoundaryPoints(Range.END_TO_END, part) < 0) {
+    part.setEnd(range.endContainer, range.endOffset);
+  }
+  return part.toString();
+}
+
+function isBlank(text) {
+  return !/\S/.test(text);
+}
+
+/**
+ * Whether [range] reaches into [element] but covers none of its text: it ends at the start of the
+ * element's text node, which the DOM orders after the start of the element itself (RR-9689).
+ */
+function onlyTouches(range, element) {
+  return (
+    !isBlank(element.textContent || "") && isBlank(coveredText(range, element))
+  );
+}
+
 /**
  * The elements [range] covers, out of [elements]: siblings in document order, none inside
- * another. Touching boundaries are excluded: a range ending where the next element begins
- * covers no part of it.
+ * another. Touching boundaries are excluded: a range ending where the next element begins, or at
+ * the start of its text, covers no part of it.
  *
  * Elements in document order end in document order too, so a binary search finds the first one
  * the range reaches, and the walk stops at the first one starting past its end. A word on a page
@@ -51,6 +78,12 @@ export function elementsCoveredByRange(range, elements) {
       break;
     }
     covered.push(elements[i]);
+  }
+  if (covered.length > 0 && onlyTouches(range, covered[covered.length - 1])) {
+    covered.pop();
+  }
+  if (covered.length > 0 && onlyTouches(range, covered[0])) {
+    covered.shift();
   }
   return covered;
 }

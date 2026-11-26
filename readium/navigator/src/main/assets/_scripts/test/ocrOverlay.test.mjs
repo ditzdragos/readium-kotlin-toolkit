@@ -115,6 +115,12 @@ function ocrPage(words) {
     overlay.end = index * 10 + 5;
     return overlay;
   });
+  const source = overlays
+    .map((overlay) => overlay.textContent.slice(0, 5).padEnd(10))
+    .join("");
+  for (const overlay of overlays) {
+    overlay.ownerDocument.createRange = () => boundaries(0, 0, source);
+  }
   return { container, overlays };
 }
 
