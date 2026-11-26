@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { boundaries } from "./support/fakeRange.mjs";
+import { boundaries, textStartOf } from "./support/fakeRange.mjs";
 import {
   ASCENT,
   DESCENT,
@@ -489,7 +489,9 @@ describe("letteringLineBoxes", () => {
   it("passes over the space glyphs between words", () => {
     const svg = letteringSvg([RUMBLE, SPACE, ...tumbleGlyphs()]);
 
-    const boxes = letteringLineBoxes(rangeOver(svg, svg.texts[0], svg.texts[8]));
+    const boxes = letteringLineBoxes(
+      rangeOver(svg, svg.texts[0], svg.texts[8])
+    );
 
     assert.ok(boxes.length > 0);
   });
@@ -528,7 +530,6 @@ describe("letteringLineBoxes", () => {
       []
     );
   });
-
 });
 
 function turn(degrees) {
@@ -668,19 +669,8 @@ const I_PLAY_RUN = [
   "\n",
 ];
 
-/**
- * A range from the start of [first] to offset 0 of [next]'s text node, the way a word's range ends
- * before punctuation set as its own glyph. The DOM orders that point after the start of [next]
- * itself, so the range reaches into [next] without covering any of its text; half a position past
- * its start models that.
- */
-function rangeIntoTextOf(container, first, next) {
-  return rangeOverText(container, first.start, next.start + 0.5);
-}
-
-// "sheep." on page007 of "Casper and Daisy's Big Day at the Park" (9780744057850): one <span> per
-// glyph along a curve turning from 24° to 56°, with the upright boxes and transforms read from
-// the page.
+// "sheep." on page007 of 9780744057850: one <span> per glyph along a curve turning 24° to 56°,
+// boxes and transforms read from the page (RR-9689).
 const SHEEP = [
   {
     text: "s",
@@ -801,7 +791,9 @@ describe("letteringLineBoxes on HTML blocks", () => {
     ]);
     const [r, , n, period] = blocks.blocks;
 
-    const boxes = letteringLineBoxes(rangeIntoTextOf(blocks, r, period));
+    const boxes = letteringLineBoxes(
+      rangeOverText(blocks, r.start, textStartOf(period))
+    );
 
     assert.equal(boxes.length, 1);
     assert.ok(boxes[0].rect.left + boxes[0].rect.width < period.rect.left + 1);
@@ -812,7 +804,9 @@ describe("letteringLineBoxes on HTML blocks", () => {
     const blocks = letteringBlocks(SHEEP);
     const [s, , , , , period] = blocks.blocks;
 
-    const boxes = letteringLineBoxes(rangeIntoTextOf(blocks, s, period));
+    const boxes = letteringLineBoxes(
+      rangeOverText(blocks, s.start, textStartOf(period))
+    );
 
     assert.equal(boxes.length, 1);
     assert.ok(boxes[0].rotationAngle > 24 && boxes[0].rotationAngle < 52);

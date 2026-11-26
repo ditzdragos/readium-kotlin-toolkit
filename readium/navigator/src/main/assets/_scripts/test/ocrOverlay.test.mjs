@@ -100,6 +100,9 @@ function rangeInside(parent) {
   return range;
 }
 
+const WORD_LENGTH = 5;
+const WORD_STRIDE = 10;
+
 /** An `.ocr-container` holding one `.text-overlay` per word, in reading order. */
 function ocrPage(words) {
   const container = element({ className: "ocr-container" });
@@ -111,12 +114,14 @@ function ocrPage(words) {
       transform: typeof word === "string" ? "" : word.transform ?? "",
     });
     // Words never touch: a range ending on one cannot spill into the next.
-    overlay.start = index * 10;
-    overlay.end = index * 10 + 5;
+    overlay.start = index * WORD_STRIDE;
+    overlay.end = overlay.start + WORD_LENGTH;
     return overlay;
   });
   const source = overlays
-    .map((overlay) => overlay.textContent.slice(0, 5).padEnd(10))
+    .map((overlay) =>
+      overlay.textContent.slice(0, WORD_LENGTH).padEnd(WORD_STRIDE)
+    )
     .join("");
   for (const overlay of overlays) {
     overlay.ownerDocument.createRange = () => boundaries(0, 0, source);

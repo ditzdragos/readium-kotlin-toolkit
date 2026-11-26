@@ -8,6 +8,7 @@ import {
   containingElement,
   coveredText,
   elementsCoveredByRange,
+  isBlank,
 } from "./rangeCoverage.mjs";
 import { mergeIntoLines } from "./rangeRects.mjs";
 import { turnedBoxAround } from "./turnedBox.mjs";
@@ -32,10 +33,6 @@ const wordContinuations = new WeakSet();
  */
 export function continuesJoinedWord(element) {
   return wordContinuations.has(element);
-}
-
-function isBlank(text) {
-  return !/\S/.test(text);
 }
 
 function isWhitespaceNode(node) {
@@ -199,10 +196,10 @@ function svgLineBoxes(range, svg) {
     range,
     svg.querySelectorAll("text")
   )) {
-    const covered = coveredText(range, element);
-    if (isBlank(covered)) {
+    if (isBlank(element.textContent)) {
       continue;
     }
+    const covered = coveredText(range, element);
     if (!coversWhole(covered, element)) {
       return [];
     }

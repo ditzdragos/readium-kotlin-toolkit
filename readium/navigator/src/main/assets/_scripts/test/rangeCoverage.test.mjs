@@ -1,19 +1,31 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { boundaries } from "./support/fakeRange.mjs";
+import { boundaries, textStartOf } from "./support/fakeRange.mjs";
 import { elementsCoveredByRange } from "../src/rangeCoverage.mjs";
 
-const document = { createRange: () => boundaries(0, 0) };
-
-/** Elements of five positions each, two apart, in document order. */
+/** Glyph elements of five positions each, two apart, in document order. */
 function elements(count) {
+  const source = "glyph  ".repeat(count);
+  const document = { createRange: () => boundaries(0, 0, source) };
   return Array.from({ length: count }, (_, index) => ({
     index,
     start: index * 7,
     end: index * 7 + 5,
+    textContent: "glyph",
     ownerDocument: document,
   }));
+}
+
+/** A range from [start] to [end], with both points measured from the top of the document. */
+function rangeOver(start, end) {
+  const top = { position: 0 };
+  return Object.assign(boundaries(start, end), {
+    startContainer: top,
+    startOffset: start,
+    endContainer: top,
+    endOffset: end,
+  });
 }
 
 function indexes(covered) {
@@ -25,7 +37,7 @@ describe("elementsCoveredByRange", () => {
     const all = elements(10);
 
     assert.deepEqual(
-      indexes(elementsCoveredByRange(boundaries(16, 30), all)),
+      indexes(elementsCoveredByRange(rangeOver(16, 30), all)),
       [2, 3, 4]
     );
   });
@@ -33,29 +45,21 @@ describe("elementsCoveredByRange", () => {
   it("leaves out elements the range only touches", () => {
     const all = elements(10);
 
-    assert.deepEqual(indexes(elementsCoveredByRange(boundaries(19, 28), all)), [
+    assert.deepEqual(indexes(elementsCoveredByRange(rangeOver(19, 28), all)), [
       3,
     ]);
   });
 
   it("leaves out an element the range reaches only at the start of its text", () => {
-    const source = "glyph  glyph  glyph";
-    const page = { createRange: () => boundaries(0, 0, source) };
-    const all = elements(3).map((element) => ({
-      ...element,
-      textContent: source.slice(element.start, element.end),
-      ownerDocument: page,
-    }));
-    const range = boundaries(all[0].start, all[1].start + 0.5, source);
-    range.endContainer = { position: 0 };
-    range.endOffset = all[1].start + 0.5;
+    const all = elements(3);
+    const range = rangeOver(all[0].start, textStartOf(all[1]));
 
     assert.deepEqual(indexes(elementsCoveredByRange(range, all)), [0]);
   });
 
   it("finds a range deep in a long list in a few comparisons", () => {
     const all = elements(4000);
-    const range = boundaries(all[2500].start, all[2501].end);
+    const range = rangeOver(all[2500].start, all[2501].end);
     let comparisons = 0;
     const compare = range.compareBoundaryPoints;
     range.compareBoundaryPoints = function (how, other) {
@@ -68,10 +72,10 @@ describe("elementsCoveredByRange", () => {
   });
 
   it("returns nothing for a range between elements", () => {
-    assert.deepEqual(elementsCoveredByRange(boundaries(5, 7), elements(3)), []);
+    assert.deepEqual(elementsCoveredByRange(rangeOver(5, 7), elements(3)), []);
   });
 
   it("returns nothing when there are no elements", () => {
-    assert.deepEqual(elementsCoveredByRange(boundaries(0, 5), []), []);
+    assert.deepEqual(elementsCoveredByRange(rangeOver(0, 5), []), []);
   });
 });

@@ -43,3 +43,8 @@ export function boundaries(start, end, source = "") {
     },
   };
 }
+
+/** Offset 0 of [element]'s text node, which the DOM orders just after the element's own start. */
+export function textStartOf(element) {
+  return element.start + 0.5;
+}

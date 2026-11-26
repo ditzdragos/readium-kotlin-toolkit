@@ -24,18 +24,14 @@ export function coveredText(range, element) {
   return part.toString();
 }
 
-function isBlank(text) {
+export function isBlank(text) {
   return !/\S/.test(text);
 }
 
-/**
- * Whether [range] reaches into [element] but covers none of its text: it ends at the start of the
- * element's text node, which the DOM orders after the start of the element itself (RR-9689).
- */
+/** Whether [range] reaches into [element] but none of its text, as when it ends at offset 0 of the
+ * element's text node, which the DOM orders after the element's own start (RR-9689). */
 function onlyTouches(range, element) {
-  return (
-    !isBlank(element.textContent || "") && isBlank(coveredText(range, element))
-  );
+  return !isBlank(element.textContent) && isBlank(coveredText(range, element));
 }
 
 /**
@@ -79,6 +75,7 @@ export function elementsCoveredByRange(range, elements) {
     }
     covered.push(elements[i]);
   }
+  // Only an end can be touched: the range covers all the text of every element between them.
   if (covered.length > 0 && onlyTouches(range, covered[covered.length - 1])) {
     covered.pop();
   }
